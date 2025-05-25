@@ -376,6 +376,12 @@ public class NDFWriter {
             writer.write(" is ");
         }
 
+        // Check if this is a function-call-like object with array syntax (e.g., RGBA[...])
+        if (isFunctionCallWithArraySyntax(object)) {
+            writeFunctionCallWithArraySyntax(object);
+            return;
+        }
+
         // Write type name
         writer.write(object.getTypeName());
 
@@ -392,6 +398,46 @@ public class NDFWriter {
                 writeObjectBody(object);
             }
         }
+    }
+
+    /**
+     * Determines if an object represents a function call with array syntax (e.g., RGBA[...])
+     */
+    private boolean isFunctionCallWithArraySyntax(ObjectValue object) {
+        // Check if this object has exactly one property called "values" that is an array
+        if (object.getProperties().size() != 1) {
+            return false;
+        }
+
+        NDFValue valuesProperty = object.getProperties().get("values");
+        if (valuesProperty == null || valuesProperty.getType() != NDFValue.ValueType.ARRAY) {
+            return false;
+        }
+
+        // Check if the type name looks like a function call (common ones: RGBA, etc.)
+        String typeName = object.getTypeName();
+        return typeName.equals("RGBA") || typeName.equals("RGB") ||
+               typeName.matches("[A-Z][A-Z0-9_]*"); // General pattern for function-like types
+    }
+
+    /**
+     * Writes a function call with array syntax (e.g., RGBA[0,0,0,0])
+     */
+    private void writeFunctionCallWithArraySyntax(ObjectValue object) throws IOException {
+        writer.write(object.getTypeName());
+        writer.write("[");
+
+        ArrayValue array = (ArrayValue) object.getProperties().get("values");
+        List<NDFValue> elements = array.getElements();
+
+        for (int i = 0; i < elements.size(); i++) {
+            if (i > 0) {
+                writer.write(",");
+            }
+            writeValue(elements.get(i));
+        }
+
+        writer.write("]");
     }
 
     /**
