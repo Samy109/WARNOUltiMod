@@ -128,25 +128,56 @@ public class NDFWriter {
      */
     private void writeUnitDescriptor(ObjectValue unitDescriptor) throws IOException {
         String instanceName = unitDescriptor.getInstanceName();
+        String typeName = unitDescriptor.getTypeName();
+
+        // Check if this is a constant definition (e.g., eAAM is 1)
+        if ("ConstantDefinition".equals(typeName)) {
+            writeConstantDefinition(unitDescriptor);
+            return;
+        }
 
         // Check if this is a standalone object definition (starts with $/) or an exported object
         if (instanceName != null && instanceName.startsWith("$/")) {
             // Write standalone object definition: '$/Path/To/Object is TypeName'
             writer.write(instanceName);
             writer.write(" is ");
-            writer.write(unitDescriptor.getTypeName());
+            writer.write(typeName);
             writer.write("\n");
-        } else {
+        } else if (unitDescriptor.isExported()) {
             // Write exported object: 'export Descriptor_Unit_X is TEntityDescriptor'
             writer.write("export ");
             writer.write(instanceName);
             writer.write(" is ");
-            writer.write(unitDescriptor.getTypeName());
+            writer.write(typeName);
+            writer.write("\n");
+        } else {
+            // Write non-exported object: 'Descriptor_Unit_X is TEntityDescriptor'
+            writer.write(instanceName);
+            writer.write(" is ");
+            writer.write(typeName);
             writer.write("\n");
         }
 
         // Write unit descriptor body
         writeObjectBody(unitDescriptor);
+    }
+
+    /**
+     * Writes a constant definition to the output (e.g., eAAM is 1)
+     *
+     * @param constantDef The constant definition to write
+     * @throws IOException If an I/O error occurs
+     */
+    private void writeConstantDefinition(ObjectValue constantDef) throws IOException {
+        String constantName = constantDef.getInstanceName();
+        NDFValue value = constantDef.getProperties().get("Value");
+
+        if (constantName != null && value != null) {
+            writer.write(constantName);
+            writer.write(" is ");
+            writeValue(value);
+            writer.write("\n");
+        }
     }
 
     /**
@@ -188,9 +219,15 @@ public class NDFWriter {
         switch (value.getType()) {
             case STRING:
                 StringValue stringValue = (StringValue) value;
-                writer.write("'");
-                writer.write(stringValue.getValue());
-                writer.write("'");
+                if (stringValue.useDoubleQuotes()) {
+                    writer.write("\"");
+                    writer.write(stringValue.getValue());
+                    writer.write("\"");
+                } else {
+                    writer.write("'");
+                    writer.write(stringValue.getValue());
+                    writer.write("'");
+                }
                 break;
 
             case NUMBER:
@@ -445,10 +482,16 @@ public class NDFWriter {
      * rather than a multi-line object body
      */
     private boolean isFunctionCall(ObjectValue object) {
-        // Function calls typically have simple properties (no nested objects or arrays)
-        // and are relatively short
-        if (object.getProperties().size() > 5) {
-            return false; // Too many properties for a function call
+        // Be more conservative about function calls
+        // Only treat very simple objects as function calls
+        if (object.getProperties().size() > 2) {
+            return false; // More than 2 properties should use multi-line format
+        }
+
+        // Don't treat template-like objects as function calls
+        String typeName = object.getTypeName();
+        if (typeName.startsWith("Template") || typeName.contains("Depiction")) {
+            return false; // Template objects should use multi-line format
         }
 
         for (NDFValue value : object.getProperties().values()) {

@@ -125,6 +125,17 @@ public abstract class NDFValue {
     }
 
     /**
+     * Creates a string value with specific quote type
+     *
+     * @param value The string value
+     * @param useDoubleQuotes Whether to use double quotes
+     * @return A new string value
+     */
+    public static NDFValue createString(String value, boolean useDoubleQuotes) {
+        return new StringValue(value, useDoubleQuotes);
+    }
+
+    /**
      * Creates a number value
      *
      * @param value The number value
@@ -259,13 +270,24 @@ public abstract class NDFValue {
      */
     public static class StringValue extends NDFValue {
         private final String value;
+        private final boolean useDoubleQuotes; // Track original quote type
 
         public StringValue(String value) {
             this.value = value;
+            this.useDoubleQuotes = false; // Default to single quotes
+        }
+
+        public StringValue(String value, boolean useDoubleQuotes) {
+            this.value = value;
+            this.useDoubleQuotes = useDoubleQuotes;
         }
 
         public String getValue() {
             return value;
+        }
+
+        public boolean useDoubleQuotes() {
+            return useDoubleQuotes;
         }
 
         @Override
@@ -275,7 +297,11 @@ public abstract class NDFValue {
 
         @Override
         public String toString() {
-            return "'" + value + "'";
+            if (useDoubleQuotes) {
+                return "\"" + value + "\"";
+            } else {
+                return "'" + value + "'";
+            }
         }
     }
 
@@ -590,6 +616,7 @@ public abstract class NDFValue {
         private final Map<String, Boolean> hasCommaAfter; // Tracks which properties have commas after them
         private String instanceName;
         private String moduleIdentifier; // For identifying modules by type/name instead of index
+        private boolean isExported; // Track if this was originally exported
 
         public ObjectValue(String typeName) {
             this.typeName = typeName;
@@ -597,6 +624,7 @@ public abstract class NDFValue {
             this.hasCommaAfter = new LinkedHashMap<>();
             this.instanceName = null;
             this.moduleIdentifier = null;
+            this.isExported = false; // Default to not exported
         }
 
         public void setProperty(String name, NDFValue value) {
@@ -643,6 +671,14 @@ public abstract class NDFValue {
 
         public String getModuleIdentifier() {
             return moduleIdentifier;
+        }
+
+        public boolean isExported() {
+            return isExported;
+        }
+
+        public void setExported(boolean exported) {
+            this.isExported = exported;
         }
 
         @Override

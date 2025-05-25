@@ -83,9 +83,9 @@ public class NDFParser {
                         // Descriptor definition like "Name is TypeName(...)"
                         unitDescriptors.add(parseDescriptorDefinition());
                     } else if (isSimpleAssignment()) {
-                        // Simple assignment like "Name is Value" - skip these for now
-                        // These are constants/aliases, not unit descriptors
-                        skipSimpleAssignment();
+                        // Simple assignment like "Name is Value" - parse these as constant definitions
+                        // These are constants/aliases like "eAAM is 1"
+                        unitDescriptors.add(parseNonExportedDefinition());
                     } else {
                         // Handle other non-exported definitions (fallback)
                         unitDescriptors.add(parseNonExportedDefinition());
@@ -148,6 +148,7 @@ public class NDFParser {
         // Create the descriptor object
         ObjectValue descriptor = NDFValue.createObject(typeName);
         descriptor.setInstanceName(descriptorName);
+        descriptor.setExported(true); // Mark as exported
 
         // Parse the descriptor body
         expect(NDFToken.TokenType.OPEN_PAREN);
@@ -434,8 +435,10 @@ public class NDFParser {
         switch (currentToken.getType()) {
             case STRING_LITERAL:
                 String stringValue = currentToken.getValue();
+                // Check if original text used double quotes
+                boolean useDoubleQuotes = currentToken.getOriginalText().startsWith("\"");
                 advance();
-                return NDFValue.createString(stringValue);
+                return NDFValue.createString(stringValue, useDoubleQuotes);
 
             case NUMBER_LITERAL:
                 double numberValue = Double.parseDouble(currentToken.getValue());
