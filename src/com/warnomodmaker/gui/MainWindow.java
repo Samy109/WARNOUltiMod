@@ -211,9 +211,9 @@ public class MainWindow extends JFrame {
             }
         }
 
-        // Show file chooser starting from last used directory
+        // Show file chooser starting from last used NDF directory
         UserPreferences prefs = UserPreferences.getInstance();
-        JFileChooser fileChooser = new JFileChooser(prefs.getLastDirectory());
+        JFileChooser fileChooser = new JFileChooser(prefs.getLastNDFDirectory());
         fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
             "NDF Files (*.ndf)", "ndf"
         ));
@@ -221,8 +221,8 @@ public class MainWindow extends JFrame {
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File file = fileChooser.getSelectedFile();
 
-            // Save the directory for next time
-            prefs.setLastDirectory(file.getParent());
+            // Save the NDF directory for next time
+            prefs.setLastNDFDirectory(file.getParent());
 
             try {
                 // Clear any existing state before loading new file
@@ -317,9 +317,9 @@ public class MainWindow extends JFrame {
      * Saves the current file with a new name
      */
     private void saveFileAs(ActionEvent e) {
-        // Show file chooser starting from last used directory
+        // Show file chooser starting from last used NDF directory
         UserPreferences prefs = UserPreferences.getInstance();
-        JFileChooser fileChooser = new JFileChooser(prefs.getLastDirectory());
+        JFileChooser fileChooser = new JFileChooser(prefs.getLastNDFDirectory());
         fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
             "NDF Files (*.ndf)", "ndf"
         ));
@@ -327,8 +327,8 @@ public class MainWindow extends JFrame {
         if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             File file = fileChooser.getSelectedFile();
 
-            // Save the directory for next time
-            prefs.setLastDirectory(file.getParent());
+            // Save the NDF directory for next time
+            prefs.setLastNDFDirectory(file.getParent());
 
             // Add .ndf extension if not present
             if (!file.getName().toLowerCase().endsWith(".ndf")) {
@@ -498,9 +498,9 @@ public class MainWindow extends JFrame {
             return; // User cancelled or entered empty name
         }
 
-        // Show file chooser starting from last used directory
+        // Show file chooser starting from last used profile directory
         UserPreferences prefs = UserPreferences.getInstance();
-        JFileChooser fileChooser = new JFileChooser(prefs.getLastDirectory());
+        JFileChooser fileChooser = new JFileChooser(prefs.getLastProfileDirectory());
         fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
             "JSON Profile Files (*.json)", "json"
         ));
@@ -509,8 +509,8 @@ public class MainWindow extends JFrame {
         if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             File file = fileChooser.getSelectedFile();
 
-            // Save the directory for next time
-            prefs.setLastDirectory(file.getParent());
+            // Save the profile directory for next time
+            prefs.setLastProfileDirectory(file.getParent());
 
             // Add .json extension if not present
             if (!file.getName().toLowerCase().endsWith(".json")) {
@@ -555,9 +555,9 @@ public class MainWindow extends JFrame {
             return;
         }
 
-        // Show file chooser starting from last used directory
+        // Show file chooser starting from last used profile directory
         UserPreferences prefs = UserPreferences.getInstance();
-        JFileChooser fileChooser = new JFileChooser(prefs.getLastDirectory());
+        JFileChooser fileChooser = new JFileChooser(prefs.getLastProfileDirectory());
         fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
             "JSON Profile Files (*.json)", "json"
         ));
@@ -565,8 +565,8 @@ public class MainWindow extends JFrame {
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File file = fileChooser.getSelectedFile();
 
-            // Save the directory for next time
-            prefs.setLastDirectory(file.getParent());
+            // Save the profile directory for next time
+            prefs.setLastProfileDirectory(file.getParent());
 
             try {
                 ModProfile profile = ModProfile.loadFromFile(file);
