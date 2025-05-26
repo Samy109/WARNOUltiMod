@@ -5,15 +5,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Represents a value in an NDF file.
- * This is the base class for all value types in the NDF format.
- */
 public abstract class NDFValue {
 
-    /**
-     * Enumeration of supported NDF file types
-     */
+    
     public enum NDFFileType {
         UNITE_DESCRIPTOR("UniteDescriptor.ndf", "TEntityDescriptor", "Unit"),
         MISSILE_DESCRIPTORS("MissileDescriptors.ndf", "TEntityDescriptor", "Missile"),
@@ -61,15 +55,11 @@ public abstract class NDFValue {
         public String getRootObjectType() { return rootObjectType; }
         public String getDisplayName() { return displayName; }
 
-        /**
-         * Determines the file type based on the filename
-         */
+        
         public static NDFFileType fromFilename(String filename) {
             if (filename == null) return UNKNOWN;
 
             String name = filename.toLowerCase();
-
-            // Check exact filename matches first
             for (NDFFileType type : values()) {
                 if (type != UNKNOWN && name.equalsIgnoreCase(type.filename)) {
                     return type;
@@ -88,9 +78,7 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * Types of values in the NDF file format
-     */
+    
     public enum ValueType {
         STRING,
         NUMBER,
@@ -107,167 +95,85 @@ public abstract class NDFValue {
         NULL
     }
 
-    /**
-     * Gets the type of this value
-     *
-     * @return The value type
-     */
+    
     public abstract ValueType getType();
 
-    /**
-     * Creates a string value
-     *
-     * @param value The string value
-     * @return A new string value
-     */
+    
     public static NDFValue createString(String value) {
         return new StringValue(value);
     }
 
-    /**
-     * Creates a string value with specific quote type
-     *
-     * @param value The string value
-     * @param useDoubleQuotes Whether to use double quotes
-     * @return A new string value
-     */
+    
     public static NDFValue createString(String value, boolean useDoubleQuotes) {
         return new StringValue(value, useDoubleQuotes);
     }
 
-    /**
-     * Creates a number value
-     *
-     * @param value The number value
-     * @return A new number value
-     */
+    
     public static NDFValue createNumber(double value) {
         return new NumberValue(value);
     }
 
-    /**
-     * Creates a number value with format preservation
-     *
-     * @param value The number value
-     * @param wasOriginallyInteger Whether the original value was an integer
-     * @return A new number value
-     */
+    
     public static NDFValue createNumber(double value, boolean wasOriginallyInteger) {
         return new NumberValue(value, wasOriginallyInteger);
     }
 
-    /**
-     * Creates a number value with original format preservation
-     *
-     * @param value The number value
-     * @param originalFormat The original format string from the NDF file
-     * @return A new number value
-     */
+    
     public static NDFValue createNumber(double value, String originalFormat) {
         return new NumberValue(value, originalFormat);
     }
 
-    /**
-     * Creates a boolean value
-     *
-     * @param value The boolean value
-     * @return A new boolean value
-     */
+    
     public static NDFValue createBoolean(boolean value) {
         return new BooleanValue(value);
     }
 
-    /**
-     * Creates an array value
-     *
-     * @return A new empty array value
-     */
+    
     public static ArrayValue createArray() {
         return new ArrayValue();
     }
 
-    /**
-     * Creates a tuple value
-     *
-     * @return A new empty tuple value
-     */
+    
     public static TupleValue createTuple() {
         return new TupleValue();
     }
 
-    /**
-     * Creates a map value
-     *
-     * @return A new empty map value
-     */
+    
     public static MapValue createMap() {
         return new MapValue();
     }
 
-    /**
-     * Creates an object value
-     *
-     * @param typeName The type name of the object
-     * @return A new empty object value
-     */
+    
     public static ObjectValue createObject(String typeName) {
         return new ObjectValue(typeName);
     }
 
-    /**
-     * Creates a template reference value
-     *
-     * @param path The reference path
-     * @return A new template reference value
-     */
+    
     public static NDFValue createTemplateRef(String path) {
         return new TemplateRefValue(path);
     }
 
-    /**
-     * Creates a resource reference value
-     *
-     * @param path The reference path
-     * @return A new resource reference value
-     */
+    
     public static NDFValue createResourceRef(String path) {
         return new ResourceRefValue(path);
     }
 
-    /**
-     * Creates a GUID value
-     *
-     * @param guid The GUID string
-     * @return A new GUID value
-     */
+    
     public static NDFValue createGUID(String guid) {
         return new GUIDValue(guid);
     }
 
-    /**
-     * Creates an enum value
-     *
-     * @param enumType The enum type
-     * @param enumValue The enum value
-     * @return A new enum value
-     */
+    
     public static NDFValue createEnum(String enumType, String enumValue) {
         return new EnumValue(enumType, enumValue);
     }
 
-    /**
-     * Creates a raw expression value (for complex expressions that should be preserved as-is)
-     *
-     * @param expression The raw expression string
-     * @return A new raw expression value
-     */
+    
     public static NDFValue createRawExpression(String expression) {
         return new RawExpressionValue(expression);
     }
 
-    /**
-     * String value implementation
-     */
+    
     public static class StringValue extends NDFValue {
         private final String value;
         private final boolean useDoubleQuotes; // Track original quote type
@@ -305,9 +211,7 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * Number value implementation with format preservation and smart rounding
-     */
+    
     public static class NumberValue extends NDFValue {
         private final double value;
         private final boolean wasOriginallyInteger; // Track if the original value was an integer
@@ -344,9 +248,7 @@ public abstract class NDFValue {
             return originalFormat;
         }
 
-        /**
-         * Gets the value rounded appropriately based on the original format
-         */
+        
         public double getRoundedValue() {
             if (wasOriginallyInteger) {
                 return Math.round(value);
@@ -354,9 +256,7 @@ public abstract class NDFValue {
             return value;
         }
 
-        /**
-         * Gets the value as an integer if it was originally an integer
-         */
+        
         public int getIntValue() {
             return (int) Math.round(value);
         }
@@ -378,7 +278,7 @@ public abstract class NDFValue {
                         // Very close to integer, but was originally decimal
                         return String.format("%.1f", value);
                     }
-                    return Double.toString(value);
+                    return formatDecimalNumber(value);
                 }
             }
 
@@ -386,13 +286,27 @@ public abstract class NDFValue {
             if (wasOriginallyInteger || (value == Math.floor(value) && !Double.isInfinite(value) && Math.abs(value) < 1e10)) {
                 return Integer.toString((int) Math.round(value));
             }
+            return formatDecimalNumber(value);
+        }
+
+        
+        private String formatDecimalNumber(double value) {
+            if (Double.isNaN(value) || Double.isInfinite(value)) {
+                return Double.toString(value);
+            }
+
+            // For reasonable ranges, avoid scientific notation
+            if (Math.abs(value) >= 1e-15 && Math.abs(value) < 1e15) {
+                java.math.BigDecimal bd = java.math.BigDecimal.valueOf(value);
+                return bd.stripTrailingZeros().toPlainString();
+            }
+
+            // For very large or very small numbers, use scientific notation
             return Double.toString(value);
         }
     }
 
-    /**
-     * Boolean value implementation
-     */
+    
     public static class BooleanValue extends NDFValue {
         private final boolean value;
 
@@ -415,12 +329,17 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * Array value implementation
-     */
+    
     public static class ArrayValue extends NDFValue {
         private final List<NDFValue> elements;
         private final List<Boolean> hasCommaAfter; // Tracks which elements have commas after them
+
+        // ORIGINAL FORMATTING PRESERVATION - ZERO INTELLIGENCE, 1-1 REPRODUCTION
+        private boolean originallyMultiLine = false; // Was this array originally multi-line?
+        private String originalOpeningBracket = "["; // Original opening bracket with any spacing
+        private String originalClosingBracket = "]"; // Original closing bracket with any spacing
+        private final List<String> originalElementPrefix = new ArrayList<>(); // Original indentation/spacing before each element
+        private final List<String> originalElementSuffix = new ArrayList<>(); // Original spacing/newlines after each element
 
         public ArrayValue() {
             this.elements = new ArrayList<>();
@@ -430,11 +349,15 @@ public abstract class NDFValue {
         public void add(NDFValue element) {
             elements.add(element);
             hasCommaAfter.add(false); // Default to no comma
+            originalElementPrefix.add("");
+            originalElementSuffix.add("");
         }
 
         public void add(NDFValue element, boolean hasComma) {
             elements.add(element);
             hasCommaAfter.add(hasComma);
+            originalElementPrefix.add("");
+            originalElementSuffix.add("");
         }
 
         public List<NDFValue> getElements() {
@@ -451,9 +374,54 @@ public abstract class NDFValue {
             }
         }
 
-        /**
-         * Removes an element at the specified index and maintains comma tracking
-         */
+        // ORIGINAL FORMATTING PRESERVATION METHODS - ZERO INTELLIGENCE, 1-1 REPRODUCTION
+        public boolean isOriginallyMultiLine() {
+            return originallyMultiLine;
+        }
+
+        public void setOriginallyMultiLine(boolean multiLine) {
+            this.originallyMultiLine = multiLine;
+        }
+
+        public String getOriginalOpeningBracket() {
+            return originalOpeningBracket;
+        }
+
+        public void setOriginalOpeningBracket(String openingBracket) {
+            this.originalOpeningBracket = openingBracket;
+        }
+
+        public String getOriginalClosingBracket() {
+            return originalClosingBracket;
+        }
+
+        public void setOriginalClosingBracket(String closingBracket) {
+            this.originalClosingBracket = closingBracket;
+        }
+
+        public String getOriginalElementPrefix(int index) {
+            return index < originalElementPrefix.size() ? originalElementPrefix.get(index) : "";
+        }
+
+        public void setOriginalElementPrefix(int index, String prefix) {
+            while (originalElementPrefix.size() <= index) {
+                originalElementPrefix.add("");
+            }
+            originalElementPrefix.set(index, prefix);
+        }
+
+        public String getOriginalElementSuffix(int index) {
+            return index < originalElementSuffix.size() ? originalElementSuffix.get(index) : "";
+        }
+
+        public void setOriginalElementSuffix(int index, String suffix) {
+            while (originalElementSuffix.size() <= index) {
+                originalElementSuffix.add("");
+            }
+            originalElementSuffix.set(index, suffix);
+        }
+
+        
         public NDFValue remove(int index) {
             if (index >= 0 && index < elements.size()) {
                 NDFValue removed = elements.remove(index);
@@ -466,9 +434,7 @@ public abstract class NDFValue {
             return null;
         }
 
-        /**
-         * Clears all elements and comma tracking
-         */
+        
         public void clear() {
             elements.clear();
             hasCommaAfter.clear();
@@ -494,9 +460,7 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * Tuple value implementation (for pairs like (key, value))
-     */
+    
     public static class TupleValue extends NDFValue {
         private final List<NDFValue> elements;
         private final List<Boolean> hasCommaAfter; // Tracks which elements have commas after them
@@ -550,9 +514,7 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * Map value implementation
-     */
+    
     public static class MapValue extends NDFValue {
         private final List<Map.Entry<NDFValue, NDFValue>> entries;
         private final List<Boolean> hasCommaAfter; // Tracks which entries have commas after them
@@ -607,9 +569,7 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * Object value implementation
-     */
+    
     public static class ObjectValue extends NDFValue {
         private final String typeName;
         private final Map<String, NDFValue> properties;
@@ -617,6 +577,17 @@ public abstract class NDFValue {
         private String instanceName;
         private String moduleIdentifier; // For identifying modules by type/name instead of index
         private boolean isExported; // Track if this was originally exported
+
+        // UNIVERSAL FORMATTING PRESERVATION - ZERO INTELLIGENCE, 1-1 REPRODUCTION
+        private String originalOpeningParen = "("; // Original opening parenthesis with exact formatting
+        private String originalClosingParen = ")"; // Original closing parenthesis with exact formatting
+        private final Map<String, String> originalPropertyPrefix = new LinkedHashMap<>(); // Original indentation/spacing before each property
+        private final Map<String, String> originalPropertyEquals = new LinkedHashMap<>(); // Original spacing around = for each property
+        private final Map<String, String> originalPropertySuffix = new LinkedHashMap<>(); // Original spacing/newlines after each property
+
+        // TOKEN RANGE PRESERVATION - SIMPLER AND MORE RELIABLE APPROACH
+        private int originalTokenStartIndex = -1; // Start token index in original token list
+        private int originalTokenEndIndex = -1;   // End token index in original token list
 
         public ObjectValue(String typeName) {
             this.typeName = typeName;
@@ -681,6 +652,67 @@ public abstract class NDFValue {
             this.isExported = exported;
         }
 
+        // UNIVERSAL FORMATTING PRESERVATION METHODS - ZERO INTELLIGENCE, 1-1 REPRODUCTION
+        public String getOriginalOpeningParen() {
+            return originalOpeningParen;
+        }
+
+        public void setOriginalOpeningParen(String openingParen) {
+            this.originalOpeningParen = openingParen;
+        }
+
+        public String getOriginalClosingParen() {
+            return originalClosingParen;
+        }
+
+        public void setOriginalClosingParen(String closingParen) {
+            this.originalClosingParen = closingParen;
+        }
+
+        public String getOriginalPropertyPrefix(String propertyName) {
+            return originalPropertyPrefix.getOrDefault(propertyName, "");
+        }
+
+        public void setOriginalPropertyPrefix(String propertyName, String prefix) {
+            originalPropertyPrefix.put(propertyName, prefix);
+        }
+
+        public String getOriginalPropertyEquals(String propertyName) {
+            return originalPropertyEquals.getOrDefault(propertyName, " = ");
+        }
+
+        public void setOriginalPropertyEquals(String propertyName, String equals) {
+            originalPropertyEquals.put(propertyName, equals);
+        }
+
+        public String getOriginalPropertySuffix(String propertyName) {
+            return originalPropertySuffix.getOrDefault(propertyName, "");
+        }
+
+        public void setOriginalPropertySuffix(String propertyName, String suffix) {
+            originalPropertySuffix.put(propertyName, suffix);
+        }
+
+        public int getOriginalTokenStartIndex() {
+            return originalTokenStartIndex;
+        }
+
+        public void setOriginalTokenStartIndex(int startIndex) {
+            this.originalTokenStartIndex = startIndex;
+        }
+
+        public int getOriginalTokenEndIndex() {
+            return originalTokenEndIndex;
+        }
+
+        public void setOriginalTokenEndIndex(int endIndex) {
+            this.originalTokenEndIndex = endIndex;
+        }
+
+        public boolean hasOriginalTokenRange() {
+            return originalTokenStartIndex >= 0 && originalTokenEndIndex >= 0;
+        }
+
         @Override
         public ValueType getType() {
             return ValueType.OBJECT;
@@ -706,9 +738,7 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * Template reference value implementation
-     */
+    
     public static class TemplateRefValue extends NDFValue {
         private final String path;
         private String instanceName;
@@ -744,9 +774,7 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * Resource reference value implementation
-     */
+    
     public static class ResourceRefValue extends NDFValue {
         private final String path;
 
@@ -769,9 +797,7 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * GUID value implementation
-     */
+    
     public static class GUIDValue extends NDFValue {
         private final String guid;
 
@@ -794,9 +820,7 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * Enum value implementation
-     */
+    
     public static class EnumValue extends NDFValue {
         private final String enumType;
         private final String enumValue;
@@ -825,9 +849,7 @@ public abstract class NDFValue {
         }
     }
 
-    /**
-     * Raw expression value implementation (for complex expressions that should be preserved as-is)
-     */
+    
     public static class RawExpressionValue extends NDFValue {
         private final String expression;
 

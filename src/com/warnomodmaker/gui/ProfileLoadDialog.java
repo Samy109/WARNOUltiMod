@@ -13,17 +13,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Dialog for loading and applying modification profiles with path validation.
- */
 public class ProfileLoadDialog extends JDialog {
     private final ModProfile profile;
     private final List<ObjectValue> unitDescriptors;
     private final ModificationTracker modificationTracker;
     private final List<ValidationResult> validationResults;
     private boolean applied = false;
-
-    // GUI components
     private JTable validationTable;
     private ValidationTableModel tableModel;
     private JLabel statusLabel;
@@ -31,9 +26,7 @@ public class ProfileLoadDialog extends JDialog {
     private JButton cancelButton;
     private JButton fixPathsButton;
 
-    /**
-     * Result of validating a modification against the current file
-     */
+    
     public static class ValidationResult {
         public ModificationRecord modification; // Non-final to allow auto-fix updates
         public final boolean isValid;
@@ -50,9 +43,7 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    /**
-     * Creates a new profile load dialog
-     */
+    
     public ProfileLoadDialog(JFrame parent, ModProfile profile, List<ObjectValue> unitDescriptors, ModificationTracker modificationTracker) {
         super(parent, "Load Profile: " + profile.getProfileName(), true);
 
@@ -65,9 +56,7 @@ public class ProfileLoadDialog extends JDialog {
         validateProfile();
     }
 
-    /**
-     * Initializes the GUI
-     */
+    
     private void initializeGUI() {
         setSize(900, 600);
         setLocationRelativeTo(getParent());
@@ -110,8 +99,6 @@ public class ProfileLoadDialog extends JDialog {
 
         // Configure column sizing for proper resizing behavior
         validationTable.setAutoResizeMode(JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
-
-        // Set minimum and preferred widths, but allow columns to grow
         TableColumnModel columnModel = validationTable.getColumnModel();
 
         // Apply column (checkbox) - fixed small width
@@ -150,9 +137,7 @@ public class ProfileLoadDialog extends JDialog {
         setContentPane(mainPanel);
     }
 
-    /**
-     * Creates the profile information panel
-     */
+    
     private JPanel createInfoPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createTitledBorder("Profile Information"));
@@ -192,9 +177,7 @@ public class ProfileLoadDialog extends JDialog {
         return panel;
     }
 
-    /**
-     * Creates the bottom panel with status and buttons
-     */
+    
     private JPanel createBottomPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
@@ -224,9 +207,7 @@ public class ProfileLoadDialog extends JDialog {
         return panel;
     }
 
-    /**
-     * Validates the profile against the current file
-     */
+    
     private void validateProfile() {
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
             @Override
@@ -257,14 +238,10 @@ public class ProfileLoadDialog extends JDialog {
         worker.execute();
     }
 
-    /**
-     * Validates a single modification
-     */
+    
     private ValidationResult validateModification(ModificationRecord modification) {
         String unitName = modification.getUnitName();
         String propertyPath = modification.getPropertyPath();
-
-        // Find the unit
         ObjectValue unit = findUnitByName(unitName);
         if (unit == null) {
             String suggestedUnit = findSimilarUnitName(unitName);
@@ -272,16 +249,12 @@ public class ProfileLoadDialog extends JDialog {
             String suggestion = suggestedUnit != null ? "Try: " + suggestedUnit : "No similar units found";
             return new ValidationResult(modification, false, issue, suggestion);
         }
-
-        // Check if property exists
         if (!PropertyUpdater.hasProperty(unit, propertyPath)) {
             String suggestedPath = findSimilarPropertyPath(unit, propertyPath);
             String issue = String.format("Property '%s' not found in unit '%s'", propertyPath, unitName);
             String suggestion = suggestedPath != null ? "Try: " + suggestedPath : "No similar properties found";
             return new ValidationResult(modification, false, issue, suggestion);
         }
-
-        // Check if the current value matches what we expect (optional validation)
         NDFValue currentValue = PropertyUpdater.getPropertyValue(unit, propertyPath);
         if (currentValue != null) {
             String currentValueStr = currentValue.toString();
@@ -299,9 +272,7 @@ public class ProfileLoadDialog extends JDialog {
         return new ValidationResult(modification, true, "Ready to apply", null);
     }
 
-    /**
-     * Finds a unit by name
-     */
+    
     private ObjectValue findUnitByName(String unitName) {
         for (ObjectValue unit : unitDescriptors) {
             if (unitName.equals(unit.getInstanceName())) {
@@ -311,9 +282,7 @@ public class ProfileLoadDialog extends JDialog {
         return null;
     }
 
-    /**
-     * Finds a similar unit name using advanced matching algorithms
-     */
+    
     private String findSimilarUnitName(String targetName) {
         if (targetName == null || targetName.trim().isEmpty()) {
             return null;
@@ -337,9 +306,7 @@ public class ProfileLoadDialog extends JDialog {
         return candidates.isEmpty() ? null : candidates.get(0).value;
     }
 
-    /**
-     * Calculates similarity between unit names using multiple algorithms
-     */
+    
     private double calculateUnitNameSimilarity(String target, String candidate) {
         // 1. Exact match
         if (target.equals(candidate)) {
@@ -367,9 +334,7 @@ public class ProfileLoadDialog extends JDialog {
         return Math.max(levenshteinScore * 0.4 + tokenScore * 0.4 + affixScore * 0.2, 0.0);
     }
 
-    /**
-     * Finds a similar property path using advanced matching algorithms
-     */
+    
     private String findSimilarPropertyPath(ObjectValue unit, String targetPath) {
         if (targetPath == null || targetPath.trim().isEmpty()) {
             return null;
@@ -393,9 +358,7 @@ public class ProfileLoadDialog extends JDialog {
         return candidates.isEmpty() ? null : candidates.get(0).value;
     }
 
-    /**
-     * Calculates similarity between property paths using specialized algorithms
-     */
+    
     private double calculatePropertyPathSimilarity(String target, String candidate) {
         // 1. Exact match
         if (target.equals(candidate)) {
@@ -434,9 +397,7 @@ public class ProfileLoadDialog extends JDialog {
                        Math.max(substringScore, levenshteinScore * 0.3));
     }
 
-    /**
-     * Updates the status label
-     */
+    
     private void updateStatus() {
         int total = validationResults.size();
         int valid = (int) validationResults.stream().mapToInt(r -> r.isValid ? 1 : 0).sum();
@@ -445,9 +406,7 @@ public class ProfileLoadDialog extends JDialog {
         statusLabel.setText(String.format("Total: %d, Valid: %d, Selected for application: %d", total, valid, selected));
     }
 
-    /**
-     * Auto-fixes paths where possible
-     */
+    
     private void autoFixPaths(ActionEvent e) {
         List<ValidationResult> fixableResults = validationResults.stream()
             .filter(r -> !r.isValid && r.suggestedFix != null && !r.suggestedFix.isEmpty())
@@ -458,8 +417,6 @@ public class ProfileLoadDialog extends JDialog {
                 "Auto-Fix Paths", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-
-        // Show confirmation dialog with details
         StringBuilder message = new StringBuilder();
         message.append("Auto-fix will attempt to correct ").append(fixableResults.size()).append(" issues:\n\n");
 
@@ -485,9 +442,7 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    /**
-     * Performs the actual auto-fix operation
-     */
+    
     private void performAutoFix(List<ValidationResult> fixableResults) {
         int fixedCount = 0;
         List<String> failedFixes = new ArrayList<>();
@@ -506,8 +461,6 @@ public class ProfileLoadDialog extends JDialog {
 
         // Re-validate after fixes
         validateProfile();
-
-        // Show results
         StringBuilder resultMessage = new StringBuilder();
         resultMessage.append("Auto-fix completed!\n\n");
         resultMessage.append("Successfully fixed: ").append(fixedCount).append(" issues\n");
@@ -524,9 +477,7 @@ public class ProfileLoadDialog extends JDialog {
             "Auto-Fix Results", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    /**
-     * Applies the selected modifications
-     */
+    
     private void applyModifications(ActionEvent e) {
         List<ValidationResult> toApply = validationResults.stream()
             .filter(r -> r.shouldApply && r.isValid)
@@ -547,9 +498,7 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    /**
-     * Applies the selected modifications to the units
-     */
+    
     private void applySelectedModifications(List<ValidationResult> toApply) {
         int appliedCount = 0;
 
@@ -559,7 +508,6 @@ public class ProfileLoadDialog extends JDialog {
 
             if (unit != null) {
                 try {
-                    // Parse the new value based on the type
                     NDFValue newValue = parseValueFromString(mod.getNewValue(), mod.getNewValueType());
 
                     // Apply the modification
@@ -581,9 +529,7 @@ public class ProfileLoadDialog extends JDialog {
         dispose();
     }
 
-    /**
-     * Parses a value from string based on its type
-     */
+    
     private NDFValue parseValueFromString(String valueStr, String valueType) {
         switch (valueType) {
             case "STRING":
@@ -606,16 +552,12 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    /**
-     * Checks if any modifications were applied
-     */
+    
     public boolean wasApplied() {
         return applied;
     }
 
-    /**
-     * Table model for validation results
-     */
+    
     private class ValidationTableModel extends AbstractTableModel {
         private final String[] columnNames = {"Apply", "Unit", "Property", "Status", "Issue/Suggestion"};
 
@@ -670,13 +612,9 @@ public class ProfileLoadDialog extends JDialog {
             return text.length() > maxLength ? text.substring(0, maxLength - 3) + "..." : text;
         }
 
-        /**
-         * Cleans up property paths by removing redundant prefixes for better readability
-         */
+        
         private String cleanPropertyPath(String propertyPath) {
             if (propertyPath == null) return "";
-
-            // Remove common ModulesDescriptors[X]. prefix
             if (propertyPath.startsWith("ModulesDescriptors[")) {
                 int dotIndex = propertyPath.indexOf('.', 19); // Look for dot after "ModulesDescriptors[XX]"
                 if (dotIndex != -1) {
@@ -697,9 +635,7 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    /**
-     * Custom cell renderer for the status column
-     */
+    
     private static class StatusCellRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
@@ -718,18 +654,12 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    /**
-     * Applies a single auto-fix
-     */
+    
     private boolean applyAutoFix(ValidationResult result) {
         String suggestion = result.suggestedFix;
         ModificationRecord oldModification = result.modification;
-
-        // Parse the suggestion to extract the fix
         if (suggestion.startsWith("Try: ")) {
             String fixedValue = suggestion.substring(5).trim();
-
-            // Create a new ModificationRecord with the fixed values
             ModificationRecord newModification = null;
 
             if (result.issue.contains("Unit") && result.issue.contains("not found")) {
@@ -770,9 +700,7 @@ public class ProfileLoadDialog extends JDialog {
         return false; // Couldn't apply the fix
     }
 
-    /**
-     * Helper class for scored matching results
-     */
+    
     private static class ScoredMatch {
         final String value;
         final double score;
@@ -783,9 +711,7 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    /**
-     * Calculates Levenshtein distance between two strings
-     */
+    
     private int levenshteinDistance(String a, String b) {
         if (a.length() == 0) return b.length();
         if (b.length() == 0) return a.length();
@@ -812,9 +738,7 @@ public class ProfileLoadDialog extends JDialog {
         return matrix[a.length()][b.length()];
     }
 
-    /**
-     * Calculates token-based similarity for multi-word strings
-     */
+    
     private double calculateTokenSimilarity(String target, String candidate) {
         String[] targetTokens = target.split("[\\s_-]+");
         String[] candidateTokens = candidate.split("[\\s_-]+");
@@ -834,9 +758,7 @@ public class ProfileLoadDialog extends JDialog {
         return (double) matches / Math.max(targetTokens.length, candidateTokens.length);
     }
 
-    /**
-     * Calculates similarity based on common prefixes and suffixes
-     */
+    
     private double calculateAffixSimilarity(String target, String candidate) {
         int commonPrefix = 0;
         int minLength = Math.min(target.length(), candidate.length());
@@ -861,9 +783,7 @@ public class ProfileLoadDialog extends JDialog {
         return (double) (commonPrefix + commonSuffix) / Math.max(target.length(), candidate.length());
     }
 
-    /**
-     * Calculates structural similarity between path segments
-     */
+    
     private double calculatePathStructuralSimilarity(String[] targetParts, String[] candidateParts) {
         if (targetParts.length != candidateParts.length) {
             return 0.0; // Different structure
@@ -884,9 +804,7 @@ public class ProfileLoadDialog extends JDialog {
         return (double) matches / targetParts.length;
     }
 
-    /**
-     * Normalizes array indices in paths (e.g., [0] -> [*], [15] -> [*])
-     */
+    
     private String normalizeArrayIndices(String path) {
         return path.replaceAll("\\[\\d+\\]", "[*]");
     }

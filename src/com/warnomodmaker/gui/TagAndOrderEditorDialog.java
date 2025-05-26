@@ -13,9 +13,6 @@ import java.awt.event.ActionEvent;
 import java.util.*;
 import java.util.List;
 
-/**
- * Dialog for editing tags and orders for units
- */
 public class TagAndOrderEditorDialog extends JDialog {
     private List<ObjectValue> unitDescriptors; // For bulk tag editing
     private final List<ObjectValue> allUnitDescriptors; // All available units
@@ -63,8 +60,6 @@ public class TagAndOrderEditorDialog extends JDialog {
         // Top panel with unit selection info
         JPanel topPanel = createUnitSelectionPanel();
         mainPanel.add(topPanel, BorderLayout.NORTH);
-
-        // Create tabbed pane
         JTabbedPane tabbedPane = new JTabbedPane();
 
         // Tags tab
@@ -162,8 +157,6 @@ public class TagAndOrderEditorDialog extends JDialog {
 
         listPanel.add(tagButtonPanel, BorderLayout.SOUTH);
         panel.add(listPanel, BorderLayout.CENTER);
-
-        // Add new tag panel
         JPanel addPanel = new JPanel(new BorderLayout());
         addPanel.setBorder(new TitledBorder("Add New Tag"));
 
@@ -271,8 +264,6 @@ public class TagAndOrderEditorDialog extends JDialog {
             statusLabel.setText("No units selected");
             return;
         }
-
-        // Load meaningful tags from first unit (excluding UNITE tags)
         ObjectValue firstUnit = unitDescriptors.get(0);
         Set<String> allUnitTags = TagExtractor.extractTagsFromUnit(firstUnit);
         // Filter out UNITE tags to match TagFilterDialog behavior
@@ -284,8 +275,6 @@ public class TagAndOrderEditorDialog extends JDialog {
         for (String tag : meaningfulTags) {
             currentTagsModel.addElement(tag);
         }
-
-        // Load order references from current unit
         if (currentUnit != null) {
             loadOrderReferences(currentUnit);
         }
@@ -296,11 +285,8 @@ public class TagAndOrderEditorDialog extends JDialog {
     }
 
     private void loadOrderReferences(ObjectValue unit) {
-        // Find TOrderConfigModuleDescriptor
         String validOrders = findOrderReference(unit, "TOrderConfigModuleDescriptor", "ValidOrders");
         validOrdersField.setText(validOrders != null ? validOrders : "Not found");
-
-        // Find TOrderableModuleDescriptor
         String unlockableOrders = findOrderReference(unit, "TOrderableModuleDescriptor", "UnlockableOrders");
         unlockableOrdersField.setText(unlockableOrders != null ? unlockableOrders : "Not found");
     }
@@ -351,8 +337,6 @@ public class TagAndOrderEditorDialog extends JDialog {
             JOptionPane.showMessageDialog(this, "Please select tags to remove", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
-
-        // Remove in reverse order to maintain indices
         for (int i = selectedIndices.length - 1; i >= 0; i--) {
             currentTagsModel.removeElementAt(selectedIndices[i]);
         }
@@ -418,7 +402,6 @@ public class TagAndOrderEditorDialog extends JDialog {
     }
 
     private void applyTagChanges() {
-        // Get new tag set
         Set<String> newTags = new HashSet<>();
         for (int i = 0; i < currentTagsModel.getSize(); i++) {
             newTags.add(currentTagsModel.getElementAt(i));
@@ -441,11 +424,10 @@ public class TagAndOrderEditorDialog extends JDialog {
             if (moduleValue instanceof ObjectValue) {
                 ObjectValue module = (ObjectValue) moduleValue;
                 if ("TTagsModuleDescriptor".equals(module.getTypeName())) {
-                    // Update the TagSet
                     ArrayValue newTagSet = NDFValue.createArray();
                     boolean first = true;
                     for (String tag : newTags) {
-                        newTagSet.add(NDFValue.createString(tag), !first); // Add comma for all but first element
+                        newTagSet.add(NDFValue.createString(tag), !first);
                         first = false;
                     }
 
@@ -494,7 +476,6 @@ public class TagAndOrderEditorDialog extends JDialog {
             if (moduleValue instanceof ObjectValue) {
                 ObjectValue module = (ObjectValue) moduleValue;
                 if (moduleType.equals(module.getTypeName())) {
-                    // Create new reference value
                     NDFValue newRef = NDFValue.createTemplateRef(newValue);
 
                     // Track the change
@@ -516,18 +497,14 @@ public class TagAndOrderEditorDialog extends JDialog {
         filterDialog.setVisible(true);
 
         if (filterDialog.isConfirmed()) {
-            // Update the unit list with filtered units
             List<ObjectValue> filteredUnits = filterDialog.getFilteredUnits();
             this.unitDescriptors = new ArrayList<>(filteredUnits);
-
-            // Update the UI
             updateUnitCount();
             loadCurrentData(); // Reload data for the new unit selection
         }
     }
 
     private void openUnitSelectorDialog(ActionEvent e) {
-        // Create a list of unit names for selection
         String[] unitNames = allUnitDescriptors.stream()
             .map(unit -> unit.getInstanceName() != null ? unit.getInstanceName() : "Unknown Unit")
             .toArray(String[]::new);
@@ -548,7 +525,6 @@ public class TagAndOrderEditorDialog extends JDialog {
         );
 
         if (selectedName != null) {
-            // Find the selected unit
             for (ObjectValue unit : allUnitDescriptors) {
                 String unitName = unit.getInstanceName() != null ? unit.getInstanceName() : "Unknown Unit";
                 if (unitName.equals(selectedName)) {
@@ -569,8 +545,6 @@ public class TagAndOrderEditorDialog extends JDialog {
 
     private void updateUnitCount() {
         unitsLabel.setText(String.format("Editing tags for: %d units", unitDescriptors.size()));
-
-        // Update status label
         statusLabel.setText(String.format("Ready to modify tags for %d units and orders for %s",
             unitDescriptors.size(),
             currentUnit != null ? (currentUnit.getInstanceName() != null ? currentUnit.getInstanceName() : "Unknown") : "no unit"));

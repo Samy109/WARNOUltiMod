@@ -6,9 +6,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
 
-/**
- * Manages user preferences for the WARNO Mod Maker application
- */
 public class UserPreferences {
     private static final String PREFERENCES_FILE = "warno-mod-maker.properties";
     private static final String LAST_DIRECTORY_KEY = "last.directory"; // Legacy key for backward compatibility
@@ -25,17 +22,13 @@ public class UserPreferences {
 
     private UserPreferences() {
         properties = new Properties();
-
-        // Get user home directory for storing preferences
         String userHome = System.getProperty("user.home");
         preferencesPath = Paths.get(userHome, ".warno-mod-maker", PREFERENCES_FILE);
 
         loadPreferences();
     }
 
-    /**
-     * Gets the singleton instance of UserPreferences
-     */
+    
     public static UserPreferences getInstance() {
         if (instance == null) {
             instance = new UserPreferences();
@@ -43,9 +36,7 @@ public class UserPreferences {
         return instance;
     }
 
-    /**
-     * Loads preferences from the file system
-     */
+    
     private void loadPreferences() {
         try {
             if (Files.exists(preferencesPath)) {
@@ -59,12 +50,9 @@ public class UserPreferences {
         }
     }
 
-    /**
-     * Saves preferences to the file system
-     */
+    
     public void savePreferences() {
         try {
-            // Create directory if it doesn't exist
             Files.createDirectories(preferencesPath.getParent());
 
             try (OutputStream output = Files.newOutputStream(preferencesPath)) {
@@ -75,16 +63,12 @@ public class UserPreferences {
         }
     }
 
-    /**
-     * Gets the last used directory for file operations (legacy method for backward compatibility)
-     */
+    
     public String getLastDirectory() {
         return properties.getProperty(LAST_DIRECTORY_KEY, System.getProperty("user.home"));
     }
 
-    /**
-     * Sets the last used directory for file operations (legacy method for backward compatibility)
-     */
+    
     public void setLastDirectory(String directory) {
         if (directory != null && !directory.trim().isEmpty()) {
             properties.setProperty(LAST_DIRECTORY_KEY, directory);
@@ -92,9 +76,7 @@ public class UserPreferences {
         }
     }
 
-    /**
-     * Gets the last used directory for NDF file operations
-     */
+    
     public String getLastNDFDirectory() {
         // First check for specific NDF directory, then fall back to legacy directory
         String ndfDir = properties.getProperty(LAST_NDF_DIRECTORY_KEY);
@@ -104,9 +86,7 @@ public class UserPreferences {
         return getLastDirectory(); // Fall back to legacy directory
     }
 
-    /**
-     * Sets the last used directory for NDF file operations
-     */
+    
     public void setLastNDFDirectory(String directory) {
         if (directory != null && !directory.trim().isEmpty()) {
             properties.setProperty(LAST_NDF_DIRECTORY_KEY, directory);
@@ -114,9 +94,7 @@ public class UserPreferences {
         }
     }
 
-    /**
-     * Gets the last used directory for profile file operations
-     */
+    
     public String getLastProfileDirectory() {
         // First check for specific profile directory, then fall back to legacy directory
         String profileDir = properties.getProperty(LAST_PROFILE_DIRECTORY_KEY);
@@ -126,9 +104,7 @@ public class UserPreferences {
         return getLastDirectory(); // Fall back to legacy directory
     }
 
-    /**
-     * Sets the last used directory for profile file operations
-     */
+    
     public void setLastProfileDirectory(String directory) {
         if (directory != null && !directory.trim().isEmpty()) {
             properties.setProperty(LAST_PROFILE_DIRECTORY_KEY, directory);
@@ -136,65 +112,47 @@ public class UserPreferences {
         }
     }
 
-    /**
-     * Gets the last window width
-     */
+    
     public int getWindowWidth() {
         return Integer.parseInt(properties.getProperty(WINDOW_WIDTH_KEY, "1200"));
     }
 
-    /**
-     * Sets the window width
-     */
+    
     public void setWindowWidth(int width) {
         properties.setProperty(WINDOW_WIDTH_KEY, String.valueOf(width));
     }
 
-    /**
-     * Gets the last window height
-     */
+    
     public int getWindowHeight() {
         return Integer.parseInt(properties.getProperty(WINDOW_HEIGHT_KEY, "800"));
     }
 
-    /**
-     * Sets the window height
-     */
+    
     public void setWindowHeight(int height) {
         properties.setProperty(WINDOW_HEIGHT_KEY, String.valueOf(height));
     }
 
-    /**
-     * Gets the last window X position
-     */
+    
     public int getWindowX() {
         return Integer.parseInt(properties.getProperty(WINDOW_X_KEY, "100"));
     }
 
-    /**
-     * Sets the window X position
-     */
+    
     public void setWindowX(int x) {
         properties.setProperty(WINDOW_X_KEY, String.valueOf(x));
     }
 
-    /**
-     * Gets the last window Y position
-     */
+    
     public int getWindowY() {
         return Integer.parseInt(properties.getProperty(WINDOW_Y_KEY, "100"));
     }
 
-    /**
-     * Sets the window Y position
-     */
+    
     public void setWindowY(int y) {
         properties.setProperty(WINDOW_Y_KEY, String.valueOf(y));
     }
 
-    /**
-     * Saves window position and size
-     */
+    
     public void saveWindowBounds(int x, int y, int width, int height) {
         setWindowX(x);
         setWindowY(y);

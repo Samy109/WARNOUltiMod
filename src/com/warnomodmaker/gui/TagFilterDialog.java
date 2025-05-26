@@ -11,9 +11,6 @@ import java.awt.event.ActionListener;
 import java.util.*;
 import java.util.List;
 
-/**
- * Dialog for filtering units by tags
- */
 public class TagFilterDialog extends JDialog {
     private final List<ObjectValue> allUnits;
     private final Map<String, Set<String>> categorizedTags;
@@ -34,8 +31,6 @@ public class TagFilterDialog extends JDialog {
         this.tagCheckBoxes = new HashMap<>();
         this.selectedTags = new HashSet<>();
         this.confirmed = false;
-
-        // Create radio buttons for filter mode
         this.anyTagsRadio = new JRadioButton("Units with ANY selected tags", true);
         this.allTagsRadio = new JRadioButton("Units with ALL selected tags", false);
         ButtonGroup modeGroup = new ButtonGroup();
@@ -61,8 +56,6 @@ public class TagFilterDialog extends JDialog {
         topPanel.add(new JLabel("Filter Mode:"));
         topPanel.add(anyTagsRadio);
         topPanel.add(allTagsRadio);
-
-        // Add listeners to radio buttons
         anyTagsRadio.addActionListener(e -> updateStatus());
         allTagsRadio.addActionListener(e -> updateStatus());
 
@@ -215,9 +208,7 @@ public class TagFilterDialog extends JDialog {
         return anyTagsRadio.isSelected();
     }
 
-    /**
-     * Gets the filtered units based on current selection
-     */
+    
     public List<ObjectValue> getFilteredUnits() {
         if (selectedTags.isEmpty()) {
             return new ArrayList<>(allUnits);

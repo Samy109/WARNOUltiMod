@@ -19,15 +19,11 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Component for editing unit properties.
- */
 public class UnitEditor extends JPanel {
-    private ObjectValue unitDescriptor;
+    private ObjectValue ndfObject;
     private ModificationTracker modificationTracker;
     private PropertyChangeSupport propertyChangeSupport;
 
-    // GUI components
     private JSplitPane splitPane;
     private JTree propertyTree;
     private DefaultTreeModel treeModel;
@@ -36,34 +32,24 @@ public class UnitEditor extends JPanel {
     private JTextField valueField;
     private JButton applyButton;
 
-    // Currently selected property
     private String selectedPath;
     private NDFValue selectedValue;
     private ObjectValue selectedParentObject;
     private String selectedPropertyName;
 
-    // Tree state management
     private TreePath currentSelectedPath;
     private boolean suppressSelectionEvents = false;
 
-    /**
-     * Creates a new unit editor
-     */
+
     public UnitEditor() {
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createTitledBorder("Unit Properties"));
-
-        // Initialize state
-        unitDescriptor = null;
+        setBorder(BorderFactory.createTitledBorder("Object Properties"));
+        ndfObject = null;
         propertyChangeSupport = new PropertyChangeSupport(this);
         selectedPath = null;
         selectedValue = null;
-
-        // Create the split pane
         splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         splitPane.setDividerLocation(300);
-
-        // Create the property tree
         rootNode = new DefaultMutableTreeNode("Unit");
         treeModel = new DefaultTreeModel(rootNode);
         propertyTree = new JTree(treeModel);
@@ -81,8 +67,6 @@ public class UnitEditor extends JPanel {
 
         JScrollPane treeScrollPane = new JScrollPane(propertyTree);
         splitPane.setLeftComponent(treeScrollPane);
-
-        // Create the editor panel
         editorPanel = new JPanel(new BorderLayout());
         editorPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
@@ -104,63 +88,54 @@ public class UnitEditor extends JPanel {
         add(splitPane, BorderLayout.CENTER);
     }
 
-    /**
-     * Sets the unit descriptor to edit
-     *
-     * @param unitDescriptor The unit descriptor
-     */
-    public void setUnitDescriptor(ObjectValue unitDescriptor) {
-        setUnitDescriptor(unitDescriptor, null);
+
+    public void setUnitDescriptor(ObjectValue ndfObject) {
+        setUnitDescriptor(ndfObject, null);
     }
 
-    /**
-     * Sets the unit descriptor to edit with modification tracking
-     *
-     * @param unitDescriptor The unit descriptor
-     * @param modificationTracker The modification tracker (can be null)
-     */
-    public void setUnitDescriptor(ObjectValue unitDescriptor, ModificationTracker modificationTracker) {
-        this.unitDescriptor = unitDescriptor;
+
+    public void setUnitDescriptor(ObjectValue ndfObject, ModificationTracker modificationTracker) {
+        this.ndfObject = ndfObject;
         this.modificationTracker = modificationTracker;
         updatePropertyTree();
         clearEditor();
+        updateBorderTitle();
     }
 
-    /**
-     * Adds a property change listener
-     *
-     * @param listener The listener to add
-     */
+
+    private void updateBorderTitle() {
+        String title = "Object Properties";
+        if (ndfObject != null && ndfObject.getTypeName() != null) {
+            String typeName = ndfObject.getTypeName();
+            // Make the title more user-friendly
+            if (typeName.startsWith("T") && typeName.length() > 1) {
+                typeName = typeName.substring(1);
+            }
+            title = typeName + " Properties";
+        }
+        setBorder(BorderFactory.createTitledBorder(title));
+    }
+
+
     public void addPropertyChangeListener(PropertyChangeListener listener) {
         propertyChangeSupport.addPropertyChangeListener(listener);
     }
 
-    /**
-     * Removes a property change listener
-     *
-     * @param listener The listener to remove
-     */
+
     public void removePropertyChangeListener(PropertyChangeListener listener) {
         propertyChangeSupport.removePropertyChangeListener(listener);
     }
 
-    /**
-     * Refreshes the editor
-     */
+
     public void refresh() {
         refreshWithStatePreservation();
     }
 
-    /**
-     * Refreshes the tree while preserving expansion state and selection
-     */
+
     private void refreshWithStatePreservation() {
-        // Save current state
         String savedPath = selectedPath;
         TreePath savedTreePath = currentSelectedPath;
         Set<String> expandedPaths = getExpandedPaths();
-
-        // Update the tree
         updatePropertyTree();
 
         // Restore expanded paths
@@ -172,9 +147,7 @@ public class UnitEditor extends JPanel {
         }
     }
 
-    /**
-     * Gets all currently expanded paths in the tree
-     */
+
     private Set<String> getExpandedPaths() {
         Set<String> expandedPaths = new HashSet<>();
 
@@ -191,9 +164,7 @@ public class UnitEditor extends JPanel {
         return expandedPaths;
     }
 
-    /**
-     * Restores expanded paths in the tree
-     */
+
     private void restoreExpandedPaths(Set<String> expandedPaths) {
         for (int i = 0; i < propertyTree.getRowCount(); i++) {
             TreePath path = propertyTree.getPathForRow(i);
@@ -205,34 +176,22 @@ public class UnitEditor extends JPanel {
         }
     }
 
-    /**
-     * Restores the selection and updates the editor with the current value
-     */
+
     private void restoreSelectionAndUpdateEditor(String propertyPath) {
         TreePath newPath = findTreePathByPropertyPath(propertyPath);
 
         if (newPath != null) {
             // Suppress selection events while we restore the selection
             suppressSelectionEvents = true;
-
-            // Set the selection
             propertyTree.setSelectionPath(newPath);
-
-            // Update our state variables manually
             currentSelectedPath = newPath;
             selectedPath = propertyPath;
-
-            // Update the editor with the current (updated) value
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) newPath.getLastPathComponent();
             if (node != null && node.getUserObject() instanceof PropertyNode) {
                 PropertyNode propertyNode = (PropertyNode) node.getUserObject();
-
-                // Update selectedValue to the new value and other state
                 selectedValue = propertyNode.getValue();
                 selectedPropertyName = propertyNode.getName();
                 selectedParentObject = findParentObject(newPath);
-
-                // Update the editor field with the new value (this is key!)
                 valueField.setText(selectedValue != null ? selectedValue.toString() : "");
 
                 // Re-enable the apply button if the value is editable
@@ -245,9 +204,7 @@ public class UnitEditor extends JPanel {
         }
     }
 
-    /**
-     * Finds a tree path by property path string
-     */
+
     private TreePath findTreePathByPropertyPath(String propertyPath) {
         if (propertyPath == null || propertyPath.isEmpty()) {
             return null;
@@ -257,11 +214,8 @@ public class UnitEditor extends JPanel {
         return findNodeByPath(rootNode, propertyPath, new TreePath(rootNode));
     }
 
-    /**
-     * Recursively searches for a node with the given property path
-     */
+
     private TreePath findNodeByPath(DefaultMutableTreeNode node, String targetPath, TreePath currentPath) {
-        // Check if this node matches the target path
         String currentPathString = getPropertyPath(currentPath);
         if (targetPath.equals(currentPathString)) {
             return currentPath;
@@ -281,21 +235,16 @@ public class UnitEditor extends JPanel {
         return null;
     }
 
-    /**
-     * Updates the property tree
-     */
+
     private void updatePropertyTree() {
         rootNode.removeAllChildren();
 
-        if (unitDescriptor != null) {
-            // Add unit type
+        if (ndfObject != null) {
             DefaultMutableTreeNode typeNode = new DefaultMutableTreeNode(
-                new PropertyNode("Type", unitDescriptor.getTypeName())
+                new PropertyNode("Type", ndfObject.getTypeName())
             );
             rootNode.add(typeNode);
-
-            // Add properties
-            for (Map.Entry<String, NDFValue> entry : unitDescriptor.getProperties().entrySet()) {
+            for (Map.Entry<String, NDFValue> entry : ndfObject.getProperties().entrySet()) {
                 String propertyName = entry.getKey();
                 NDFValue propertyValue = entry.getValue();
 
@@ -310,18 +259,10 @@ public class UnitEditor extends JPanel {
         propertyTree.expandPath(new TreePath(rootNode.getPath()));
     }
 
-    /**
-     * Creates a tree node for a property
-     *
-     * @param propertyName The property name
-     * @param propertyValue The property value
-     * @return The tree node
-     */
+
     private DefaultMutableTreeNode createPropertyNode(String propertyName, NDFValue propertyValue) {
         PropertyNode node = new PropertyNode(propertyName, propertyValue);
         DefaultMutableTreeNode treeNode = new DefaultMutableTreeNode(node);
-
-        // Add child nodes for complex types
         switch (propertyValue.getType()) {
             case OBJECT:
                 ObjectValue objectValue = (ObjectValue) propertyValue;
@@ -358,23 +299,30 @@ public class UnitEditor extends JPanel {
                     treeNode.add(childNode);
                 }
                 break;
+
+            case TUPLE:
+                // CRITICAL FIX: Handle tuples like (EBaseHitValueModifier,Moving, 7)
+                TupleValue tupleValue = (TupleValue) propertyValue;
+
+                for (int i = 0; i < tupleValue.getElements().size(); i++) {
+                    NDFValue element = tupleValue.getElements().get(i);
+                    String childName = "[" + i + "]";
+
+                    DefaultMutableTreeNode childNode = createPropertyNode(childName, element);
+                    treeNode.add(childNode);
+                }
+                break;
         }
 
         return treeNode;
     }
 
-    /**
-     * Handles property selection in the tree
-     *
-     * @param path The selected path
-     */
+
     private void handlePropertySelection(TreePath path) {
         // Skip if we're suppressing selection events (during refresh)
         if (suppressSelectionEvents) {
             return;
         }
-
-        // Handle null path (happens during tree clearing/rebuilding)
         if (path == null) {
             clearEditor();
             return;
@@ -388,9 +336,7 @@ public class UnitEditor extends JPanel {
             selectedPath = getPropertyPath(path);
             selectedValue = propertyNode.getValue();
             selectedPropertyName = propertyNode.getName();
-            currentSelectedPath = path; // Save the current tree path
-
-            // Find the parent object that contains this property
+            currentSelectedPath = path;
             selectedParentObject = findParentObject(path);
 
             // Debug output
@@ -406,12 +352,7 @@ public class UnitEditor extends JPanel {
         }
     }
 
-    /**
-     * Gets the property path for a tree path
-     *
-     * @param treePath The tree path
-     * @return The property path
-     */
+
     private String getPropertyPath(TreePath treePath) {
         StringBuilder path = new StringBuilder();
 
@@ -424,8 +365,6 @@ public class UnitEditor extends JPanel {
             if (node.getUserObject() instanceof PropertyNode) {
                 PropertyNode propertyNode = (PropertyNode) node.getUserObject();
                 String nodeName = propertyNode.getName();
-
-                // Handle array indices - they should be attached to the previous property name
                 if (nodeName.startsWith("[") && nodeName.endsWith("]")) {
                     // This is an array index, append it directly to the path without a dot
                     path.append(nodeName);
@@ -442,12 +381,7 @@ public class UnitEditor extends JPanel {
         return path.toString();
     }
 
-    /**
-     * Finds the parent object that contains the selected property
-     *
-     * @param treePath The tree path to the selected property
-     * @return The parent ObjectValue that contains this property
-     */
+
     private ObjectValue findParentObject(TreePath treePath) {
         Object[] nodes = treePath.getPath();
 
@@ -466,11 +400,11 @@ public class UnitEditor extends JPanel {
         // If we're at the root level (direct property of unitDescriptor)
         if (nodes.length == 2) {
             System.out.println("  Returning unitDescriptor as parent (root level)");
-            return unitDescriptor;
+            return ndfObject;
         }
 
         // Navigate through the object hierarchy to find the parent
-        ObjectValue currentObject = unitDescriptor;
+        ObjectValue currentObject = ndfObject;
 
         // Skip root node and go to the parent of the selected node
         for (int i = 1; i < nodes.length - 1; i++) {
@@ -495,7 +429,6 @@ public class UnitEditor extends JPanel {
                     currentObject = (ObjectValue) value;
                     System.out.println("    Updated current object");
                 } else if (value instanceof ArrayValue) {
-                    // Handle array case - we need to get the specific array element
                     System.out.println("    Found array, need to get array element");
                     ArrayValue arrayValue = (ArrayValue) value;
 
@@ -505,8 +438,6 @@ public class UnitEditor extends JPanel {
                         if (nextNode.getUserObject() instanceof PropertyNode) {
                             PropertyNode nextPropertyNode = (PropertyNode) nextNode.getUserObject();
                             String indexStr = nextPropertyNode.getName();
-
-                            // Parse array index from "[19]" format
                             if (indexStr.startsWith("[") && indexStr.endsWith("]")) {
                                 try {
                                     int index = Integer.parseInt(indexStr.substring(1, indexStr.length() - 1));
@@ -545,11 +476,7 @@ public class UnitEditor extends JPanel {
         return currentObject;
     }
 
-    /**
-     * Updates the editor with the selected property
-     *
-     * @param propertyNode The selected property node
-     */
+
     private void updateEditor(PropertyNode propertyNode) {
         NDFValue value = propertyNode.getValue();
 
@@ -561,9 +488,7 @@ public class UnitEditor extends JPanel {
         applyButton.setEnabled(editable);
     }
 
-    /**
-     * Clears the editor
-     */
+
     private void clearEditor() {
         selectedPath = null;
         selectedValue = null;
@@ -576,12 +501,6 @@ public class UnitEditor extends JPanel {
     }
 
 
-    /**
-     * Checks if a value type is editable
-     *
-     * @param value The value to check
-     * @return True if the value is editable, false otherwise
-     */
     private boolean isEditableType(NDFValue value) {
         if (value == null) {
             return false;
@@ -595,7 +514,20 @@ public class UnitEditor extends JPanel {
             case RESOURCE_REF:
             case GUID:
             case ENUM:
+            case TUPLE:  // FIXED: Tuples like (EBaseHitValueModifier,Moving, 7) are now editable
                 return true;
+
+            case ARRAY:
+                // Arrays themselves are not directly editable, but their elements might be
+                return false;
+
+            case OBJECT:
+                // Objects themselves are not directly editable, but their properties might be
+                return false;
+
+            case MAP:
+                // Maps themselves are not directly editable, but their entries might be
+                return false;
 
             default:
                 return false;
@@ -603,22 +535,18 @@ public class UnitEditor extends JPanel {
     }
 
 
-
-    /**
-     * Applies the edited value
-     */
     private void applyValue(ActionEvent e) {
         // Debug output
         System.out.println("Apply button clicked:");
         System.out.println("  selectedPath: " + selectedPath);
         System.out.println("  selectedValue: " + selectedValue);
-        System.out.println("  unitDescriptor: " + (unitDescriptor != null ? "not null" : "null"));
+        System.out.println("  ndfObject: " + (ndfObject != null ? "not null" : "null"));
 
-        if (selectedPath == null || selectedValue == null || unitDescriptor == null) {
+        if (selectedPath == null || selectedValue == null || ndfObject == null) {
             String message = "No property selected for editing\n";
             message += "selectedPath: " + (selectedPath == null ? "null" : selectedPath) + "\n";
             message += "selectedValue: " + (selectedValue == null ? "null" : selectedValue.toString()) + "\n";
-            message += "unitDescriptor: " + (unitDescriptor == null ? "null" : "not null");
+            message += "ndfObject: " + (ndfObject == null ? "null" : "not null");
 
             JOptionPane.showMessageDialog(
                 this,
@@ -632,13 +560,10 @@ public class UnitEditor extends JPanel {
         String newValueText = valueField.getText();
 
         try {
-            // Parse the new value based on the type of the selected value
             NDFValue newValue = parseValue(newValueText, selectedValue);
-
-            // Use PropertyUpdater for consistency with mass changes
             String actualPath = selectedPath;
             if (selectedPath.startsWith("Type.")) {
-                actualPath = selectedPath.substring(5); // Remove "Type." prefix
+                actualPath = selectedPath.substring(5);
             }
 
             System.out.println("Using PropertyUpdater for individual change:");
@@ -647,14 +572,14 @@ public class UnitEditor extends JPanel {
             System.out.println("  newValue: " + newValue);
 
             // Use PropertyUpdater.updateProperty with tracking - same as mass changes!
-            boolean success = PropertyUpdater.updateProperty(unitDescriptor, actualPath, newValue, modificationTracker);
+            boolean success = PropertyUpdater.updateProperty(ndfObject, actualPath, newValue, modificationTracker);
 
             if (!success) {
                 throw new IllegalArgumentException("Failed to update property at path: " + actualPath);
             }
 
             // Notify listeners
-            propertyChangeSupport.firePropertyChange("unitModified", null, unitDescriptor);
+            propertyChangeSupport.firePropertyChange("unitModified", null, ndfObject);
 
             // Refresh the tree
             refresh();
@@ -668,17 +593,10 @@ public class UnitEditor extends JPanel {
         }
     }
 
-    /**
-     * Parses a value from text based on the type of the original value
-     *
-     * @param text The text to parse
-     * @param originalValue The original value
-     * @return The parsed value
-     */
+
     private NDFValue parseValue(String text, NDFValue originalValue) {
         switch (originalValue.getType()) {
             case STRING:
-                // Remove quotes if present
                 if (text.startsWith("'") && text.endsWith("'")) {
                     text = text.substring(1, text.length() - 1);
                 }
@@ -723,45 +641,69 @@ public class UnitEditor extends JPanel {
                 }
                 return NDFValue.createEnum(parts[0], parts[1]);
 
+            case TUPLE:
+                // Handle tuple editing: (EBaseHitValueModifier,Moving, 7)
+                if (!text.startsWith("(") || !text.endsWith(")")) {
+                    throw new IllegalArgumentException("Tuple must be in the format '(value1, value2, value3)'");
+                }
+
+                String tupleContent = text.substring(1, text.length() - 1);
+                String[] tupleElements = tupleContent.split(",");
+
+                TupleValue newTuple = NDFValue.createTuple();
+                for (String element : tupleElements) {
+                    element = element.trim();
+
+                    // Try to parse each element as the appropriate type
+                    NDFValue elementValue;
+                    if (element.startsWith("'") && element.endsWith("'")) {
+                        elementValue = NDFValue.createString(element.substring(1, element.length() - 1));
+                    } else if (element.equalsIgnoreCase("true") || element.equalsIgnoreCase("false")) {
+                        elementValue = NDFValue.createBoolean(Boolean.parseBoolean(element));
+                    } else if (element.matches("-?\\d+(\\.\\d+)?")) {
+                        elementValue = NDFValue.createNumber(Double.parseDouble(element));
+                    } else if (element.contains("/")) {
+                        String[] enumParts = element.split("/");
+                        if (enumParts.length == 2) {
+                            elementValue = NDFValue.createEnum(enumParts[0], enumParts[1]);
+                        } else {
+                            elementValue = NDFValue.createString(element);
+                        }
+                    } else {
+                        elementValue = NDFValue.createString(element);
+                    }
+
+                    newTuple.add(elementValue);
+                }
+
+                return newTuple;
+
             default:
                 throw new IllegalArgumentException("Cannot edit this type of value");
         }
     }
 
-    /**
-     * Updates a value in the unit descriptor using the shared PropertyUpdater
-     *
-     * @param path The path to the value
-     * @param newValue The new value
-     */
+
     private void updateValueInUnitDescriptor(String path, NDFValue newValue) {
         // Skip the "Type" node if present
         String actualPath = path;
         if (path.startsWith("Type.")) {
-            actualPath = path.substring(5); // Remove "Type." prefix
+            actualPath = path.substring(5);
         }
-
-        // Use the shared PropertyUpdater for consistency with mass updates
         // Note: Don't pass modificationTracker here as we already recorded it in applyValue()
-        boolean success = PropertyUpdater.updateProperty(unitDescriptor, actualPath, newValue, null);
+        boolean success = PropertyUpdater.updateProperty(ndfObject, actualPath, newValue, null);
 
         if (!success) {
             throw new IllegalArgumentException("Failed to update property at path: " + path);
         }
     }
 
-    /**
-     * Selects a property in the tree by its path
-     *
-     * @param path The property path
-     */
+
     private void selectPropertyByPath(String path) {
         // Not implemented yet
     }
 
-    /**
-     * Node for the property tree
-     */
+
     private static class PropertyNode {
         private final String name;
         private final NDFValue value;

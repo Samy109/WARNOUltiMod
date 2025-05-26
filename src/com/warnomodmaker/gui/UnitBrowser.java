@@ -18,20 +18,15 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
-/**
- * Component for browsing and selecting units.
- */
 public class UnitBrowser extends JPanel {
-    private List<ObjectValue> unitDescriptors;
-    private List<ObjectValue> filteredUnits;
+    private List<ObjectValue> ndfObjects;
+    private List<ObjectValue> filteredObjects;
     private List<Consumer<ObjectValue>> selectionListeners;
-    private List<ObjectValue> originalUnits; // Keep a separate copy of the original units
-    private NDFFileType currentFileType; // Current file type being displayed
-
-    // GUI components
+    private List<ObjectValue> originalObjects;
+    private NDFFileType currentFileType;
     private JTextField searchField;
     private JComboBox<String> searchTypeComboBox;
-    private JList<ObjectValue> unitList;
+    private JList<ObjectValue> objectList;
     private DefaultListModel<ObjectValue> listModel;
     private JLabel statusLabel;
 
@@ -46,20 +41,14 @@ public class UnitBrowser extends JPanel {
     private static final String SEARCH_BY_VISION = "Search by Vision";
     private static final String SEARCH_BY_CUSTOM = "Search by Custom Path";
 
-    /**
-     * Creates a new unit browser
-     */
+    
     public UnitBrowser() {
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createTitledBorder("Units"));
-
-        // Initialize state
-        unitDescriptors = new ArrayList<>();
-        filteredUnits = new ArrayList<>();
+        setBorder(BorderFactory.createTitledBorder("Objects"));
+        ndfObjects = new ArrayList<>();
+        filteredObjects = new ArrayList<>();
         selectionListeners = new ArrayList<>();
         currentFileType = NDFFileType.UNKNOWN;
-
-        // Create the search panel
         JPanel searchPanel = new JPanel(new GridBagLayout());
         searchPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
@@ -81,7 +70,6 @@ public class UnitBrowser extends JPanel {
         });
         searchTypeComboBox.addActionListener(e -> {
             if (searchTypeComboBox.getSelectedItem().equals(SEARCH_BY_CUSTOM)) {
-                // Show a dialog to enter the custom property path
                 String customPath = JOptionPane.showInputDialog(
                     this,
                     "Enter the property path to search (e.g., MaxPhysicalDamages):",
@@ -155,119 +143,79 @@ public class UnitBrowser extends JPanel {
         searchPanel.add(statusLabel, gbc);
 
         add(searchPanel, BorderLayout.NORTH);
-
-        // Create the unit list
         listModel = new DefaultListModel<>();
-        unitList = new JList<>(listModel);
-        unitList.setCellRenderer(new UnitListCellRenderer());
-        unitList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        unitList.addListSelectionListener(new ListSelectionListener() {
+        objectList = new JList<>(listModel);
+        objectList.setCellRenderer(new UnitListCellRenderer());
+        objectList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        objectList.addListSelectionListener(new ListSelectionListener() {
             @Override
             public void valueChanged(ListSelectionEvent e) {
                 if (!e.getValueIsAdjusting()) {
-                    ObjectValue selectedUnit = unitList.getSelectedValue();
-                    notifySelectionListeners(selectedUnit);
+                    ObjectValue selectedObject = objectList.getSelectedValue();
+                    notifySelectionListeners(selectedObject);
                 }
             }
         });
 
-        JScrollPane scrollPane = new JScrollPane(unitList);
+        JScrollPane scrollPane = new JScrollPane(objectList);
         add(scrollPane, BorderLayout.CENTER);
     }
 
-    /**
-     * Sets the unit descriptors to display
-     *
-     * @param unitDescriptors The unit descriptors
-     */
+    
     public void setUnitDescriptors(List<ObjectValue> unitDescriptors) {
         setUnitDescriptors(unitDescriptors, NDFFileType.UNKNOWN);
     }
 
-    /**
-     * Sets the unit descriptors to display with file type information
-     *
-     * @param unitDescriptors The unit descriptors
-     * @param fileType The file type being displayed
-     */
-    public void setUnitDescriptors(List<ObjectValue> unitDescriptors, NDFFileType fileType) {
+    
+    public void setUnitDescriptors(List<ObjectValue> ndfObjects, NDFFileType fileType) {
         // Store the original list and file type
-        this.unitDescriptors = unitDescriptors != null ? unitDescriptors : new ArrayList<>();
+        this.ndfObjects = ndfObjects != null ? ndfObjects : new ArrayList<>();
         this.currentFileType = fileType;
 
-        // Store a separate copy of the original units
-        this.originalUnits = new ArrayList<>(this.unitDescriptors);
-
-        // Initialize the filtered list with all units
-        this.filteredUnits = new ArrayList<>(this.unitDescriptors);
-
-        // Update the border title based on file type
-        String borderTitle = fileType != NDFFileType.UNKNOWN ? fileType.getDisplayName() + "s" : "Units";
+        // Store a separate copy of the original objects
+        this.originalObjects = new ArrayList<>(this.ndfObjects);
+        this.filteredObjects = new ArrayList<>(this.ndfObjects);
+        String borderTitle = fileType != NDFFileType.UNKNOWN ? fileType.getDisplayName() + "s" : "Objects";
         setBorder(BorderFactory.createTitledBorder(borderTitle));
-
-        // Update the status label
-        String objectTypeName = fileType != NDFFileType.UNKNOWN ? fileType.getDisplayName().toLowerCase() + "s" : "units";
-        statusLabel.setText(this.unitDescriptors.size() + " " + objectTypeName + " found");
-
-        // Create a new list model instead of updating the existing one
+        String objectTypeName = fileType != NDFFileType.UNKNOWN ? fileType.getDisplayName().toLowerCase() + "s" : "objects";
+        statusLabel.setText(this.ndfObjects.size() + " " + objectTypeName + " found");
         DefaultListModel<ObjectValue> newModel = new DefaultListModel<>();
-
-        // Add all units to the new model at once
-        for (ObjectValue unit : this.unitDescriptors) {
-            newModel.addElement(unit);
+        for (ObjectValue object : this.ndfObjects) {
+            newModel.addElement(object);
         }
 
         // Replace the entire model at once - this is much more efficient
-        unitList.setModel(newModel);
-
-        // Update our reference to the model
+        objectList.setModel(newModel);
         listModel = newModel;
 
-        // Select the first unit if available
-        if (!this.unitDescriptors.isEmpty()) {
-            unitList.setSelectedIndex(0);
+        // Select the first object if available
+        if (!this.ndfObjects.isEmpty()) {
+            objectList.setSelectedIndex(0);
         }
     }
 
-    /**
-     * Gets the selected unit descriptor
-     *
-     * @return The selected unit descriptor, or null if none is selected
-     */
+    
     public ObjectValue getSelectedUnitDescriptor() {
-        return unitList.getSelectedValue();
+        return objectList.getSelectedValue();
     }
 
-    /**
-     * Adds a listener for unit selection events
-     *
-     * @param listener The listener to add
-     */
+    
     public void addUnitSelectionListener(Consumer<ObjectValue> listener) {
         selectionListeners.add(listener);
     }
 
-    /**
-     * Removes a listener for unit selection events
-     *
-     * @param listener The listener to remove
-     */
+    
     public void removeUnitSelectionListener(Consumer<ObjectValue> listener) {
         selectionListeners.remove(listener);
     }
 
-    /**
-     * Refreshes the unit list
-     */
+    
     public void refresh() {
         filterUnits();
     }
 
-    /**
-     * Filters the units based on the search criteria
-     */
+    
     private void filterUnits() {
-        // Get the search text and type
         final String searchText = searchField.getText().toLowerCase().trim();
         final String searchType = (String) searchTypeComboBox.getSelectedItem();
 
@@ -276,8 +224,6 @@ public class UnitBrowser extends JPanel {
             resetToAllUnits();
             return;
         }
-
-        // Show a "Searching..." message
         statusLabel.setText("Searching...");
 
         // Disable the search field while searching
@@ -291,7 +237,7 @@ public class UnitBrowser extends JPanel {
 
                 // For very short search terms (1-2 characters), only search by name to avoid performance issues
                 if (searchText.length() <= 2 && !searchType.equals(SEARCH_BY_CUSTOM)) {
-                    for (ObjectValue unit : unitDescriptors) {
+                    for (ObjectValue unit : ndfObjects) {
                         String unitName = unit.getInstanceName().toLowerCase();
                         if (unitName.contains(searchText)) {
                             results.add(unit);
@@ -301,7 +247,7 @@ public class UnitBrowser extends JPanel {
                 }
 
                 // For longer search terms or custom search, do the full search
-                for (ObjectValue unit : unitDescriptors) {
+                for (ObjectValue unit : ndfObjects) {
                     boolean matches = false;
 
                     try {
@@ -363,37 +309,25 @@ public class UnitBrowser extends JPanel {
             @Override
             protected void done() {
                 try {
-                    // Get the search results
                     List<ObjectValue> results = get();
-
-                    // Update the filtered units list
-                    filteredUnits = results;
-
-                    // Create a new list model instead of updating the existing one
+                    filteredObjects = results;
                     DefaultListModel<ObjectValue> newModel = new DefaultListModel<>();
-
-                    // Add all filtered units to the new model at once
-                    for (ObjectValue unit : filteredUnits) {
+                    for (ObjectValue unit : filteredObjects) {
                         newModel.addElement(unit);
                     }
 
                     // Replace the entire model at once - this is much more efficient
-                    unitList.setModel(newModel);
-
-                    // Update our reference to the model
+                    objectList.setModel(newModel);
                     listModel = newModel;
-
-                    // Update the status label
                     String objectTypeName = currentFileType != NDFFileType.UNKNOWN ?
-                        currentFileType.getDisplayName().toLowerCase() + "s" : "units";
-                    statusLabel.setText(filteredUnits.size() + " " + objectTypeName + " found");
+                        currentFileType.getDisplayName().toLowerCase() + "s" : "objects";
+                    statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found");
 
-                    // Select the first unit if available
-                    if (!filteredUnits.isEmpty()) {
-                        unitList.setSelectedIndex(0);
+                    // Select the first object if available
+                    if (!filteredObjects.isEmpty()) {
+                        objectList.setSelectedIndex(0);
                     }
                 } catch (InterruptedException | ExecutionException e) {
-                    // Handle any errors
                     statusLabel.setText("Error searching: " + e.getMessage());
                 } finally {
                     // Re-enable the search field and restore focus
@@ -407,13 +341,7 @@ public class UnitBrowser extends JPanel {
         worker.execute();
     }
 
-    /**
-     * Checks if a unit has a property with the given path
-     *
-     * @param unit The unit to check
-     * @param propertyPath The property path to look for
-     * @return True if the property exists, false otherwise
-     */
+    
     private boolean hasProperty(ObjectValue unit, String propertyPath) {
         // Split the property path into parts
         String[] pathParts = propertyPath.split("\\.");
@@ -438,14 +366,7 @@ public class UnitBrowser extends JPanel {
         return true;
     }
 
-    /**
-     * Checks if a unit property matches a value
-     *
-     * @param unit The unit to check
-     * @param propertyPath The property path to look for
-     * @param valueToMatch The value to match
-     * @return True if the property matches the value, false otherwise
-     */
+    
     private boolean matchesPropertyValue(ObjectValue unit, String propertyPath, String valueToMatch) {
         // If no value to match, just check if the property exists
         if (valueToMatch.isEmpty()) {
@@ -471,11 +392,7 @@ public class UnitBrowser extends JPanel {
                 return false;
             }
         }
-
-        // Check if the value matches
         String valueStr = currentValue.toString().toLowerCase();
-
-        // Handle comparison operators
         if (valueToMatch.startsWith(">")) {
             try {
                 double threshold = Double.parseDouble(valueToMatch.substring(1).trim());
@@ -522,22 +439,14 @@ public class UnitBrowser extends JPanel {
         }
     }
 
-
-
-    /**
-     * Notifies selection listeners of a selection change
-     *
-     * @param selectedUnit The selected unit
-     */
+    
     private void notifySelectionListeners(ObjectValue selectedUnit) {
         for (Consumer<ObjectValue> listener : selectionListeners) {
             listener.accept(selectedUnit);
         }
     }
 
-    /**
-     * Cell renderer for the unit list
-     */
+    
     private static class UnitListCellRenderer extends DefaultListCellRenderer {
         @Override
         public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
@@ -552,36 +461,24 @@ public class UnitBrowser extends JPanel {
         }
     }
 
-    /**
-     * Resets the unit list to show all units
-     * This is a special method to handle the empty search case efficiently
-     */
+    
     private void resetToAllUnits() {
-        // Create a new list model instead of updating the existing one
         DefaultListModel<ObjectValue> newModel = new DefaultListModel<>();
-
-        // Add all units to the new model at once
-        for (ObjectValue unit : originalUnits) {
+        for (ObjectValue unit : originalObjects) {
             newModel.addElement(unit);
         }
 
         // Replace the entire model at once - this is much more efficient
-        unitList.setModel(newModel);
-
-        // Update our reference to the model
+        objectList.setModel(newModel);
         listModel = newModel;
-
-        // Update the filtered units list
-        filteredUnits = new ArrayList<>(originalUnits);
-
-        // Update the status label
+        filteredObjects = new ArrayList<>(originalObjects);
         String objectTypeName = currentFileType != NDFFileType.UNKNOWN ?
-            currentFileType.getDisplayName().toLowerCase() + "s" : "units";
-        statusLabel.setText(filteredUnits.size() + " " + objectTypeName + " found");
+            currentFileType.getDisplayName().toLowerCase() + "s" : "objects";
+        statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found");
 
-        // Select the first unit if available
-        if (!filteredUnits.isEmpty()) {
-            unitList.setSelectedIndex(0);
+        // Select the first object if available
+        if (!filteredObjects.isEmpty()) {
+            objectList.setSelectedIndex(0);
         }
 
         // Make sure the search field has focus

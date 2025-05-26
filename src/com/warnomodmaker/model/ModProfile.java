@@ -7,10 +7,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
-/**
- * Represents a complete mod profile that can be saved to and loaded from JSON.
- * Contains all modifications made during a session along with metadata.
- */
 public class ModProfile {
     private String profileName;
     private String description;
@@ -21,12 +17,9 @@ public class ModProfile {
     private String createdBy;
     private List<ModificationRecord> modifications;
 
-    // JSON format version for compatibility
     private static final String FORMAT_VERSION = "1.0";
 
-    /**
-     * Creates a new empty mod profile
-     */
+    
     public ModProfile() {
         this.profileName = "Untitled Profile";
         this.description = "";
@@ -38,9 +31,7 @@ public class ModProfile {
         this.modifications = new ArrayList<>();
     }
 
-    /**
-     * Creates a mod profile from a modification tracker
-     */
+    
     public ModProfile(String profileName, ModificationTracker tracker, String sourceFileName) {
         this();
         this.profileName = profileName;
@@ -48,8 +39,6 @@ public class ModProfile {
         this.modifications = new ArrayList<>(tracker.getLatestModifications());
         this.lastModified = LocalDateTime.now();
     }
-
-    // Getters and Setters
     public String getProfileName() { return profileName; }
     public void setProfileName(String profileName) {
         this.profileName = profileName;
@@ -89,17 +78,13 @@ public class ModProfile {
         this.lastModified = LocalDateTime.now();
     }
 
-    /**
-     * Adds a modification to the profile
-     */
+    
     public void addModification(ModificationRecord modification) {
         modifications.add(modification);
         this.lastModified = LocalDateTime.now();
     }
 
-    /**
-     * Removes a modification from the profile
-     */
+    
     public boolean removeModification(ModificationRecord modification) {
         boolean removed = modifications.remove(modification);
         if (removed) {
@@ -108,37 +93,27 @@ public class ModProfile {
         return removed;
     }
 
-    /**
-     * Gets the number of modifications in this profile
-     */
+    
     public int getModificationCount() {
         return modifications.size();
     }
 
-    /**
-     * Checks if the profile has any modifications
-     */
+    
     public boolean hasModifications() {
         return !modifications.isEmpty();
     }
 
-    /**
-     * Gets formatted creation date
-     */
+    
     public String getFormattedCreatedDate() {
         return createdDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
     }
 
-    /**
-     * Gets formatted last modified date
-     */
+    
     public String getFormattedLastModified() {
         return lastModified.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
     }
 
-    /**
-     * Saves the profile to a JSON file
-     */
+    
     public void saveToFile(File file) throws IOException {
         try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
             writer.println("{");
@@ -178,9 +153,7 @@ public class ModProfile {
         }
     }
 
-    /**
-     * Loads a profile from a JSON file
-     */
+    
     public static ModProfile loadFromFile(File file) throws IOException {
         ModProfile profile = new ModProfile();
         List<ModificationRecord> mods = new ArrayList<>();
@@ -191,8 +164,6 @@ public class ModProfile {
             while ((line = reader.readLine()) != null) {
                 jsonContent.append(line).append("\n");
             }
-
-            // Parse the JSON content
             String content = jsonContent.toString();
 
             // Extract basic profile information
@@ -201,8 +172,6 @@ public class ModProfile {
             profile.gameVersion = extractJsonValue(content, "gameVersion");
             profile.sourceFileName = extractJsonValue(content, "sourceFileName");
             profile.createdBy = extractJsonValue(content, "createdBy");
-
-            // Parse dates
             String createdDateStr = extractJsonValue(content, "createdDate");
             if (!createdDateStr.isEmpty()) {
                 profile.createdDate = LocalDateTime.parse(createdDateStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
@@ -212,8 +181,6 @@ public class ModProfile {
             if (!lastModifiedStr.isEmpty()) {
                 profile.lastModified = LocalDateTime.parse(lastModifiedStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
             }
-
-            // Parse modifications array
             mods = parseModifications(content);
             profile.modifications = mods;
         }
@@ -221,9 +188,7 @@ public class ModProfile {
         return profile;
     }
 
-    /**
-     * Simple JSON string escaping
-     */
+    
     private String escapeJson(String str) {
         if (str == null) return "";
         return str.replace("\\", "\\\\")
@@ -233,9 +198,7 @@ public class ModProfile {
                   .replace("\t", "\\t");
     }
 
-    /**
-     * Extracts a JSON value by key from the content
-     */
+    
     private static String extractJsonValue(String content, String key) {
         String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]*?)\"";
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
@@ -246,13 +209,9 @@ public class ModProfile {
         return "";
     }
 
-    /**
-     * Parses the modifications array from JSON content
-     */
+    
     private static List<ModificationRecord> parseModifications(String content) {
         List<ModificationRecord> modifications = new ArrayList<>();
-
-        // Find the modifications array
         int modificationsStart = content.indexOf("\"modifications\": [");
         if (modificationsStart == -1) {
             return modifications;
@@ -283,8 +242,6 @@ public class ModProfile {
             if (obj.trim().isEmpty()) {
                 continue;
             }
-
-            // Parse individual modification
             try {
                 String unitName = extractValueFromObject(obj, "unitName");
                 String propertyPath = extractValueFromObject(obj, "propertyPath");
@@ -325,9 +282,7 @@ public class ModProfile {
         return modifications;
     }
 
-    /**
-     * Finds the matching closing bracket for an opening bracket
-     */
+    
     private static int findMatchingBracket(String content, int openIndex) {
         if (openIndex >= content.length() || content.charAt(openIndex) != '[') {
             return -1;
@@ -348,9 +303,7 @@ public class ModProfile {
         return -1;
     }
 
-    /**
-     * Extracts a value from a JSON object string
-     */
+    
     private static String extractValueFromObject(String objectStr, String key) {
         String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]*?)\"";
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);

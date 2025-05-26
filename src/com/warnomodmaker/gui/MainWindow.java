@@ -1,45 +1,37 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.model.FileTabState;
 import com.warnomodmaker.model.NDFValue;
 import com.warnomodmaker.model.ModificationTracker;
+import com.warnomodmaker.model.ModificationRecord;
 import com.warnomodmaker.model.ModProfile;
 import com.warnomodmaker.model.UserPreferences;
 import com.warnomodmaker.parser.NDFParser;
 import com.warnomodmaker.parser.NDFWriter;
 
 import javax.swing.*;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
+import java.awt.event.*;
 import java.io.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-/**
- * Main window for the WARNO Mod Maker application.
- */
 public class MainWindow extends JFrame {
-    private File currentFile;
-    private List<NDFValue.ObjectValue> unitDescriptors;
-    private NDFValue.NDFFileType currentFileType;
-    private boolean modified;
-    private NDFParser parser; // Store the parser for access to original tokens
-    private ModificationTracker modificationTracker; // Track all modifications
 
-    // GUI components
+    private List<FileTabState> tabStates;
+    private JTabbedPane tabbedPane;
+    private int nextTabId = 1;
+
     private JPanel mainPanel;
-    private JSplitPane splitPane;
-    private com.warnomodmaker.gui.UnitBrowser unitBrowser;
-    private com.warnomodmaker.gui.UnitEditor unitEditor;
     private JMenuBar menuBar;
 
-    /**
-     * Creates a new main window
-     */
     public MainWindow() {
-        // Set up the frame
         setTitle("WARNO Mod Maker");
 
         // Restore window position and size from preferences
@@ -48,20 +40,15 @@ public class MainWindow extends JFrame {
         setLocation(prefs.getWindowX(), prefs.getWindowY());
 
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-
-        // Add window listener to handle close events
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
                 exitApplication();
             }
         });
-
-        // Add component listener to save window position and size changes
         addComponentListener(new ComponentAdapter() {
             @Override
             public void componentMoved(ComponentEvent e) {
-                // Save window position when moved
                 UserPreferences.getInstance().saveWindowBounds(
                     getX(), getY(), getWidth(), getHeight()
                 );
@@ -69,31 +56,18 @@ public class MainWindow extends JFrame {
 
             @Override
             public void componentResized(ComponentEvent e) {
-                // Save window size when resized
                 UserPreferences.getInstance().saveWindowBounds(
                     getX(), getY(), getWidth(), getHeight()
                 );
             }
         });
-
-        // Create the menu bar
+        tabStates = new ArrayList<>();
         createMenuBar();
-
-        // Create the main panel
         createMainPanel();
-
-        // Initialize state
-        currentFile = null;
-        unitDescriptors = null;
-        currentFileType = NDFValue.NDFFileType.UNKNOWN;
-        modified = false;
-        modificationTracker = new ModificationTracker();
         updateTitle();
     }
 
-    /**
-     * Creates the menu bar
-     */
+
     private void createMenuBar() {
         menuBar = new JMenuBar();
 
@@ -101,16 +75,32 @@ public class MainWindow extends JFrame {
         JMenu fileMenu = new JMenu("File");
 
         JMenuItem openItem = new JMenuItem("Open...");
+        openItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
         openItem.addActionListener(this::openFile);
         fileMenu.add(openItem);
 
+        fileMenu.addSeparator();
+
         JMenuItem saveItem = new JMenuItem("Save");
+        saveItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
         saveItem.addActionListener(this::saveFile);
         fileMenu.add(saveItem);
 
         JMenuItem saveAsItem = new JMenuItem("Save As...");
+        saveAsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         saveAsItem.addActionListener(this::saveFileAs);
         fileMenu.add(saveAsItem);
+
+        fileMenu.addSeparator();
+
+        JMenuItem closeTabItem = new JMenuItem("Close Tab");
+        closeTabItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_W, InputEvent.CTRL_DOWN_MASK));
+        closeTabItem.addActionListener(this::closeCurrentTab);
+        fileMenu.add(closeTabItem);
+
+        JMenuItem closeAllTabsItem = new JMenuItem("Close All Tabs");
+        closeAllTabsItem.addActionListener(this::closeAllTabs);
+        fileMenu.add(closeAllTabsItem);
 
         fileMenu.addSeparator();
 
@@ -168,50 +158,43 @@ public class MainWindow extends JFrame {
         setJMenuBar(menuBar);
     }
 
-    /**
-     * Creates the main panel
-     */
+
     private void createMainPanel() {
         mainPanel = new JPanel(new BorderLayout());
+        tabbedPane = new JTabbedPane();
+        tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+        tabbedPane.addChangeListener(this::onTabChanged);
+        tabbedPane.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isMiddleMouseButton(e)) {
+                    int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
+                    if (tabIndex >= 0) {
+                        closeTab(tabIndex);
+                    }
+                }
+            }
 
-        // Create the unit browser
-        unitBrowser = new com.warnomodmaker.gui.UnitBrowser();
-        unitBrowser.addUnitSelectionListener(this::unitSelected);
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (SwingUtilities.isRightMouseButton(e)) {
+                    int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
+                    if (tabIndex >= 0) {
+                        showTabContextMenu(e, tabIndex);
+                    }
+                }
+            }
+        });
+        setupTabKeyBindings();
 
-        // Create the unit editor
-        unitEditor = new com.warnomodmaker.gui.UnitEditor();
-        unitEditor.addPropertyChangeListener(e -> setModified(true));
-
-        // Create the split pane
-        splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, unitBrowser, unitEditor);
-        splitPane.setDividerLocation(300);
-
-        mainPanel.add(splitPane, BorderLayout.CENTER);
+        mainPanel.add(tabbedPane, BorderLayout.CENTER);
+        showWelcomeTab();
 
         setContentPane(mainPanel);
     }
 
-    /**
-     * Opens a file
-     */
+
     private void openFile(ActionEvent e) {
-        // Check if the current file has been modified
-        if (modified) {
-            int result = JOptionPane.showConfirmDialog(
-                this,
-                "The current file has been modified. Save changes?",
-                "Save Changes",
-                JOptionPane.YES_NO_CANCEL_OPTION
-            );
-
-            if (result == JOptionPane.YES_OPTION) {
-                saveFile(null);
-            } else if (result == JOptionPane.CANCEL_OPTION) {
-                return;
-            }
-        }
-
-        // Show file chooser starting from last used NDF directory
         UserPreferences prefs = UserPreferences.getInstance();
         JFileChooser fileChooser = new JFileChooser(prefs.getLastNDFDirectory());
         fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
@@ -220,104 +203,52 @@ public class MainWindow extends JFrame {
 
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File file = fileChooser.getSelectedFile();
-
-            // Save the NDF directory for next time
             prefs.setLastNDFDirectory(file.getParent());
-
-            try {
-                // Clear any existing state before loading new file
-                modificationTracker.clearModifications();
-                unitEditor.setUnitDescriptor(null); // Clear editor first
-
-                // Determine file type
-                currentFileType = NDFValue.NDFFileType.fromFilename(file.getName());
-
-                // Parse the file
-                try (Reader reader = new BufferedReader(new FileReader(file))) {
-                    parser = new NDFParser(reader); // Store the parser for later use
-                    parser.setFileType(currentFileType); // Set the file type for proper parsing
-                    unitDescriptors = parser.parse();
+            for (int i = 0; i < tabStates.size(); i++) {
+                FileTabState tabState = tabStates.get(i);
+                if (tabState.getFile() != null && tabState.getFile().equals(file)) {
+                    // File already open, switch to that tab
+                    tabbedPane.setSelectedIndex(i);
+                    return;
                 }
-
-                // Update the UI
-                currentFile = file;
-                modified = false;
-                updateTitle();
-
-                unitBrowser.setUnitDescriptors(unitDescriptors, currentFileType);
-
-                String objectTypeName = currentFileType.getDisplayName().toLowerCase() + " descriptors";
-                JOptionPane.showMessageDialog(
-                    this,
-                    "Loaded " + unitDescriptors.size() + " " + objectTypeName + ".",
-                    "File Loaded",
-                    JOptionPane.INFORMATION_MESSAGE
-                );
-            } catch (Exception ex) {
-                String errorMessage = ex.getMessage();
-                if (errorMessage == null || errorMessage.trim().isEmpty()) {
-                    errorMessage = ex.getClass().getSimpleName() + " occurred during file loading";
-                }
-
-                JOptionPane.showMessageDialog(
-                    this,
-                    "Error opening file: " + errorMessage,
-                    "Error",
-                    JOptionPane.ERROR_MESSAGE
-                );
-                ex.printStackTrace();
             }
+            loadFileInBackground(file);
         }
     }
 
-    /**
-     * Saves the current file
-     */
+
     private void saveFile(ActionEvent e) {
-        if (currentFile == null) {
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab == null || !currentTab.hasData()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "No file to save. Please open a file first.",
+                "No File",
+                JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        if (currentTab.getFile() == null) {
             saveFileAs(e);
             return;
         }
 
-        try {
-            // Write the file
-            try (Writer writer = new BufferedWriter(new FileWriter(currentFile))) {
-                NDFWriter ndfWriter = new NDFWriter(writer);
-
-                // Use exact formatting preservation if available
-                if (parser != null) {
-                    ndfWriter.setOriginalTokens(parser.getOriginalTokens());
-                }
-
-                ndfWriter.write(unitDescriptors);
-            }
-
-            // Update state
-            modified = false;
-            updateTitle();
-
-            JOptionPane.showMessageDialog(
-                this,
-                "File saved successfully.",
-                "File Saved",
-                JOptionPane.INFORMATION_MESSAGE
-            );
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(
-                this,
-                "Error saving file: " + ex.getMessage(),
-                "Error",
-                JOptionPane.ERROR_MESSAGE
-            );
-            ex.printStackTrace();
-        }
+        saveTabToFile(currentTab, currentTab.getFile());
     }
 
-    /**
-     * Saves the current file with a new name
-     */
+
     private void saveFileAs(ActionEvent e) {
-        // Show file chooser starting from last used NDF directory
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab == null || !currentTab.hasData()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "No file to save. Please open a file first.",
+                "No File",
+                JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
         UserPreferences prefs = UserPreferences.getInstance();
         JFileChooser fileChooser = new JFileChooser(prefs.getLastNDFDirectory());
         fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
@@ -326,16 +257,10 @@ public class MainWindow extends JFrame {
 
         if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             File file = fileChooser.getSelectedFile();
-
-            // Save the NDF directory for next time
             prefs.setLastNDFDirectory(file.getParent());
-
-            // Add .ndf extension if not present
             if (!file.getName().toLowerCase().endsWith(".ndf")) {
                 file = new File(file.getPath() + ".ndf");
             }
-
-            // Check if file exists
             if (file.exists()) {
                 int result = JOptionPane.showConfirmDialog(
                     this,
@@ -348,17 +273,15 @@ public class MainWindow extends JFrame {
                     return;
                 }
             }
-
-            currentFile = file;
-            saveFile(e);
+            currentTab.setFile(file);
+            saveTabToFile(currentTab, file);
         }
     }
 
-    /**
-     * Shows the mass modify dialog
-     */
+
     private void showMassModifyDialog(ActionEvent e) {
-        if (unitDescriptors == null || unitDescriptors.isEmpty()) {
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab == null || !currentTab.hasData()) {
             JOptionPane.showMessageDialog(
                 this,
                 "No units loaded. Please open a file first.",
@@ -368,21 +291,21 @@ public class MainWindow extends JFrame {
             return;
         }
 
-        com.warnomodmaker.gui.MassModifyDialog dialog = new com.warnomodmaker.gui.MassModifyDialog(this, unitDescriptors, modificationTracker, currentFileType);
+        com.warnomodmaker.gui.MassModifyDialog dialog = new com.warnomodmaker.gui.MassModifyDialog(
+            this, currentTab.getUnitDescriptors(), currentTab.getModificationTracker(), currentTab.getFileType());
         dialog.setVisible(true);
 
         if (dialog.isModified()) {
-            setModified(true);
-            unitBrowser.refresh();
-            unitEditor.refresh();
+            currentTab.setModified(true);
+            refreshCurrentTab();
+            updateTitle();
         }
     }
 
-    /**
-     * Shows the tag and order editor dialog
-     */
+
     private void showTagAndOrderEditor(ActionEvent e) {
-        if (unitDescriptors == null || unitDescriptors.isEmpty()) {
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab == null || !currentTab.hasData()) {
             JOptionPane.showMessageDialog(
                 this,
                 "No units loaded. Please open a file first.",
@@ -392,19 +315,18 @@ public class MainWindow extends JFrame {
             return;
         }
 
-        com.warnomodmaker.gui.TagAndOrderEditorDialog dialog = new com.warnomodmaker.gui.TagAndOrderEditorDialog(this, unitDescriptors, modificationTracker);
+        com.warnomodmaker.gui.TagAndOrderEditorDialog dialog = new com.warnomodmaker.gui.TagAndOrderEditorDialog(
+            this, currentTab.getUnitDescriptors(), currentTab.getModificationTracker());
         dialog.setVisible(true);
 
         if (dialog.isModified()) {
-            setModified(true);
-            unitBrowser.refresh();
-            unitEditor.refresh();
+            currentTab.setModified(true);
+            refreshCurrentTab();
+            updateTitle();
         }
     }
 
-    /**
-     * Shows the about dialog
-     */
+
     private void showAboutDialog(ActionEvent e) {
         JOptionPane.showMessageDialog(
             this,
@@ -416,21 +338,40 @@ public class MainWindow extends JFrame {
         );
     }
 
-    /**
-     * Exits the application
-     */
+
     private void exitApplication() {
-        // Check if the current file has been modified
-        if (modified) {
+        List<FileTabState> modifiedTabs = new ArrayList<>();
+        for (FileTabState tabState : tabStates) {
+            if (tabState.isModified()) {
+                modifiedTabs.add(tabState);
+            }
+        }
+
+        if (!modifiedTabs.isEmpty()) {
+            StringBuilder message = new StringBuilder();
+            message.append("The following files have been modified:\n\n");
+            for (FileTabState tabState : modifiedTabs) {
+                String fileName = tabState.getFile() != null ? tabState.getFile().getName() : "Untitled";
+                message.append("• ").append(fileName).append("\n");
+            }
+            message.append("\nSave changes before exiting?");
+
             int result = JOptionPane.showConfirmDialog(
                 this,
-                "The current file has been modified. Save changes?",
+                message.toString(),
                 "Save Changes",
                 JOptionPane.YES_NO_CANCEL_OPTION
             );
 
             if (result == JOptionPane.YES_OPTION) {
-                saveFile(null);
+                for (FileTabState tabState : modifiedTabs) {
+                    if (tabState.getFile() != null) {
+                        saveTabToFile(tabState, tabState.getFile());
+                    } else {
+                        // Would need to prompt for save location for each untitled tab
+                        // For now, skip untitled tabs
+                    }
+                }
             } else if (result == JOptionPane.CANCEL_OPTION) {
                 return;
             }
@@ -440,43 +381,28 @@ public class MainWindow extends JFrame {
         System.exit(0);
     }
 
-    /**
-     * Called when a unit is selected in the unit browser
-     */
-    private void unitSelected(NDFValue.ObjectValue unitDescriptor) {
-        unitEditor.setUnitDescriptor(unitDescriptor, modificationTracker);
-    }
 
-    /**
-     * Sets the modified flag and updates the title
-     */
-    private void setModified(boolean modified) {
-        this.modified = modified;
-        updateTitle();
-    }
-
-    /**
-     * Updates the window title
-     */
     private void updateTitle() {
         String title = "WARNO Mod Maker";
 
-        if (currentFile != null) {
-            title += " - " + currentFile.getName();
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab != null && currentTab.getFile() != null) {
+            title += " - " + currentTab.getFile().getName();
+            if (currentTab.isModified()) {
+                title += " *";
+            }
         }
-
-        if (modified) {
-            title += " *";
+        if (tabStates.size() > 1) {
+            title += " (" + tabStates.size() + " files)";
         }
 
         setTitle(title);
     }
 
-    /**
-     * Saves the current modification profile
-     */
+
     private void saveProfile(ActionEvent e) {
-        if (!modificationTracker.hasModifications()) {
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab == null || !currentTab.getModificationTracker().hasModifications()) {
             JOptionPane.showMessageDialog(
                 this,
                 "No modifications to save. Make some changes first.",
@@ -485,8 +411,6 @@ public class MainWindow extends JFrame {
             );
             return;
         }
-
-        // Get profile name from user
         String profileName = JOptionPane.showInputDialog(
             this,
             "Enter a name for this profile:",
@@ -497,8 +421,6 @@ public class MainWindow extends JFrame {
         if (profileName == null || profileName.trim().isEmpty()) {
             return; // User cancelled or entered empty name
         }
-
-        // Show file chooser starting from last used profile directory
         UserPreferences prefs = UserPreferences.getInstance();
         JFileChooser fileChooser = new JFileChooser(prefs.getLastProfileDirectory());
         fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
@@ -508,24 +430,20 @@ public class MainWindow extends JFrame {
 
         if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             File file = fileChooser.getSelectedFile();
-
-            // Save the profile directory for next time
             prefs.setLastProfileDirectory(file.getParent());
-
-            // Add .json extension if not present
             if (!file.getName().toLowerCase().endsWith(".json")) {
                 file = new File(file.getPath() + ".json");
             }
 
             try {
-                String sourceFileName = currentFile != null ? currentFile.getName() : "Unknown";
-                ModProfile profile = new ModProfile(profileName.trim(), modificationTracker, sourceFileName);
+                String sourceFileName = currentTab.getFile() != null ? currentTab.getFile().getName() : "Unknown";
+                ModProfile profile = new ModProfile(profileName.trim(), currentTab.getModificationTracker(), sourceFileName);
                 profile.saveToFile(file);
 
                 JOptionPane.showMessageDialog(
                     this,
                     String.format("Profile saved successfully!\n\nProfile: %s\nModifications: %d\nFile: %s",
-                                profileName, modificationTracker.getModificationCount(), file.getName()),
+                                profileName, currentTab.getModificationTracker().getModificationCount(), file.getName()),
                     "Profile Saved",
                     JOptionPane.INFORMATION_MESSAGE
                 );
@@ -541,11 +459,10 @@ public class MainWindow extends JFrame {
         }
     }
 
-    /**
-     * Loads a modification profile
-     */
+
     private void loadProfile(ActionEvent e) {
-        if (unitDescriptors == null || unitDescriptors.isEmpty()) {
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab == null || !currentTab.hasData()) {
             JOptionPane.showMessageDialog(
                 this,
                 "No file loaded. Please open an NDF file first.",
@@ -554,8 +471,6 @@ public class MainWindow extends JFrame {
             );
             return;
         }
-
-        // Show file chooser starting from last used profile directory
         UserPreferences prefs = UserPreferences.getInstance();
         JFileChooser fileChooser = new JFileChooser(prefs.getLastProfileDirectory());
         fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
@@ -564,22 +479,16 @@ public class MainWindow extends JFrame {
 
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File file = fileChooser.getSelectedFile();
-
-            // Save the profile directory for next time
             prefs.setLastProfileDirectory(file.getParent());
 
             try {
                 ModProfile profile = ModProfile.loadFromFile(file);
-
-                // Show the profile load dialog with path validation
-                ProfileLoadDialog loadDialog = new ProfileLoadDialog(this, profile, unitDescriptors, modificationTracker);
+                ProfileLoadDialog loadDialog = new ProfileLoadDialog(this, profile, currentTab.getUnitDescriptors(), currentTab.getModificationTracker());
                 loadDialog.setVisible(true);
-
-                // Check if modifications were applied
                 if (loadDialog.wasApplied()) {
-                    setModified(true);
-                    unitBrowser.refresh();
-                    unitEditor.refresh();
+                    currentTab.setModified(true);
+                    refreshCurrentTab();
+                    updateTitle();
 
                     JOptionPane.showMessageDialog(
                         this,
@@ -601,11 +510,10 @@ public class MainWindow extends JFrame {
         }
     }
 
-    /**
-     * Views the current modification profile
-     */
+
     private void viewProfile(ActionEvent e) {
-        if (!modificationTracker.hasModifications()) {
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab == null || !currentTab.getModificationTracker().hasModifications()) {
             JOptionPane.showMessageDialog(
                 this,
                 "No modifications in current profile.",
@@ -614,12 +522,12 @@ public class MainWindow extends JFrame {
             );
             return;
         }
-
-        // TODO: Implement ProfileViewDialog
         // For now, show a simple summary
-        ModificationTracker.ModificationStats stats = modificationTracker.getStats();
+        ModificationTracker.ModificationStats stats = currentTab.getModificationTracker().getStats();
         StringBuilder message = new StringBuilder();
         message.append("Current Profile Summary:\n\n");
+        String fileName = currentTab.getFile() != null ? currentTab.getFile().getName() : "Untitled";
+        message.append("File: ").append(fileName).append("\n");
         message.append("Total Modifications: ").append(stats.totalModifications).append("\n");
         message.append("Units Modified: ").append(stats.uniqueUnits).append("\n");
         message.append("Properties Modified: ").append(stats.uniqueProperties).append("\n\n");
@@ -630,16 +538,15 @@ public class MainWindow extends JFrame {
         JOptionPane.showMessageDialog(
             this,
             message.toString(),
-            "Current Profile",
+            "Current Profile - " + fileName,
             JOptionPane.INFORMATION_MESSAGE
         );
     }
 
-    /**
-     * Clears the current modification profile
-     */
+
     private void clearProfile(ActionEvent e) {
-        if (!modificationTracker.hasModifications()) {
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab == null || !currentTab.getModificationTracker().hasModifications()) {
             JOptionPane.showMessageDialog(
                 this,
                 "No modifications to clear.",
@@ -652,14 +559,16 @@ public class MainWindow extends JFrame {
         int result = JOptionPane.showConfirmDialog(
             this,
             String.format("Clear all %d modifications from the current profile?\n\nThis action cannot be undone.",
-                        modificationTracker.getModificationCount()),
+                        currentTab.getModificationTracker().getModificationCount()),
             "Clear Profile",
             JOptionPane.YES_NO_OPTION,
             JOptionPane.WARNING_MESSAGE
         );
 
         if (result == JOptionPane.YES_OPTION) {
-            modificationTracker.clearModifications();
+            currentTab.clearModifications();
+            refreshCurrentTab();
+            updateTitle();
             JOptionPane.showMessageDialog(
                 this,
                 "Profile cleared successfully.",
@@ -667,5 +576,468 @@ public class MainWindow extends JFrame {
                 JOptionPane.INFORMATION_MESSAGE
             );
         }
+    }
+
+
+    private FileTabState getCurrentTabState() {
+        int selectedIndex = tabbedPane.getSelectedIndex();
+        if (selectedIndex >= 0 && selectedIndex < tabStates.size()) {
+            return tabStates.get(selectedIndex);
+        }
+        return null;
+    }
+
+
+    private FileTabPanel getCurrentTabPanel() {
+        int selectedIndex = tabbedPane.getSelectedIndex();
+        if (selectedIndex >= 0) {
+            Component component = tabbedPane.getComponentAt(selectedIndex);
+            if (component instanceof FileTabPanel) {
+                return (FileTabPanel) component;
+            }
+        }
+        return null;
+    }
+
+
+    private void createNewTab(File file, List<NDFValue.ObjectValue> ndfObjects,
+                             NDFValue.NDFFileType fileType, NDFParser parser) {
+        FileTabState tabState = new FileTabState(file, ndfObjects, fileType, parser);
+        FileTabPanel tabPanel = new FileTabPanel(tabState);
+        tabPanel.addModificationListener(e -> {
+            tabState.setModified(true);
+            updateTabTitle(tabState);
+            updateTitle();
+        });
+        tabStates.add(tabState);
+        String tabTitle = tabState.getTabTitle();
+        tabbedPane.addTab(tabTitle, tabPanel);
+        tabbedPane.setToolTipTextAt(tabbedPane.getTabCount() - 1, tabState.getTabTooltip());
+        removeWelcomeTab();
+
+        // Select the new tab
+        tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
+
+        updateTitle();
+    }
+
+
+    private void showWelcomeTab() {
+        if (tabbedPane.getTabCount() == 0) {
+            JPanel welcomePanel = new JPanel(new BorderLayout());
+            JLabel welcomeLabel = new JLabel(
+                "<html><div style='text-align: center; padding: 50px;'>" +
+                "<h2>Welcome to WARNO Mod Maker</h2>" +
+                "<p>Open an NDF file to get started</p>" +
+                "<p>Use Ctrl+O or File → Open to load a file</p>" +
+                "</div></html>",
+                SwingConstants.CENTER
+            );
+            welcomePanel.add(welcomeLabel, BorderLayout.CENTER);
+            tabbedPane.addTab("Welcome", welcomePanel);
+        }
+    }
+
+
+    private void removeWelcomeTab() {
+        if (tabbedPane.getTabCount() > 0) {
+            Component firstTab = tabbedPane.getComponentAt(0);
+            if (!(firstTab instanceof FileTabPanel)) {
+                tabbedPane.removeTabAt(0);
+            }
+        }
+    }
+
+
+    private void loadFileInBackground(File file) {
+        JDialog progressDialog = new JDialog(this, "Loading File", true);
+        JProgressBar progressBar = new JProgressBar();
+        progressBar.setIndeterminate(true);
+        progressBar.setString("Loading " + file.getName() + "...");
+        progressBar.setStringPainted(true);
+
+        progressDialog.add(progressBar);
+        progressDialog.setSize(300, 100);
+        progressDialog.setLocationRelativeTo(this);
+        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            private List<NDFValue.ObjectValue> ndfObjects;
+            private NDFValue.NDFFileType fileType;
+            private NDFParser parser;
+            private Exception error;
+
+            @Override
+            protected Void doInBackground() throws Exception {
+                try {
+                    // Determine file type
+                    fileType = NDFValue.NDFFileType.fromFilename(file.getName());
+                    try (Reader reader = new BufferedReader(new FileReader(file))) {
+                        parser = new NDFParser(reader);
+                        parser.setFileType(fileType);
+                        ndfObjects = parser.parse();
+                    }
+                } catch (Exception e) {
+                    error = e;
+                }
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+
+                if (error != null) {
+                    String errorMessage = error.getMessage();
+                    if (errorMessage == null || errorMessage.trim().isEmpty()) {
+                        errorMessage = error.getClass().getSimpleName() + " occurred during file loading";
+                    }
+
+                    JOptionPane.showMessageDialog(
+                        MainWindow.this,
+                        "Error opening file: " + errorMessage,
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE
+                    );
+                    error.printStackTrace();
+                } else {
+                    createNewTab(file, ndfObjects, fileType, parser);
+
+                    String objectTypeName = fileType.getDisplayName().toLowerCase() + " descriptors";
+                    JOptionPane.showMessageDialog(
+                        MainWindow.this,
+                        "Loaded " + ndfObjects.size() + " " + objectTypeName + ".",
+                        "File Loaded",
+                        JOptionPane.INFORMATION_MESSAGE
+                    );
+                }
+            }
+        };
+
+        worker.execute();
+        progressDialog.setVisible(true);
+    }
+
+
+    private void saveTabToFile(FileTabState tabState, File file) {
+        try {
+            try (Writer writer = new BufferedWriter(new FileWriter(file))) {
+                NDFWriter ndfWriter = new NDFWriter(writer);
+
+                // Use exact formatting preservation if available
+                if (tabState.getParser() != null) {
+                    ndfWriter.setOriginalTokens(tabState.getParser().getOriginalTokens());
+                }
+
+                // CRITICAL FIX: Mark modified objects so NDFWriter uses memory model instead of original tokens
+                markModifiedObjects(ndfWriter, tabState);
+
+                ndfWriter.write(tabState.getUnitDescriptors());
+            }
+            tabState.setModified(false);
+            updateTabTitle(tabState);
+            updateTitle();
+
+            JOptionPane.showMessageDialog(
+                this,
+                "File saved successfully.",
+                "File Saved",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Error saving file: " + ex.getMessage(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+            ex.printStackTrace();
+        }
+    }
+
+
+    private void markModifiedObjects(NDFWriter ndfWriter, FileTabState tabState) {
+        // Get all modified unit names from the modification tracker
+        ModificationTracker tracker = tabState.getModificationTracker();
+        if (!tracker.hasModifications()) {
+            return; // No modifications to mark
+        }
+
+        // Get unique unit names that have been modified
+        Set<String> modifiedUnitNames = new HashSet<>();
+        for (ModificationRecord record : tracker.getAllModifications()) {
+            modifiedUnitNames.add(record.getUnitName());
+        }
+
+        // Find and mark the corresponding ObjectValue instances
+        List<NDFValue.ObjectValue> allObjects = tabState.getUnitDescriptors();
+        for (NDFValue.ObjectValue obj : allObjects) {
+            String instanceName = obj.getInstanceName();
+            if (instanceName != null && modifiedUnitNames.contains(instanceName)) {
+                ndfWriter.markObjectAsModified(obj);
+            }
+        }
+
+        System.out.println("Marked " + modifiedUnitNames.size() + " modified objects for writing");
+    }
+
+
+    private void updateTabTitle(FileTabState tabState) {
+        int tabIndex = tabStates.indexOf(tabState);
+        if (tabIndex >= 0 && tabIndex < tabbedPane.getTabCount()) {
+            tabbedPane.setTitleAt(tabIndex, tabState.getTabTitle());
+            tabbedPane.setToolTipTextAt(tabIndex, tabState.getTabTooltip());
+        }
+    }
+
+
+    private void refreshCurrentTab() {
+        FileTabPanel currentPanel = getCurrentTabPanel();
+        if (currentPanel != null) {
+            currentPanel.refresh();
+        }
+    }
+
+
+    private void closeCurrentTab(ActionEvent e) {
+        int selectedIndex = tabbedPane.getSelectedIndex();
+        if (selectedIndex >= 0) {
+            closeTab(selectedIndex);
+        }
+    }
+
+
+    private void closeTab(int tabIndex) {
+        if (tabIndex < 0 || tabIndex >= tabStates.size()) {
+            return;
+        }
+
+        FileTabState tabState = tabStates.get(tabIndex);
+        if (tabState.isModified()) {
+            String fileName = tabState.getFile() != null ? tabState.getFile().getName() : "Untitled";
+            int result = JOptionPane.showConfirmDialog(
+                this,
+                "The file '" + fileName + "' has been modified. Save changes?",
+                "Save Changes",
+                JOptionPane.YES_NO_CANCEL_OPTION
+            );
+
+            if (result == JOptionPane.YES_OPTION) {
+                if (tabState.getFile() != null) {
+                    saveTabToFile(tabState, tabState.getFile());
+                } else {
+                    // Would need to implement save as for untitled tabs
+                    return;
+                }
+            } else if (result == JOptionPane.CANCEL_OPTION) {
+                return;
+            }
+        }
+        tabStates.remove(tabIndex);
+        tabbedPane.removeTabAt(tabIndex);
+        if (tabStates.isEmpty()) {
+            showWelcomeTab();
+        }
+
+        updateTitle();
+    }
+
+
+    private void closeAllTabs(ActionEvent e) {
+        List<FileTabState> modifiedTabs = new ArrayList<>();
+        for (FileTabState tabState : tabStates) {
+            if (tabState.isModified()) {
+                modifiedTabs.add(tabState);
+            }
+        }
+
+        if (!modifiedTabs.isEmpty()) {
+            StringBuilder message = new StringBuilder();
+            message.append("The following files have been modified:\n\n");
+            for (FileTabState tabState : modifiedTabs) {
+                String fileName = tabState.getFile() != null ? tabState.getFile().getName() : "Untitled";
+                message.append("• ").append(fileName).append("\n");
+            }
+            message.append("\nSave changes before closing?");
+
+            int result = JOptionPane.showConfirmDialog(
+                this,
+                message.toString(),
+                "Save Changes",
+                JOptionPane.YES_NO_CANCEL_OPTION
+            );
+
+            if (result == JOptionPane.YES_OPTION) {
+                for (FileTabState tabState : modifiedTabs) {
+                    if (tabState.getFile() != null) {
+                        saveTabToFile(tabState, tabState.getFile());
+                    }
+                }
+            } else if (result == JOptionPane.CANCEL_OPTION) {
+                return;
+            }
+        }
+
+        // Close all tabs
+        tabStates.clear();
+        tabbedPane.removeAll();
+        showWelcomeTab();
+        updateTitle();
+    }
+
+
+    private void onTabChanged(ChangeEvent e) {
+        updateTitle();
+        // Could add logic here to save/restore UI state per tab
+    }
+
+
+    private void setupTabKeyBindings() {
+        // Ctrl+Tab - Next tab
+        tabbedPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_TAB, InputEvent.CTRL_DOWN_MASK), "nextTab");
+        tabbedPane.getActionMap().put("nextTab", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int selectedIndex = tabbedPane.getSelectedIndex();
+                int nextIndex = (selectedIndex + 1) % tabbedPane.getTabCount();
+                tabbedPane.setSelectedIndex(nextIndex);
+            }
+        });
+
+        // Ctrl+Shift+Tab - Previous tab
+        tabbedPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_TAB, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK), "prevTab");
+        tabbedPane.getActionMap().put("prevTab", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                int selectedIndex = tabbedPane.getSelectedIndex();
+                int prevIndex = selectedIndex - 1;
+                if (prevIndex < 0) prevIndex = tabbedPane.getTabCount() - 1;
+                tabbedPane.setSelectedIndex(prevIndex);
+            }
+        });
+    }
+
+
+    private void showTabContextMenu(MouseEvent e, int tabIndex) {
+        if (tabIndex < 0 || tabIndex >= tabStates.size()) {
+            return;
+        }
+
+        FileTabState tabState = tabStates.get(tabIndex);
+        JPopupMenu contextMenu = new JPopupMenu();
+
+        // Close this tab
+        JMenuItem closeItem = new JMenuItem("Close");
+        closeItem.addActionListener(evt -> closeTab(tabIndex));
+        contextMenu.add(closeItem);
+
+        // Close other tabs
+        if (tabStates.size() > 1) {
+            JMenuItem closeOthersItem = new JMenuItem("Close Others");
+            closeOthersItem.addActionListener(evt -> closeOtherTabs(tabIndex));
+            contextMenu.add(closeOthersItem);
+
+            JMenuItem closeAllItem = new JMenuItem("Close All");
+            closeAllItem.addActionListener(evt -> closeAllTabs(null));
+            contextMenu.add(closeAllItem);
+        }
+
+        contextMenu.addSeparator();
+        JMenuItem saveItem = new JMenuItem("Save");
+        saveItem.setEnabled(tabState.getFile() != null);
+        saveItem.addActionListener(evt -> {
+            tabbedPane.setSelectedIndex(tabIndex);
+            saveFile(null);
+        });
+        contextMenu.add(saveItem);
+
+        JMenuItem saveAsItem = new JMenuItem("Save As...");
+        saveAsItem.setEnabled(tabState.hasData());
+        saveAsItem.addActionListener(evt -> {
+            tabbedPane.setSelectedIndex(tabIndex);
+            saveFileAs(null);
+        });
+        contextMenu.add(saveAsItem);
+
+        contextMenu.addSeparator();
+
+        // File info
+        String fileName = tabState.getFile() != null ? tabState.getFile().getName() : "Untitled";
+        JMenuItem infoItem = new JMenuItem("File: " + fileName);
+        infoItem.setEnabled(false);
+        contextMenu.add(infoItem);
+
+        if (tabState.hasData()) {
+            JMenuItem unitsItem = new JMenuItem("Units: " + tabState.getUnitDescriptors().size());
+            unitsItem.setEnabled(false);
+            contextMenu.add(unitsItem);
+
+            if (tabState.getModificationTracker().hasModifications()) {
+                JMenuItem modsItem = new JMenuItem("Modifications: " + tabState.getModificationTracker().getModificationCount());
+                modsItem.setEnabled(false);
+                contextMenu.add(modsItem);
+            }
+        }
+
+        contextMenu.show(tabbedPane, e.getX(), e.getY());
+    }
+
+
+    private void closeOtherTabs(int keepTabIndex) {
+        if (keepTabIndex < 0 || keepTabIndex >= tabStates.size()) {
+            return;
+        }
+        List<FileTabState> modifiedTabs = new ArrayList<>();
+        for (int i = 0; i < tabStates.size(); i++) {
+            if (i != keepTabIndex && tabStates.get(i).isModified()) {
+                modifiedTabs.add(tabStates.get(i));
+            }
+        }
+
+        if (!modifiedTabs.isEmpty()) {
+            StringBuilder message = new StringBuilder();
+            message.append("The following files have been modified:\n\n");
+            for (FileTabState tabState : modifiedTabs) {
+                String fileName = tabState.getFile() != null ? tabState.getFile().getName() : "Untitled";
+                message.append("• ").append(fileName).append("\n");
+            }
+            message.append("\nSave changes before closing?");
+
+            int result = JOptionPane.showConfirmDialog(
+                this,
+                message.toString(),
+                "Save Changes",
+                JOptionPane.YES_NO_CANCEL_OPTION
+            );
+
+            if (result == JOptionPane.YES_OPTION) {
+                for (FileTabState tabState : modifiedTabs) {
+                    if (tabState.getFile() != null) {
+                        saveTabToFile(tabState, tabState.getFile());
+                    }
+                }
+            } else if (result == JOptionPane.CANCEL_OPTION) {
+                return;
+            }
+        }
+
+        // Close tabs in reverse order to maintain indices
+        for (int i = tabStates.size() - 1; i >= 0; i--) {
+            if (i != keepTabIndex) {
+                tabStates.remove(i);
+                tabbedPane.removeTabAt(i);
+                // Adjust keepTabIndex if necessary
+                if (i < keepTabIndex) {
+                    keepTabIndex--;
+                }
+            }
+        }
+
+        // Select the remaining tab
+        if (keepTabIndex >= 0 && keepTabIndex < tabbedPane.getTabCount()) {
+            tabbedPane.setSelectedIndex(keepTabIndex);
+        }
+
+        updateTitle();
     }
 }

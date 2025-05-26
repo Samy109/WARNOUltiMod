@@ -3,15 +3,9 @@ package com.warnomodmaker.model;
 import com.warnomodmaker.model.NDFValue.*;
 import java.util.*;
 
-/**
- * Dynamically scans the in-memory object model to discover all available properties.
- * This replaces hard-coded property lists with dynamic discovery from the actual parsed data.
- */
 public class PropertyScanner {
 
-    /**
-     * Represents a discovered property with its path and metadata
-     */
+    
     public static class PropertyInfo {
         public final String name;
         public final String path;
@@ -65,9 +59,7 @@ public class PropertyScanner {
         this.categorizedProperties = new HashMap<>();
     }
 
-    /**
-     * Scans all unit descriptors and discovers available properties
-     */
+    
     public void scanProperties() {
         discoveredProperties.clear();
         categorizedProperties.clear();
@@ -75,8 +67,6 @@ public class PropertyScanner {
         // Track property occurrences
         Map<String, Integer> propertyOccurrences = new HashMap<>();
         Map<String, NDFValue.ValueType> propertyTypes = new HashMap<>();
-
-        // Scan each unit descriptor
         for (ObjectValue unit : unitDescriptors) {
             scanObject(unit, "", propertyOccurrences, propertyTypes);
         }
@@ -104,8 +94,6 @@ public class PropertyScanner {
                 normalizedToOriginal.put(normalizedPath, originalPath);
             }
         }
-
-        // Create PropertyInfo objects for normalized properties with ACCURATE unit counts
         for (Map.Entry<String, Integer> entry : normalizedOccurrences.entrySet()) {
             String normalizedPath = entry.getKey();
             NDFValue.ValueType type = normalizedTypes.get(normalizedPath);
@@ -124,8 +112,6 @@ public class PropertyScanner {
 
                 PropertyInfo info = new PropertyInfo(name, originalPath, description, type, category, actualUnitCount);
                 discoveredProperties.put(normalizedPath, info);
-
-                // Add to category
                 categorizedProperties.computeIfAbsent(category, k -> new ArrayList<>()).add(info);
             }
         }
@@ -140,9 +126,7 @@ public class PropertyScanner {
         }
     }
 
-    /**
-     * Recursively scans an object and its nested properties
-     */
+    
     private void scanObject(ObjectValue object, String basePath,
                            Map<String, Integer> occurrences, Map<String, NDFValue.ValueType> types) {
         if (object == null) return;
@@ -165,7 +149,6 @@ public class PropertyScanner {
                     if ("ModulesDescriptors".equals(propertyName)) {
                         scanModulesDescriptors((ArrayValue) value, occurrences, types);
                     } else {
-                        // Scan other arrays with indices
                         ArrayValue arrayValue = (ArrayValue) value;
                         for (int i = 0; i < arrayValue.getElements().size(); i++) {
                             NDFValue element = arrayValue.getElements().get(i);
@@ -179,23 +162,18 @@ public class PropertyScanner {
         }
     }
 
-    /**
-     * Scans ModulesDescriptors array using wildcard paths for mass update compatibility
-     */
+    
     private void scanModulesDescriptors(ArrayValue modulesArray,
                                       Map<String, Integer> occurrences, Map<String, NDFValue.ValueType> types) {
         for (NDFValue element : modulesArray.getElements()) {
             if (element instanceof ObjectValue) {
                 ObjectValue module = (ObjectValue) element;
-                // Use wildcard path format for mass update compatibility
                 scanObject(module, "ModulesDescriptors[*]", occurrences, types);
             }
         }
     }
 
-    /**
-     * Checks if a value type can be edited in mass updates
-     */
+    
     private boolean isEditableType(NDFValue.ValueType type) {
         return type == NDFValue.ValueType.NUMBER ||
                type == NDFValue.ValueType.STRING ||
@@ -206,23 +184,17 @@ public class PropertyScanner {
                type == NDFValue.ValueType.ARRAY; // Include arrays (like TagSet) as they can be modified
     }
 
-    /**
-     * Normalizes a property path by replacing specific array indices with generic placeholders
-     */
+    
     private String normalizePropertyPath(String path) {
         // Replace specific array indices like [0], [1], [19] with [*]
         // This groups similar properties together regardless of their array position
         return path.replaceAll("\\[\\d+\\]", "[*]");
     }
 
-    /**
-     * Generates a user-friendly display name for a property path
-     */
+    
     private String getPropertyDisplayName(String path) {
         String[] parts = path.split("\\.");
         String lastPart = parts[parts.length - 1];
-
-        // Remove array indices for cleaner display
         lastPart = lastPart.replaceAll("\\[\\*\\]", "").replaceAll("\\[\\d+\\]", "");
 
         // Context-aware naming for resistance properties
@@ -248,9 +220,7 @@ public class PropertyScanner {
                       .replaceAll("([A-Z])([A-Z][a-z])", "$1 $2");
     }
 
-    /**
-     * Checks if a property path is related to resistance/armor properties
-     */
+    
     private boolean isResistanceProperty(String path) {
         String lowerPath = path.toLowerCase();
         return lowerPath.contains("resistance") ||
@@ -260,9 +230,7 @@ public class PropertyScanner {
                 lowerPath.contains("resistancerear") || lowerPath.contains("resistancetop"));
     }
 
-    /**
-     * Checks if a property path is related to damage properties
-     */
+    
     private boolean isDamageProperty(String path) {
         String lowerPath = path.toLowerCase();
         return lowerPath.contains("damage") &&
@@ -270,34 +238,21 @@ public class PropertyScanner {
                !lowerPath.contains("resistance"); // Exclude resistance damage properties
     }
 
-    /**
-     * Categorizes a property based on its path and name with file-type-aware categorization
-     */
+    
     private String categorizeProperty(String path, String name) {
         String lowerPath = path.toLowerCase();
         String lowerName = name.toLowerCase();
 
-        // File-type-specific categorization
-        if (fileType == NDFValue.NDFFileType.WEAPON_DESCRIPTOR) {
-            return categorizeWeaponProperty(lowerPath, lowerName);
-        } else if (fileType == NDFValue.NDFFileType.AMMUNITION || fileType == NDFValue.NDFFileType.AMMUNITION_MISSILES) {
-            return categorizeAmmunitionProperty(lowerPath, lowerName);
-        } else if (fileType == NDFValue.NDFFileType.MISSILE_DESCRIPTORS) {
-            return categorizeMissileProperty(lowerPath, lowerName);
-        } else if (fileType == NDFValue.NDFFileType.MISSILE_CARRIAGE) {
-            return categorizeMissileCarriageProperty(lowerPath, lowerName);
-        }
-
-        // Default to unit descriptor categorization for unknown types
-        return categorizeUnitProperty(lowerPath, lowerName);
+        // GENERIC APPROACH: Use universal categorization for all file types
+        // This ensures equal treatment regardless of file type
+        return categorizeGenericProperty(lowerPath, lowerName);
     }
 
-    /**
-     * Categorizes weapon descriptor properties
-     */
+    
     private String categorizeWeaponProperty(String lowerPath, String lowerName) {
-        // Weapon-specific categories
-        if (lowerPath.contains("salves") || lowerName.contains("salvo")) {
+        // Weapon-specific categories - Salvo configuration
+        if (lowerPath.contains("salves") || lowerName.contains("salves") ||
+            lowerPath.contains("salvo") || lowerName.contains("salvo")) {
             return "Salvo Configuration";
         }
 
@@ -321,9 +276,7 @@ public class PropertyScanner {
         return "Weapon System";
     }
 
-    /**
-     * Categorizes ammunition properties
-     */
+    
     private String categorizeAmmunitionProperty(String lowerPath, String lowerName) {
         // Ammunition-specific categories
         if (lowerPath.contains("damage") || lowerName.contains("damage") ||
@@ -360,17 +313,13 @@ public class PropertyScanner {
         return "Ammunition System";
     }
 
-    /**
-     * Categorizes missile descriptor properties
-     */
+    
     private String categorizeMissileProperty(String lowerPath, String lowerName) {
         // Similar to unit properties but missile-focused
         return categorizeUnitProperty(lowerPath, lowerName);
     }
 
-    /**
-     * Categorizes missile carriage properties
-     */
+    
     private String categorizeMissileCarriageProperty(String lowerPath, String lowerName) {
         if (lowerPath.contains("weapon") || lowerName.contains("weapon")) {
             return "Weapon Configuration";
@@ -378,9 +327,42 @@ public class PropertyScanner {
         return "Missile Carriage";
     }
 
-    /**
-     * Original unit descriptor categorization
-     */
+    
+    private String categorizeGenericProperty(String lowerPath, String lowerName) {
+        // First try unit-specific categorization for backward compatibility
+        String unitCategory = categorizeUnitProperty(lowerPath, lowerName);
+        if (!unitCategory.equals("Other")) {
+            return unitCategory;
+        }
+        if (lowerPath.contains("template") || lowerName.contains("template") ||
+            lowerPath.contains("depiction") || lowerName.contains("depiction")) {
+            return "Templates & Depiction";
+        }
+
+        if (lowerPath.contains("effect") || lowerName.contains("effect") ||
+            lowerPath.contains("fx") || lowerName.contains("fx")) {
+            return "Effects & FX";
+        }
+
+        if (lowerPath.contains("sound") || lowerName.contains("sound") ||
+            lowerPath.contains("audio") || lowerName.contains("audio")) {
+            return "Audio & Sound";
+        }
+
+        if (lowerPath.contains("texture") || lowerName.contains("texture") ||
+            lowerPath.contains("material") || lowerName.contains("material")) {
+            return "Textures & Materials";
+        }
+
+        if (lowerPath.contains("mesh") || lowerName.contains("mesh") ||
+            lowerPath.contains("model") || lowerName.contains("model")) {
+            return "Models & Meshes";
+        }
+
+        return "Other";
+    }
+
+    
     private String categorizeUnitProperty(String lowerPath, String lowerName) {
 
         // 0. TAGS & CLASSIFICATION - Unit tags and AI classification
@@ -544,44 +526,32 @@ public class PropertyScanner {
         return "Other";
     }
 
-    /**
-     * Generates a description for a property
-     */
+    
     private String generateDescription(String path, String name, int count) {
         return String.format("%s (found in %d units)", name, count);
     }
 
-    /**
-     * Gets all discovered properties
-     */
+    
     public Collection<PropertyInfo> getAllProperties() {
         return discoveredProperties.values();
     }
 
-    /**
-     * Gets the discovered properties map
-     */
+    
     public Map<String, PropertyInfo> getDiscoveredProperties() {
         return discoveredProperties;
     }
 
-    /**
-     * Gets properties by category
-     */
+    
     public Map<String, List<PropertyInfo>> getCategorizedProperties() {
         return categorizedProperties;
     }
 
-    /**
-     * Gets a specific property by path
-     */
+    
     public PropertyInfo getProperty(String path) {
         return discoveredProperties.get(path);
     }
 
-    /**
-     * Searches for properties matching a query
-     */
+    
     public List<PropertyInfo> searchProperties(String query) {
         String lowerQuery = query.toLowerCase();
         List<PropertyInfo> results = new ArrayList<>();
@@ -608,9 +578,7 @@ public class PropertyScanner {
         return results;
     }
 
-    /**
-     * Gets detailed scanning statistics for debugging
-     */
+    
     public String getScanningStats() {
         StringBuilder stats = new StringBuilder();
         stats.append("Property Scanning Statistics:\n");
@@ -637,10 +605,7 @@ public class PropertyScanner {
         return stats.toString();
     }
 
-    /**
-     * Counts how many units actually have a specific property using direct checking
-     * This uses the same logic as MassModifyDialog to ensure accuracy
-     */
+    
     private int countUnitsWithProperty(String propertyPath) {
         int count = 0;
         for (ObjectValue unit : unitDescriptors) {
@@ -648,13 +613,11 @@ public class PropertyScanner {
                 count++;
             }
         }
+
         return count;
     }
 
-    /**
-     * Direct property checking with comprehensive filtering
-     * Accounts for ALL WARNO data patterns for accurate counts
-     */
+    
     private boolean hasPropertyDirect(ObjectValue unit, String propertyPath) {
         // Wildcard paths: check if ANY array element has the property
         if (propertyPath.contains("[*]")) {
@@ -665,8 +628,6 @@ public class PropertyScanner {
         if (!PropertyUpdater.hasProperty(unit, propertyPath)) {
             return false;
         }
-
-        // Get the actual value to analyze it
         NDFValue value = PropertyUpdater.getPropertyValue(unit, propertyPath);
         if (value == null) {
             return false;
@@ -677,13 +638,12 @@ public class PropertyScanner {
             return false;
         }
 
-        // Apply module type filtering for unit-type-specific properties
-        return hasRequiredModuleType(unit, propertyPath);
+        // GENERIC APPROACH: No file-type-specific filtering
+        // All NDF file types are treated equally - if the property exists and is modifiable, count it
+        return true;
     }
 
-    /**
-     * Determines if a property is actually modifiable based on WARNO data patterns
-     */
+    
     private boolean isModifiableProperty(NDFValue value, String propertyPath) {
         // 1. BOOLEAN PROPERTIES: Only count if True (False means unit doesn't have capability)
         if (value.getType() == NDFValue.ValueType.BOOLEAN) {
@@ -742,9 +702,7 @@ public class PropertyScanner {
         return true;
     }
 
-    /**
-     * Determines if an array property is modifiable
-     */
+    
     private boolean isModifiableArray(NDFValue value, String propertyPath) {
         if (!(value instanceof ArrayValue)) {
             return false;
@@ -757,8 +715,6 @@ public class PropertyScanner {
         if (lowerPath.contains("tagset")) {
             return true;
         }
-
-        // SearchedTagsInEngagementTarget arrays are modifiable
         if (lowerPath.contains("searchedtagsinengagementtarget")) {
             return true;
         }
@@ -773,7 +729,7 @@ public class PropertyScanner {
             return true;
         }
 
-        // Arrays of simple values (strings, numbers) that are modifiable
+        // Arrays of simple values (strings, numbers, tuples) that are modifiable
         if (!arrayValue.getElements().isEmpty()) {
             NDFValue firstElement = arrayValue.getElements().get(0);
 
@@ -792,33 +748,31 @@ public class PropertyScanner {
             if (firstElement instanceof NumberValue) {
                 return true;
             }
+
+            // Arrays of tuples are often modifiable (like BaseHitValueModifiers)
+            if (firstElement instanceof TupleValue) {
+                return true; // Arrays of tuples (like accuracy modifiers) are modifiable
+            }
         }
 
         // Default: exclude complex arrays (arrays of objects, etc.)
         return false;
     }
 
-    /**
-     * Checks if a unit has the required module type for a specific property
-     * This prevents counting tank-specific properties for infantry units, etc.
-     * For non-unit files, always returns true since they don't have module restrictions
-     */
+    
     private boolean hasRequiredModuleType(ObjectValue unit, String propertyPath) {
-        // For non-unit descriptor files, skip module type checking
+        // For non-unit descriptor files, skip module type checking entirely
+        // Weapon descriptors, ammunition, missiles, etc. should not have unit-type restrictions
         if (fileType != NDFValue.NDFFileType.UNITE_DESCRIPTOR &&
             fileType != NDFValue.NDFFileType.MISSILE_DESCRIPTORS) {
             return true; // No module restrictions for weapons, ammunition, etc.
         }
-
-        // Get the modules array
         NDFValue modulesValue = unit.getProperty("ModulesDescriptors");
         if (!(modulesValue instanceof ArrayValue)) {
             return true; // If no modules array, allow all properties
         }
 
         ArrayValue modules = (ArrayValue) modulesValue;
-
-        // Check for unit type flags that indicate what kind of unit this is
         boolean hasTankFlags = false;
         boolean hasInfantryFlags = false;
         boolean hasHelicopterFlags = false;
@@ -848,9 +802,7 @@ public class PropertyScanner {
         return isPropertyValidForUnitType(propertyPath, hasTankFlags, hasInfantryFlags, hasHelicopterFlags, hasPlaneFlags, hasCanonFlags);
     }
 
-    /**
-     * Determines if a property is valid for a specific unit type with comprehensive filtering
-     */
+    
     private boolean isPropertyValidForUnitType(String propertyPath, boolean hasTankFlags,
                                              boolean hasInfantryFlags, boolean hasHelicopterFlags, boolean hasPlaneFlags, boolean hasCanonFlags) {
         String lowerPath = propertyPath.toLowerCase();
@@ -945,9 +897,7 @@ public class PropertyScanner {
         return true;
     }
 
-    /**
-     * Checks if a unit has a property with wildcard array indices - same logic as MassModifyDialog
-     */
+    
     private boolean hasPropertyWithWildcards(ObjectValue unit, String propertyPath) {
         // Split on [*] to get the parts
         String[] mainParts = propertyPath.split("\\[\\*\\]");
@@ -957,29 +907,20 @@ public class PropertyScanner {
 
         String arrayPropertyName = mainParts[0]; // "ModulesDescriptors"
         String remainingPath = mainParts[1]; // ".BlindageProperties.ExplosiveReactiveArmor"
-
-        // Remove leading dot if present
         if (remainingPath.startsWith(".")) {
             remainingPath = remainingPath.substring(1);
         }
-
-        // Get the array property
         NDFValue arrayValue = unit.getProperty(arrayPropertyName);
         if (!(arrayValue instanceof ArrayValue)) {
             return false; // Not an array
         }
 
         ArrayValue array = (ArrayValue) arrayValue;
-
-        // Check if ANY array element has the target property - no assumptions
         for (int i = 0; i < array.getElements().size(); i++) {
             NDFValue element = array.getElements().get(i);
             if (element instanceof ObjectValue) {
                 ObjectValue elementObj = (ObjectValue) element;
-
-                // Check if this element has the property
                 if (PropertyUpdater.hasProperty(elementObj, remainingPath)) {
-                    // Get the value and apply comprehensive filtering
                     NDFValue value = PropertyUpdater.getPropertyValue(elementObj, remainingPath);
                     if (value != null && isModifiableProperty(value, remainingPath) &&
                         hasRequiredModuleType(unit, propertyPath)) {

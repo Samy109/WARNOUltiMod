@@ -7,10 +7,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 
-/**
- * Represents a single modification made to an NDF file.
- * This class tracks what was changed, when, and how.
- */
 public class ModificationRecord {
     private final String unitName;
     private final String propertyPath;
@@ -22,17 +18,13 @@ public class ModificationRecord {
     private final ModificationType modificationType;
     private final String modificationDetails; // For mass modifications, stores the operation details
 
-    /**
-     * Creates a new modification record for a direct value change
-     */
+    
     public ModificationRecord(String unitName, String propertyPath,
                             NDFValue oldValue, NDFValue newValue) {
         this(unitName, propertyPath, oldValue, newValue, ModificationType.SET, null);
     }
 
-    /**
-     * Creates a new modification record with modification type details
-     */
+    
     public ModificationRecord(String unitName, String propertyPath,
                             NDFValue oldValue, NDFValue newValue,
                             ModificationType modificationType, String modificationDetails) {
@@ -47,9 +39,7 @@ public class ModificationRecord {
         this.modificationDetails = modificationDetails;
     }
 
-    /**
-     * Constructor for JSON deserialization
-     */
+    
     public ModificationRecord(String unitName, String propertyPath,
                             String oldValue, String newValue,
                             String oldValueType, String newValueType,
@@ -65,8 +55,6 @@ public class ModificationRecord {
         this.modificationType = modificationType;
         this.modificationDetails = modificationDetails;
     }
-
-    // Getters
     public String getUnitName() { return unitName; }
     public String getPropertyPath() { return propertyPath; }
     public String getOldValue() { return oldValue; }
@@ -77,16 +65,12 @@ public class ModificationRecord {
     public ModificationType getModificationType() { return modificationType; }
     public String getModificationDetails() { return modificationDetails; }
 
-    /**
-     * Gets a formatted timestamp string
-     */
+    
     public String getFormattedTimestamp() {
         return timestamp.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
     }
 
-    /**
-     * Gets a human-readable description of this modification
-     */
+    
     public String getDescription() {
         StringBuilder sb = new StringBuilder();
         sb.append(unitName).append(" -> ").append(propertyPath);
@@ -103,9 +87,7 @@ public class ModificationRecord {
         return sb.toString();
     }
 
-    /**
-     * Gets a display-friendly version of a value with ellipses for very long strings
-     */
+    
     private String getDisplayValue(String value) {
         if (value == null) {
             return "null";
@@ -119,9 +101,7 @@ public class ModificationRecord {
         return value;
     }
 
-    /**
-     * Validates that this modification record has valid data
-     */
+    
     public boolean isValid() {
         return unitName != null && !unitName.trim().isEmpty() &&
                propertyPath != null && !propertyPath.trim().isEmpty() &&
@@ -130,9 +110,7 @@ public class ModificationRecord {
                timestamp != null && modificationType != null;
     }
 
-    /**
-     * Creates a unique key for this modification (unit + path)
-     */
+    
     public String getKey() {
         return unitName + ":" + propertyPath;
     }
