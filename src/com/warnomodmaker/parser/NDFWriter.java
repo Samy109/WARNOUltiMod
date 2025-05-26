@@ -81,10 +81,17 @@ public class NDFWriter {
         // SOPHISTICATED FIX: Store all objects for nested object handling
         setAllObjects(ndfObjects);
 
-        if (preserveFormatting && originalTokens != null && !originalTokens.isEmpty()) {
-            // Don't write preserved comments when using token range reconstruction
+        // CRITICAL FIX: Never use writeExact if any objects are modified
+        // writeExact corrupts array element prefixes with gap tokens
+        boolean hasModifiedObjects = ndfObjects.stream().anyMatch(modifiedObjects::contains);
+        boolean isCompleteFile = isCompleteFileWrite(ndfObjects);
+
+        if (preserveFormatting && originalTokens != null && !originalTokens.isEmpty() &&
+            isCompleteFile && !hasModifiedObjects) {
+            // Only use writeExact for complete file writes with NO modified objects
             writeExact(ndfObjects);
         } else {
+            // Use memory model approach for individual objects, modified objects, or when not preserving formatting
             writePreservedComments();
             for (ObjectValue ndfObject : ndfObjects) {
                 writeNDFObject(ndfObject);
@@ -154,7 +161,8 @@ public class NDFWriter {
             writer.write("\n");
         } else if (ndfObject.isExported()) {
             if (modifiedObjects.contains(ndfObject)) {
-                // CRITICAL FIX: Use memory model for modified objects with perfect formatting preservation
+                // CRITICAL FIX: Always use memory model for modified objects
+                // Never use token reconstruction for modified objects as it can include unwanted content
                 writer.write("export ");
                 writer.write(instanceName);
                 writer.write(" is ");
@@ -175,11 +183,12 @@ public class NDFWriter {
                 writer.write(" is ");
                 writer.write(ndfObject.getTypeName());
                 writer.write("\n");
-                writeObjectFromMemoryModel(ndfObject);
+                writeCleanObjectFromMemoryModel(ndfObject);
             }
         } else {
             if (modifiedObjects.contains(ndfObject)) {
-                // CRITICAL FIX: Use memory model for modified objects with perfect formatting preservation
+                // CRITICAL FIX: Always use memory model for modified objects
+                // Never use token reconstruction for modified objects as it can include unwanted content
                 writer.write(instanceName);
                 writer.write(" is ");
                 writer.write(ndfObject.getTypeName());
@@ -194,131 +203,356 @@ public class NDFWriter {
                 writer.write(originalText);
             } else {
                 // Fallback: Write directly from memory model
-                writeObjectFromMemoryModel(ndfObject);
+                writer.write(instanceName);
+                writer.write(" is ");
+                writer.write(ndfObject.getTypeName());
+                writeCleanObjectFromMemoryModel(ndfObject);
             }
         }
     }
 
 
-    private void writeObjectFromMemoryModel(ObjectValue object) throws IOException {
-        // CRITICAL: Use EXACT original formatting - no fallbacks that change formatting
-        String openParen = object.getOriginalOpeningParen();
-        if (openParen != null && !openParen.isEmpty()) {
-            writer.write(openParen);
-        } else {
-            writer.write("(");
-        }
+    // REMOVED: writeObjectFromMemoryModel - replaced by writeCleanObjectFromMemoryModel
+
+    private void writeObjectFromMemoryModelWithPerfectFormatting(NDFValue.ObjectValue object) throws IOException {
+        // COMPLETE ARCHITECTURAL REWRITE: Clean memory model writing for modified objects
+        // This completely bypasses all token reconstruction and array corruption issues
+        writeCleanObjectFromMemoryModel(object);
+    }
+
+    /**
+     * BRAND NEW CLEAN WRITING SYSTEM for modified objects
+     * This completely bypasses all token reconstruction and array prefix corruption issues
+     */
+    private void writeCleanObjectFromMemoryModel(NDFValue.ObjectValue object) throws IOException {
+        // Write opening parenthesis with clean formatting
+        writer.write("(");
 
         Map<String, NDFValue> properties = object.getProperties();
+
         for (Map.Entry<String, NDFValue> entry : properties.entrySet()) {
             String propertyName = entry.getKey();
             NDFValue value = entry.getValue();
 
-            // CRITICAL: Use EXACT original formatting - with proper defaults
-            String prefix = object.getOriginalPropertyPrefix(propertyName);
-            String equals = object.getOriginalPropertyEquals(propertyName);
-            String suffix = object.getOriginalPropertySuffix(propertyName);
-
-            if (prefix != null && !prefix.isEmpty()) {
-                writer.write(prefix);
-            } else {
-                writer.write("\n  "); // Default indentation
-            }
-
+            // Clean formatting: newline and indentation before each property
+            writer.write("\n  ");
             writer.write(propertyName);
+            writer.write(" = ");
 
-            if (equals != null && !equals.isEmpty()) {
-                writer.write(equals);
+            // STANDALONE UNITEDESCRIPTOR FUNCTIONALITY - Special handling for ModulesDescriptors
+            if ("ModulesDescriptors".equals(propertyName) && value instanceof NDFValue.ArrayValue && isUniteDescriptorFile()) {
+                writeUniteDescriptorModulesArray((NDFValue.ArrayValue) value);
             } else {
-                writer.write(" = ");
-            }
-
-            writeValue(value);
-
-            if (suffix != null && !suffix.isEmpty()) {
-                writer.write(suffix);
-            } else {
-                // No default suffix - let the closing paren handle the newline
+                // CRITICAL: Use clean value writing that doesn't corrupt arrays
+                writeCleanValue(value);
             }
         }
 
-        // CRITICAL: Use EXACT original closing parenthesis
-        String closeParen = object.getOriginalClosingParen();
-        if (closeParen != null && !closeParen.isEmpty()) {
-            writer.write(closeParen);
-        } else {
-            writer.write("\n)");
+        // Write closing parenthesis with clean formatting
+        writer.write("\n)");
+    }
+
+    /**
+     * BRAND NEW CLEAN VALUE WRITING SYSTEM
+     * This completely avoids all the array corruption issues in the existing writeValue method
+     */
+    private void writeCleanValue(NDFValue value) throws IOException {
+        switch (value.getType()) {
+            case STRING:
+                StringValue stringValue = (StringValue) value;
+                if (stringValue.useDoubleQuotes()) {
+                    writer.write("\"");
+                    writer.write(stringValue.getValue());
+                    writer.write("\"");
+                } else {
+                    writer.write("'");
+                    writer.write(stringValue.getValue());
+                    writer.write("'");
+                }
+                break;
+
+            case NUMBER:
+                NumberValue numberValue = (NumberValue) value;
+                writer.write(numberValue.toString());
+                break;
+
+            case BOOLEAN:
+                BooleanValue booleanValue = (BooleanValue) value;
+                writer.write(booleanValue.toString());
+                break;
+
+            case TEMPLATE_REF:
+                TemplateRefValue templateRefValue = (TemplateRefValue) value;
+                if (templateRefValue.getInstanceName() != null) {
+                    writer.write(templateRefValue.getInstanceName());
+                    writer.write(" is ");
+                }
+                writer.write(templateRefValue.getPath());
+                break;
+
+            case RESOURCE_REF:
+                ResourceRefValue resourceRefValue = (ResourceRefValue) value;
+                writer.write(resourceRefValue.getPath());
+                break;
+
+            case GUID:
+                GUIDValue guidValue = (GUIDValue) value;
+                writer.write(guidValue.getGUID());
+                break;
+
+            case ENUM:
+                EnumValue enumValue = (EnumValue) value;
+                writer.write(enumValue.toString());
+                break;
+
+            case RAW_EXPRESSION:
+                RawExpressionValue rawValue = (RawExpressionValue) value;
+                writer.write(rawValue.getExpression());
+                break;
+
+            case ARRAY:
+                ArrayValue arrayValue = (ArrayValue) value;
+                writeCleanArray(arrayValue);
+                break;
+
+            case TUPLE:
+                TupleValue tupleValue = (TupleValue) value;
+                writeCleanTuple(tupleValue);
+                break;
+
+            case MAP:
+                MapValue mapValue = (MapValue) value;
+                writeCleanMap(mapValue);
+                break;
+
+            case OBJECT:
+                ObjectValue objectValue = (ObjectValue) value;
+                // Special handling for RGBA objects
+                if ("RGBA".equals(objectValue.getTypeName())) {
+                    writeCleanRGBA(objectValue);
+                } else {
+                    writeCleanObject(objectValue);
+                }
+                break;
+
+            case NULL:
+                writer.write("nil");
+                break;
+
+            default:
+                writer.write(value.toString());
+                break;
         }
     }
 
-    private void writeObjectFromMemoryModelWithPerfectFormatting(NDFValue.ObjectValue object) throws IOException {
-        // Use the exact original opening parenthesis
-        String openParen = object.getOriginalOpeningParen();
-        if (openParen != null && !openParen.isEmpty()) {
-            writer.write(openParen);
-        } else {
-            writer.write("(");
+    /**
+     * CLEAN ARRAY WRITING - No corruption, no token reconstruction issues
+     */
+    private void writeCleanArray(ArrayValue array) throws IOException {
+        List<NDFValue> elements = array.getElements();
+
+        if (elements.isEmpty()) {
+            writer.write("[]");
+            return;
         }
 
-        // Write properties with exact original formatting
-        boolean isFirstProperty = true;
-        for (String propertyName : object.getProperties().keySet()) {
-            NDFValue value = object.getProperty(propertyName);
+        writer.write("[\n");
 
-            // Use EXACT original formatting for each property
-            String prefix = object.getOriginalPropertyPrefix(propertyName);
-            String equals = object.getOriginalPropertyEquals(propertyName);
-            String suffix = object.getOriginalPropertySuffix(propertyName);
+        for (int i = 0; i < elements.size(); i++) {
+            NDFValue element = elements.get(i);
 
-            // CRITICAL: Use either stored formatting OR reconstructed formatting, not both
-            if (prefix != null && !prefix.isEmpty()) {
-                // Use stored formatting
-                writer.write(prefix);
-                writer.write(propertyName);
+            // Clean indentation for each element
+            writer.write("  ");
+            writeCleanValue(element);
 
-                if (equals != null && !equals.isEmpty()) {
-                    writer.write(equals);
+            // Add comma for all but the last element
+            if (i < elements.size() - 1) {
+                writer.write(",");
+            }
+            writer.write("\n");
+        }
+
+        writer.write("]");
+    }
+
+    /**
+     * CLEAN TUPLE WRITING
+     */
+    private void writeCleanTuple(TupleValue tuple) throws IOException {
+        List<NDFValue> elements = tuple.getElements();
+
+        if (elements.isEmpty()) {
+            writer.write("()");
+            return;
+        }
+
+        writer.write("(");
+        for (int i = 0; i < elements.size(); i++) {
+            NDFValue element = elements.get(i);
+            writeCleanValue(element);
+            if (i < elements.size() - 1) {
+                writer.write(", ");
+            }
+        }
+        writer.write(")");
+    }
+
+    /**
+     * CLEAN MAP WRITING
+     */
+    private void writeCleanMap(MapValue map) throws IOException {
+        List<Map.Entry<NDFValue, NDFValue>> entries = map.getEntries();
+
+        writer.write("MAP [\n");
+        for (int i = 0; i < entries.size(); i++) {
+            Map.Entry<NDFValue, NDFValue> entry = entries.get(i);
+
+            writer.write("  (");
+            writeCleanValue(entry.getKey());
+            writer.write(", ");
+            writeCleanValue(entry.getValue());
+            writer.write(")");
+            if (i < entries.size() - 1) {
+                writer.write(",");
+            }
+            writer.write("\n");
+        }
+        writer.write("]");
+    }
+
+    /**
+     * CLEAN RGBA WRITING - Special compact format for RGBA objects
+     */
+    private void writeCleanRGBA(ObjectValue rgbaObject) throws IOException {
+        writer.write("RGBA[");
+
+        // Find the array property (usually "values" or similar)
+        NDFValue arrayValue = null;
+        for (NDFValue value : rgbaObject.getProperties().values()) {
+            if (value instanceof ArrayValue) {
+                arrayValue = value;
+                break;
+            }
+        }
+
+        if (arrayValue instanceof ArrayValue) {
+            ArrayValue array = (ArrayValue) arrayValue;
+            List<NDFValue> elements = array.getElements();
+
+            for (int i = 0; i < elements.size(); i++) {
+                NDFValue element = elements.get(i);
+                if (element instanceof NumberValue) {
+                    NumberValue numberValue = (NumberValue) element;
+                    // Write as integer if it was originally an integer
+                    if (numberValue.wasOriginallyInteger()) {
+                        writer.write(String.valueOf(numberValue.getIntValue()));
+                    } else {
+                        writer.write(numberValue.toString());
+                    }
                 } else {
-                    writer.write(" = ");
+                    writer.write(element.toString());
                 }
+
+                if (i < elements.size() - 1) {
+                    writer.write(",");
+                }
+            }
+        }
+
+        writer.write("]");
+    }
+
+    /**
+     * CLEAN OBJECT WRITING
+     */
+    private void writeCleanObject(ObjectValue object) throws IOException {
+        // Write type name
+        writer.write(object.getTypeName());
+
+        // Write object content using clean method
+        writeCleanObjectFromMemoryModel(object);
+    }
+
+    // ===== STANDALONE UNITEDESCRIPTOR FUNCTIONALITY =====
+    // Specialized writing for UniteDescriptor.ndf without affecting other files
+
+    /**
+     * Check if we're writing a UniteDescriptor file
+     */
+    private boolean isUniteDescriptorFile() {
+        // Simple heuristic: check if any object has TEntityDescriptor type
+        // This is safe and additive - won't affect other files
+        List<ObjectValue> objects = getAllObjects();
+        for (NDFValue.ObjectValue obj : objects) {
+            if ("TEntityDescriptor".equals(obj.getTypeName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * STANDALONE UniteDescriptor ModulesDescriptors array writing
+     * Handles the unique patterns: named assignments, template refs, objects
+     */
+    private void writeUniteDescriptorModulesArray(NDFValue.ArrayValue array) throws IOException {
+        List<NDFValue> elements = array.getElements();
+
+        if (elements.isEmpty()) {
+            writer.write("[]");
+            return;
+        }
+
+        writer.write("[\n");
+
+        for (int i = 0; i < elements.size(); i++) {
+            NDFValue element = elements.get(i);
+
+            // Clean indentation for each element
+            writer.write("    ");
+            writeUniteDescriptorModuleElement(element);
+
+            // Add comma for all but the last element
+            if (i < elements.size() - 1) {
+                writer.write(",");
+            }
+            writer.write("\n");
+        }
+
+        writer.write("  ]");
+    }
+
+    /**
+     * Write individual module elements with UniteDescriptor-specific formatting
+     */
+    private void writeUniteDescriptorModuleElement(NDFValue element) throws IOException {
+        if (element instanceof NDFValue.TemplateRefValue) {
+            NDFValue.TemplateRefValue templateRef = (NDFValue.TemplateRefValue) element;
+            if (templateRef.getInstanceName() != null) {
+                // Named assignment: "FacingInfos is ~/FacingInfosModuleDescriptor"
+                writer.write(templateRef.getInstanceName());
+                writer.write(" is ");
+                writer.write(templateRef.getPath());
             } else {
-                // Use reconstructed formatting from original tokens
-                // Only add newline + indentation if the opening parenthesis doesn't already include it
-                String objectOpenParen = object.getOriginalOpeningParen();
-                boolean openParenIncludesNewline = objectOpenParen != null && objectOpenParen.contains("\n");
-
-                if (!isFirstProperty || !openParenIncludesNewline) {
-                    writer.write("\n    "); // Default indentation when needed
-                }
-                writer.write(propertyName);
-
-                if (equals != null && !equals.isEmpty()) {
-                    String propertySpacing = reconstructPropertySpacing(propertyName, object);
-                    writer.write(propertySpacing);
-                    writer.write(equals);
-                } else {
-                    writer.write(" = ");
-                }
+                // Simple template ref: "~/TargetManagerModuleSelector"
+                writer.write(templateRef.getPath());
             }
-
-            // Write the value (this will use current memory values, including modifications)
-            writeValue(value);
-
-            // Write suffix (usually contains trailing comma or newline)
-            if (suffix != null && !suffix.isEmpty()) {
-                writer.write(suffix);
+        } else if (element instanceof NDFValue.ObjectValue) {
+            NDFValue.ObjectValue objectValue = (NDFValue.ObjectValue) element;
+            if (objectValue.getInstanceName() != null) {
+                // Named assignment: "ApparenceModel is VehicleApparenceModuleDescriptor(...)"
+                writer.write(objectValue.getInstanceName());
+                writer.write(" is ");
+                writer.write(objectValue.getTypeName());
+                writeCleanObjectFromMemoryModel(objectValue);
+            } else {
+                // Simple object: "TTagsModuleDescriptor(...)"
+                writer.write(objectValue.getTypeName());
+                writeCleanObjectFromMemoryModel(objectValue);
             }
-            // Note: No default suffix - let the closing paren handle final formatting
-
-            isFirstProperty = false;
-        }
-
-        // Use EXACT original closing parenthesis
-        String closeParen = object.getOriginalClosingParen();
-        if (closeParen != null && !closeParen.isEmpty()) {
-            writer.write(closeParen);
         } else {
-            writer.write("\n)");
+            // Fallback to standard clean value writing
+            writeCleanValue(element);
         }
     }
 
@@ -332,13 +566,15 @@ public class NDFWriter {
         if (constantDef.hasOriginalTokenRange() && originalTokens != null) {
             // PRIORITY: Use token reconstruction to preserve exact original formatting
             if (modifiedObjects.contains(constantDef)) {
-                String originalText = reconstructOriginalTextWithMemoryModel(
-                    constantDef.getOriginalTokenStartIndex(),
-                    constantDef.getOriginalTokenEndIndex(),
-                    constantDef,
-                    getAllObjects()
-                );
-                writer.write(originalText);
+                // CRITICAL FIX: Use CLEAN writing system for modified constant definitions
+                // This completely avoids all array corruption issues
+                writer.write(instanceName);
+                writer.write(" is ");
+
+                if (value != null) {
+                    writeCleanValue(value);
+                }
+                writer.write("\n");
             } else {
                 String originalText = reconstructOriginalText(
                     constantDef.getOriginalTokenStartIndex(),
@@ -350,14 +586,14 @@ public class NDFWriter {
             // Fallback: Simple constant definition when no token range
             writer.write(instanceName);
             writer.write(" is ");
-            writeValue(value);
+            writeCleanValue(value);
             writer.write("\n");
         } else if (instanceName != null && typeName != null && !"ConstantDefinition".equals(typeName)) {
             // Fallback: Object constant definition when no token range
             writer.write(instanceName);
             writer.write(" is ");
             writer.write(typeName);
-            writeObjectContent(constantDef);
+            writeCleanObjectFromMemoryModel(constantDef);
         } else {
             // Final fallback
             if (instanceName != null) {
@@ -365,11 +601,13 @@ public class NDFWriter {
                 writer.write(" is ");
             }
             if (value != null) {
-                writeValue(value);
+                writeCleanValue(value);
             }
             writer.write("\n");
         }
     }
+
+    // REMOVED: writeConstantDefinitionWithArrayPreservation - no longer needed with clean system
 
     // REMOVED: writeObjectBody method
     // SINGLE SOURCE OF TRUTH: All object writing now goes through token reconstruction with memory model values
@@ -396,325 +634,30 @@ public class NDFWriter {
     }
 
 
-    private void writeValue(NDFValue value) throws IOException {
-        switch (value.getType()) {
-            case STRING:
-                StringValue stringValue = (StringValue) value;
-                if (stringValue.useDoubleQuotes()) {
-                    writer.write("\"");
-                    writer.write(stringValue.getValue());
-                    writer.write("\"");
-                } else {
-                    writer.write("'");
-                    writer.write(stringValue.getValue());
-                    writer.write("'");
-                }
-                break;
-
-            case NUMBER:
-                NumberValue numberValue = (NumberValue) value;
-                writer.write(numberValue.toString());
-                break;
-
-            case BOOLEAN:
-                BooleanValue booleanValue = (BooleanValue) value;
-                writer.write(booleanValue.toString());
-                break;
-
-            case ARRAY:
-                writeArray((ArrayValue) value);
-                break;
-            case TUPLE:
-                writeTuple((TupleValue) value);
-                break;
-
-            case MAP:
-                writeMap((MapValue) value);
-                break;
-
-            case OBJECT:
-                writeObject((ObjectValue) value);
-                break;
-
-            case TEMPLATE_REF:
-                TemplateRefValue templateRefValue = (TemplateRefValue) value;
-                if (templateRefValue.getInstanceName() != null) {
-                    writer.write(templateRefValue.getInstanceName());
-                    writer.write(" is ");
-                    writer.write(templateRefValue.getPath());
-                } else {
-                    writer.write(templateRefValue.getPath());
-                }
-                break;
-
-            case RESOURCE_REF:
-                ResourceRefValue resourceRefValue = (ResourceRefValue) value;
-                writer.write(resourceRefValue.getPath());
-                break;
-
-            case GUID:
-                GUIDValue guidValue = (GUIDValue) value;
-                writer.write(guidValue.getGUID());
-                break;
-
-            case ENUM:
-                EnumValue enumValue = (EnumValue) value;
-                writer.write(enumValue.getEnumType());
-                writer.write("/");
-                writer.write(enumValue.getEnumValue());
-                break;
-
-            case RAW_EXPRESSION:
-                RawExpressionValue rawExpressionValue = (RawExpressionValue) value;
-                writer.write(rawExpressionValue.getExpression());
-                break;
-
-            default:
-                throw new IllegalArgumentException("Unknown value type: " + value.getType());
-        }
-    }
+    // REMOVED: Old writeValue method - replaced by writeCleanValue for modified objects
+    // This method caused array duplication issues and is no longer used
 
 
-    private void writeArray(ArrayValue array) throws IOException {
-        List<NDFValue> elements = array.getElements();
-
-        if (elements.isEmpty()) {
-            // CRITICAL: Use exact original formatting for empty arrays
-            String openBracket = array.getOriginalOpeningBracket();
-            String closeBracket = array.getOriginalClosingBracket();
-            if (openBracket != null && closeBracket != null) {
-                writer.write(openBracket);
-                writer.write(closeBracket);
-            } else {
-                writer.write("[]");
-            }
-            return;
-        }
-
-        // CRITICAL: REPRODUCE EXACT ORIGINAL FORMATTING
-        String openBracket = array.getOriginalOpeningBracket();
-        if (openBracket != null && !openBracket.isEmpty()) {
-            writer.write(openBracket);
-        } else {
-            writer.write("[");
-        }
-
-        for (int i = 0; i < elements.size(); i++) {
-            NDFValue element = elements.get(i);
-            String prefix = array.getOriginalElementPrefix(i);
-            String suffix = array.getOriginalElementSuffix(i);
-
-            if (prefix != null && !prefix.isEmpty()) {
-                writer.write(prefix);
-            } else {
-                // SURGICAL FIX: Add default formatting for array elements when missing
-                // This handles DamageLevels.ndf and ExperienceLevels.ndf patterns
-                if (element instanceof NDFValue.ObjectValue) {
-                    NDFValue.ObjectValue objElement = (NDFValue.ObjectValue) element;
-                    if (objElement.getInstanceName() != null) {
-                        // This is a named object in an array - add proper indentation
-                        writer.write("\n        ");
-                    }
-                }
-            }
-
-            // PERFECT FIX: Only use constant definition writing for individually modified array elements
-            if (element instanceof NDFValue.ObjectValue) {
-                NDFValue.ObjectValue objElement = (NDFValue.ObjectValue) element;
-                if (objElement.getInstanceName() != null && objElement.getTypeName() != null &&
-                    modifiedObjects.contains(objElement)) {
-                    // This array element is individually modified - write as constant definition
-                    writeConstantDefinition(objElement);
-                } else {
-                    // This array element is not individually modified - use normal value writing (token reconstruction)
-                    writeValue(element);
-                }
-            } else {
-                writeValue(element);
-            }
-            if (suffix != null && !suffix.isEmpty()) {
-                writer.write(suffix);
-            }
-        }
-
-        String closeBracket = array.getOriginalClosingBracket();
-        if (closeBracket != null && !closeBracket.isEmpty()) {
-            // CRITICAL: Strip trailing newlines from array closing bracket to prevent duplication
-            // The newlines will be added by the next property's prefix
-            String cleanCloseBracket = closeBracket.replaceAll("\\n\\s*$", "");
-            writer.write(cleanCloseBracket);
-        } else {
-            writer.write("]");
-        }
-    }
+    // REMOVED: Old writeArray method - replaced by writeCleanArray for modified objects
+    // This method was part of the corrupted system that caused array duplication
 
     // REMOVED: shouldArrayBeSingleLine() and shouldUseCompactArrayFormat()
     // These methods made formatting decisions which violated 1-1 reproduction requirement
     // Now using EXACT ORIGINAL FORMATTING PRESERVATION instead
 
 
-    private void writeTuple(TupleValue tuple) throws IOException {
-        List<NDFValue> elements = tuple.getElements();
-
-        if (elements.isEmpty()) {
-            writer.write("()");
-            return;
-        }
-
-        writer.write("(");
-        for (int i = 0; i < elements.size(); i++) {
-            NDFValue element = elements.get(i);
-            writeValue(element);
-            if (tuple.hasCommaAfter(i)) {
-                writer.write(",");
-            }
-            if (i < elements.size() - 1) {
-                writer.write(" ");
-            }
-        }
-
-        writer.write(")");
-    }
+    // REMOVED: Old writeTuple method - replaced by writeCleanTuple
 
 
-    private void writeMap(MapValue map) throws IOException {
-        List<Map.Entry<NDFValue, NDFValue>> entries = map.getEntries();
-
-        writer.write("MAP [\n");
-        indentLevel++;
-        for (int i = 0; i < entries.size(); i++) {
-            Map.Entry<NDFValue, NDFValue> entry = entries.get(i);
-
-            writeIndent();
-            writer.write("(");
-            writeValue(entry.getKey());
-            writer.write(", ");
-            writeValue(entry.getValue());
-            writer.write(")");
-            if (map.hasCommaAfter(i)) {
-                writer.write(",");
-            }
-            writer.write("\n");
-        }
-
-        indentLevel--;
-        writeIndent();
-        writer.write("]");
-    }
+    // REMOVED: Old writeMap method - replaced by writeCleanMap
 
 
-    private void writeObject(ObjectValue object) throws IOException {
-        // FALLBACK: Write instance name if present (only when not using token range)
-        if (object.getInstanceName() != null) {
-            writer.write(object.getInstanceName());
-            writer.write(" is ");
-        }
+    // REMOVED: Old writeObject method - replaced by writeCleanObject
 
-        // FALLBACK: Use the complex formatting preservation approach
-        writer.write(object.getTypeName());
+    // REMOVED: Old writeArrayElementContent method - was part of the corrupted system
 
-        // Write the object content
-        writeObjectContent(object);
-    }
-
-    private void writeObjectContent(ObjectValue object) throws IOException {
-
-        // UNIVERSAL FORMATTING PRESERVATION - Works for all file types
-        String openParen = object.getOriginalOpeningParen();
-
-        // SURGICAL FIX: Handle DamageLevels object constant definitions specifically
-        if (object.getInstanceName() != null && object.getInstanceName().contains("DamageLevelDescriptor_")) {
-            // This is a DamageLevels object constant definition - ensure proper newline + indentation
-            if (openParen != null && openParen.contains("\n")) {
-                // Original has newline - use it
-                writer.write(openParen);
-            } else {
-                // Original doesn't have newline or is missing - add proper formatting
-                writer.write("\n        (");
-            }
-        } else if (openParen != null && !openParen.isEmpty()) {
-            writer.write(openParen);
-        } else {
-            writer.write("(");
-        }
-
-        Map<String, NDFValue> properties = object.getProperties();
-        boolean isFirstProperty = true;
-        for (Map.Entry<String, NDFValue> entry : properties.entrySet()) {
-            String propertyName = entry.getKey();
-            NDFValue propertyValue = entry.getValue();
-
-            String prefix = object.getOriginalPropertyPrefix(propertyName);
-            String equals = object.getOriginalPropertyEquals(propertyName);
-            String suffix = object.getOriginalPropertySuffix(propertyName);
-
-            // CRITICAL: Preserve original formatting style - don't force expansion
-            if (prefix != null && !prefix.isEmpty()) {
-                // Use stored formatting exactly as it was
-                writer.write(prefix);
-                writer.write(propertyName);
-
-                if (equals != null && !equals.isEmpty()) {
-                    writer.write(equals);
-                } else {
-                    writer.write(" = ");
-                }
-            } else {
-                // ONLY add formatting if the original object had expanded formatting
-                String objectOpenParen = object.getOriginalOpeningParen();
-                boolean originalWasExpanded = objectOpenParen != null && objectOpenParen.contains("\n");
-
-                // SURGICAL FIX: Force expanded formatting for nested objects in DamageLevels/ExperienceLevels
-                if (!originalWasExpanded && object.getInstanceName() != null &&
-                    (object.getInstanceName().contains("DamageLevel") || object.getInstanceName().contains("ExperienceLevel"))) {
-                    originalWasExpanded = true;
-                }
-
-                if (originalWasExpanded) {
-                    // Original was expanded - use expanded formatting
-                    if (!isFirstProperty || !originalWasExpanded) {
-                        writer.write("\n    ");
-                    }
-                    writer.write(propertyName);
-
-                    if (equals != null && !equals.isEmpty()) {
-                        String propertySpacing = reconstructPropertySpacing(propertyName, object);
-                        writer.write(propertySpacing);
-                        writer.write(equals);
-                    } else {
-                        writer.write(" = ");
-                    }
-                } else {
-                    // Original was compact - preserve compact formatting
-                    if (!isFirstProperty) {
-                        writer.write(" ");
-                    }
-                    writer.write(propertyName);
-
-                    if (equals != null && !equals.isEmpty()) {
-                        writer.write(equals);
-                    } else {
-                        writer.write("=");
-                    }
-                }
-            }
-
-            writeValue(propertyValue);
-
-            if (suffix != null && !suffix.isEmpty()) {
-                writer.write(suffix);
-            }
-
-            isFirstProperty = false;
-        }
-
-        String closeParen = object.getOriginalClosingParen();
-        if (closeParen != null && !closeParen.isEmpty()) {
-            writer.write(closeParen);
-        } else {
-            writer.write("\n)");
-        }
-    }
+    // REMOVED: Old writeObjectContent method - replaced by writeCleanObjectFromMemoryModel
+    // This method was part of the corrupted system and is no longer used
 
 
     private String reconstructOriginalText(int startIndex, int endIndex) {
@@ -1103,6 +1046,66 @@ public class NDFWriter {
     // Now using EXACT ORIGINAL FORMATTING PRESERVATION instead
 
     // REMOVED: writeFunctionCallWithArraySyntax method
+
+    /**
+     * Determines if we're writing a complete file or just individual objects
+     * This is used to decide whether to use writeExact (which includes gap tokens) or memory model approach
+     */
+    private boolean isCompleteFileWrite(List<ObjectValue> ndfObjects) {
+        // CRITICAL FIX: Never use writeExact for small object lists
+        // writeExact is designed for complete file writes and includes gap tokens from file start
+
+        // If we're writing only a few objects, it's definitely individual object writing
+        if (ndfObjects.size() <= 10) {
+            return false;
+        }
+
+        // If we don't have original tokens, we can't use writeExact anyway
+        if (originalTokens == null || originalTokens.isEmpty()) {
+            return false;
+        }
+
+        // For larger writes, we need to be more careful
+        // Only consider it a complete file write if we're writing a substantial portion
+        // and the objects appear to be in file order
+
+        // If we're writing more than 100 objects, it's likely a complete file
+        if (ndfObjects.size() > 100) {
+            return true;
+        }
+
+        // Otherwise, err on the side of caution and use memory model approach
+        return false;
+    }
+
+    /**
+     * Determines if an ObjectValue is an array element (should not have instance name written)
+     * Array elements are objects that don't have instance names or have instance names that are null
+     */
+    private boolean isArrayElement(ObjectValue objectValue) {
+        // Array elements typically don't have instance names
+        // or have instance names that are just type descriptors
+        String instanceName = objectValue.getInstanceName();
+
+        // If no instance name, it's likely an array element
+        if (instanceName == null) {
+            return true;
+        }
+
+        // If instance name is just the type name, it's likely an array element
+        String typeName = objectValue.getTypeName();
+        if (instanceName.equals(typeName)) {
+            return true;
+        }
+
+        // If instance name starts with the type name (like TDepictionDescriptor_1), it's likely an array element
+        if (instanceName.startsWith(typeName)) {
+            return true;
+        }
+
+        // Otherwise, it's a top-level object
+        return false;
+    }
     // This method made formatting decisions which violated 1-1 reproduction requirement
 
     // REMOVED: isFunctionCall method and all related formatting decision methods

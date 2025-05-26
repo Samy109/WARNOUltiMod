@@ -45,22 +45,22 @@ public class MassModifyDialog extends JDialog {
     private static final String CATEGORY_FAVORITES = "Favorites";
     private static final String CATEGORY_CUSTOM = "Custom Property";
 
-    
+
     public MassModifyDialog(JFrame parent, List<ObjectValue> unitDescriptors) {
         this(parent, unitDescriptors, null, NDFFileType.UNKNOWN);
     }
 
-    
+
     public MassModifyDialog(JFrame parent, List<ObjectValue> unitDescriptors, NDFFileType fileType) {
         this(parent, unitDescriptors, null, fileType);
     }
 
-    
+
     public MassModifyDialog(JFrame parent, List<ObjectValue> unitDescriptors, ModificationTracker modificationTracker) {
         this(parent, unitDescriptors, modificationTracker, NDFFileType.UNKNOWN);
     }
 
-    
+
     public MassModifyDialog(JFrame parent, List<ObjectValue> unitDescriptors, ModificationTracker modificationTracker, NDFFileType fileType) {
         super(parent, "Mass Modify - Dynamic Property Discovery", true);
 
@@ -102,7 +102,7 @@ public class MassModifyDialog extends JDialog {
         });
     }
 
-    
+
     private void initializeGUI() {
         setSize(650, 400);
         setLocationRelativeTo(getParent());
@@ -278,12 +278,12 @@ public class MassModifyDialog extends JDialog {
         categoryChanged(null);
     }
 
-    
+
     public boolean isModified() {
         return modified;
     }
 
-    
+
     private void categoryChanged(ActionEvent e) {
         propertyComboBox.removeAllItems();
         String category = (String) categoryComboBox.getSelectedItem();
@@ -312,7 +312,7 @@ public class MassModifyDialog extends JDialog {
         updateStatusLabel();
     }
 
-    
+
     private void propertyChanged(ActionEvent e) {
         String category = (String) categoryComboBox.getSelectedItem();
 
@@ -324,7 +324,7 @@ public class MassModifyDialog extends JDialog {
         updateStatusLabel();
     }
 
-    
+
     private void showTagFilterDialog(ActionEvent e) {
         TagFilterDialog tagDialog = new TagFilterDialog(
             (JFrame) SwingUtilities.getWindowAncestor(this),
@@ -352,7 +352,7 @@ public class MassModifyDialog extends JDialog {
         }
     }
 
-    
+
     private void updateStatusLabel() {
         String propertyPath = propertyPathField.getText();
 
@@ -415,7 +415,7 @@ public class MassModifyDialog extends JDialog {
         statusLabel.setText(statusText.toString());
     }
 
-    
+
     private void refreshProperties(ActionEvent e) {
         JDialog progressDialog = new JDialog(this, "Refreshing Properties", true);
         JProgressBar progressBar = new JProgressBar();
@@ -462,7 +462,7 @@ public class MassModifyDialog extends JDialog {
         progressDialog.setVisible(true);
     }
 
-    
+
     private void showPropertyPathHelp(ActionEvent e) {
         String helpText = "<html><body style='width: 400px;'>" +
             "<h3>Property Path Format Guide</h3>" +
@@ -536,7 +536,7 @@ public class MassModifyDialog extends JDialog {
         );
     }
 
-    
+
     private void searchProperties(ActionEvent e) {
         String searchTerm = JOptionPane.showInputDialog(
             this,
@@ -606,7 +606,7 @@ public class MassModifyDialog extends JDialog {
         }
     }
 
-    
+
     private void applyModification(ActionEvent e) {
         String propertyPath = propertyPathField.getText().trim();
 
@@ -721,7 +721,7 @@ public class MassModifyDialog extends JDialog {
         }
     }
 
-    
+
     private int countUnitsToModify(String propertyPath, String filter) {
         // Start with all units, then apply filters
         List<ObjectValue> workingUnits = new ArrayList<>(unitDescriptors);
@@ -754,7 +754,7 @@ public class MassModifyDialog extends JDialog {
         return count;
     }
 
-    
+
     private boolean hasPropertyDirect(ObjectValue unit, String propertyPath) {
         // Wildcard paths: check if ANY array element has the property
         if (propertyPath.contains("[*]")) {
@@ -774,7 +774,7 @@ public class MassModifyDialog extends JDialog {
         return isModifiableProperty(value, propertyPath) && hasRequiredModuleType(unit, propertyPath);
     }
 
-    
+
     private boolean isModifiableProperty(NDFValue value, String propertyPath) {
         // 1. BOOLEAN PROPERTIES: Only count if True
         if (value.getType() == NDFValue.ValueType.BOOLEAN) {
@@ -821,7 +821,7 @@ public class MassModifyDialog extends JDialog {
         return true;
     }
 
-    
+
     private boolean isModifiableArray(NDFValue value, String propertyPath) {
         if (!(value instanceof ArrayValue)) {
             return false;
@@ -864,7 +864,7 @@ public class MassModifyDialog extends JDialog {
         return false;
     }
 
-    
+
     private boolean hasRequiredModuleType(ObjectValue unit, String propertyPath) {
         // For non-unit descriptor files, skip module type checking
         if (fileType != NDFFileType.UNITE_DESCRIPTOR &&
@@ -906,7 +906,7 @@ public class MassModifyDialog extends JDialog {
         return isPropertyValidForUnitType(propertyPath, hasTankFlags, hasInfantryFlags, hasHelicopterFlags, hasPlaneFlags, hasCanonFlags);
     }
 
-    
+
     private boolean isPropertyValidForUnitType(String propertyPath, boolean hasTankFlags,
                                              boolean hasInfantryFlags, boolean hasHelicopterFlags, boolean hasPlaneFlags, boolean hasCanonFlags) {
         String lowerPath = propertyPath.toLowerCase();
@@ -957,7 +957,7 @@ public class MassModifyDialog extends JDialog {
         return true; // Default: allow for all unit types
     }
 
-    
+
     private boolean hasPropertyWithWildcards(ObjectValue unit, String propertyPath) {
         // Split on [*] to get the parts
         String[] mainParts = propertyPath.split("\\[\\*\\]");
@@ -993,7 +993,7 @@ public class MassModifyDialog extends JDialog {
         return false; // Not found in any array element
     }
 
-    
+
     private int applyModificationToUnits(String propertyPath, PropertyUpdater.ModificationType modificationType,
                                        double value, String valueText, String filter) {
         // Start with all units, then apply filters
@@ -1029,7 +1029,7 @@ public class MassModifyDialog extends JDialog {
         return modifiedCount;
     }
 
-    
+
     private boolean updatePropertyDirect(ObjectValue unit, String propertyPath,
                                       PropertyUpdater.ModificationType modificationType, double value, String valueText) {
         // Wildcard paths: update ALL array elements that have the property
@@ -1086,7 +1086,7 @@ public class MassModifyDialog extends JDialog {
         return false; // Property doesn't exist in this unit
     }
 
-    
+
     private boolean updateArrayProperty(ObjectValue unit, String propertyPath,
                                       PropertyUpdater.ModificationType modificationType, double value, String valueText) {
         NDFValue currentValue = PropertyUpdater.getPropertyValue(unit, propertyPath);
@@ -1114,7 +1114,7 @@ public class MassModifyDialog extends JDialog {
         return false; // Unsupported array type
     }
 
-    
+
     private boolean updateTagSetArray(ObjectValue unit, String propertyPath, ArrayValue currentArray, String valueText) {
         String[] tags = valueText.split(",");
         boolean modified = false;
@@ -1177,11 +1177,29 @@ public class MassModifyDialog extends JDialog {
         return modified;
     }
 
-    
+
     private boolean updateStringArray(ObjectValue unit, String propertyPath, ArrayValue currentArray, String valueText) {
         // For string arrays, replace all elements with the new value
+
+        // CRITICAL FIX: Preserve original quote type from first string element if it exists
+        boolean useDoubleQuotes = false; // Default to single quotes
+        if (!currentArray.getElements().isEmpty()) {
+            NDFValue firstElement = currentArray.getElements().get(0);
+            if (firstElement instanceof NDFValue.StringValue) {
+                NDFValue.StringValue firstString = (NDFValue.StringValue) firstElement;
+                useDoubleQuotes = firstString.useDoubleQuotes();
+            }
+        }
+
+        // CRITICAL FIX: Remove quotes from input if user included them
+        String cleanValue = valueText;
+        if ((cleanValue.startsWith("\"") && cleanValue.endsWith("\"")) ||
+            (cleanValue.startsWith("'") && cleanValue.endsWith("'"))) {
+            cleanValue = cleanValue.substring(1, cleanValue.length() - 1);
+        }
+
         currentArray.clear(); // This properly clears both elements and comma tracking
-        currentArray.add(NDFValue.createString(valueText));
+        currentArray.add(NDFValue.createString(cleanValue, useDoubleQuotes));
 
         if (modificationTracker != null) {
             String unitName = unit.getInstanceName() != null ? unit.getInstanceName() : "Unknown Unit";
@@ -1191,7 +1209,7 @@ public class MassModifyDialog extends JDialog {
         return true;
     }
 
-    
+
     private boolean updateNumberArray(ObjectValue unit, String propertyPath, ArrayValue currentArray,
                                     PropertyUpdater.ModificationType modificationType, double value) {
         // Apply the modification to all numeric elements in the array
@@ -1222,7 +1240,7 @@ public class MassModifyDialog extends JDialog {
         return modified;
     }
 
-    
+
     private double calculateNewValue(double currentValue, PropertyUpdater.ModificationType modificationType, double value) {
         switch (modificationType) {
             case SET:
@@ -1242,7 +1260,7 @@ public class MassModifyDialog extends JDialog {
         }
     }
 
-    
+
     private boolean updatePropertyWithWildcards(ObjectValue unit, String propertyPath,
                                               PropertyUpdater.ModificationType modificationType, double value, String valueText) {
         // Split on [*] to get the parts
@@ -1328,7 +1346,7 @@ public class MassModifyDialog extends JDialog {
         return modified;
     }
 
-    
+
     private void showDebugInfo(ActionEvent e) {
         StringBuilder debug = new StringBuilder();
 

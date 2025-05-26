@@ -597,10 +597,13 @@ public class UnitEditor extends JPanel {
     private NDFValue parseValue(String text, NDFValue originalValue) {
         switch (originalValue.getType()) {
             case STRING:
-                if (text.startsWith("'") && text.endsWith("'")) {
-                    text = text.substring(1, text.length() - 1);
-                }
-                return NDFValue.createString(text);
+                // CRITICAL FIX: Preserve original quote type when creating new string value
+                StringValue originalStringValue = (StringValue) originalValue;
+                boolean useDoubleQuotes = originalStringValue.useDoubleQuotes();
+
+                // Remove quotes from input if user included them
+                String cleanText = removeQuotesIfPresent(text);
+                return NDFValue.createString(cleanText, useDoubleQuotes);
 
             case NUMBER:
                 try {
@@ -651,6 +654,7 @@ public class UnitEditor extends JPanel {
                 String[] tupleElements = tupleContent.split(",");
 
                 TupleValue newTuple = NDFValue.createTuple();
+                int elementIndex = 0;
                 for (String element : tupleElements) {
                     element = element.trim();
 
@@ -667,13 +671,20 @@ public class UnitEditor extends JPanel {
                         if (enumParts.length == 2) {
                             elementValue = NDFValue.createEnum(enumParts[0], enumParts[1]);
                         } else {
-                            elementValue = NDFValue.createString(element);
+                            // CRITICAL FIX: Preserve original quote type for string elements
+                            boolean tupleElementUseDoubleQuotes = getOriginalQuoteType(elementIndex);
+                            String cleanElement = removeQuotesIfPresent(element);
+                            elementValue = NDFValue.createString(cleanElement, tupleElementUseDoubleQuotes);
                         }
                     } else {
-                        elementValue = NDFValue.createString(element);
+                        // CRITICAL FIX: Preserve original quote type for string elements
+                        boolean tupleElementUseDoubleQuotes = getOriginalQuoteType(elementIndex);
+                        String cleanElement = removeQuotesIfPresent(element);
+                        elementValue = NDFValue.createString(cleanElement, tupleElementUseDoubleQuotes);
                     }
 
                     newTuple.add(elementValue);
+                    elementIndex++;
                 }
 
                 return newTuple;
@@ -701,6 +712,36 @@ public class UnitEditor extends JPanel {
 
     private void selectPropertyByPath(String path) {
         // Not implemented yet
+    }
+
+
+    /**
+     * Helper method to get original quote type for tuple elements
+     */
+    private boolean getOriginalQuoteType(int elementIndex) {
+        if (selectedValue instanceof NDFValue.TupleValue) {
+            NDFValue.TupleValue originalTuple = (NDFValue.TupleValue) selectedValue;
+            if (elementIndex < originalTuple.getElements().size()) {
+                NDFValue originalElement = originalTuple.getElements().get(elementIndex);
+                if (originalElement instanceof NDFValue.StringValue) {
+                    NDFValue.StringValue originalString = (NDFValue.StringValue) originalElement;
+                    return originalString.useDoubleQuotes();
+                }
+            }
+        }
+        return false; // Default to single quotes
+    }
+
+
+    /**
+     * Helper method to remove quotes from user input if present
+     */
+    private String removeQuotesIfPresent(String input) {
+        if ((input.startsWith("\"") && input.endsWith("\"")) ||
+            (input.startsWith("'") && input.endsWith("'"))) {
+            return input.substring(1, input.length() - 1);
+        }
+        return input;
     }
 
 

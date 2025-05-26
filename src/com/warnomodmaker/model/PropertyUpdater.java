@@ -252,7 +252,19 @@ public class PropertyUpdater {
         if (!(currentValue instanceof StringValue)) {
             return false; // Property doesn't exist or isn't string
         }
-        NDFValue newValue = NDFValue.createString(value);
+
+        // CRITICAL FIX: Preserve original quote type when creating new string value
+        StringValue originalStringValue = (StringValue) currentValue;
+        boolean useDoubleQuotes = originalStringValue.useDoubleQuotes();
+
+        // CRITICAL FIX: Remove quotes from input if user included them
+        String cleanValue = value;
+        if ((cleanValue.startsWith("\"") && cleanValue.endsWith("\"")) ||
+            (cleanValue.startsWith("'") && cleanValue.endsWith("'"))) {
+            cleanValue = cleanValue.substring(1, cleanValue.length() - 1);
+        }
+
+        NDFValue newValue = NDFValue.createString(cleanValue, useDoubleQuotes);
         boolean success = updateProperty(ndfObject, propertyPath, newValue, null);
 
         // Record the modification if tracker is provided and update was successful

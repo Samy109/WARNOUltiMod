@@ -35,6 +35,12 @@ public class NDFParser {
         originalTokens = new ArrayList<>(tokens);
         currentTokenIndex = 0;
         currentToken = tokens.get(currentTokenIndex);
+
+        // STANDALONE UNITEDESCRIPTOR FUNCTIONALITY - Route to specialized parser
+        if (fileType == NDFFileType.UNITE_DESCRIPTOR) {
+            return parseUniteDescriptor();
+        }
+
         List<ObjectValue> ndfObjects = new ArrayList<>();
         while (currentToken.getType() != NDFToken.TokenType.EOF) {
             try {
@@ -782,16 +788,669 @@ public class NDFParser {
 
 
     private NDFToken expect(NDFToken.TokenType type) throws NDFParseException {
+        // Enhanced tolerance: Skip whitespace and comments before checking token type
+        skipWhitespaceAndComments();
+
         if (currentToken.getType() != type) {
-            throw new NDFParseException(
-                "Expected " + type + " but got " + currentToken.getType(),
-                currentToken
-            );
+            // Special handling for common formatting issues
+            if (type == NDFToken.TokenType.EQUALS && currentToken.getType() == NDFToken.TokenType.IDENTIFIER) {
+                // Look ahead to see if there's an EQUALS token nearby
+                int lookAheadIndex = currentTokenIndex + 1;
+                while (lookAheadIndex < tokens.size()) {
+                    NDFToken lookAheadToken = tokens.get(lookAheadIndex);
+                    if (lookAheadToken.getType() == NDFToken.TokenType.EQUALS) {
+                        // Found EQUALS token, skip the intervening tokens
+                        while (currentTokenIndex < lookAheadIndex) {
+                            advance();
+                        }
+                        break;
+                    } else if (lookAheadToken.getType() == NDFToken.TokenType.IDENTIFIER ||
+                               isWhitespaceToken(lookAheadToken) ||
+                               lookAheadToken.getType() == NDFToken.TokenType.COMMENT) {
+                        // Continue looking
+                        lookAheadIndex++;
+                    } else {
+                        // Hit something else, stop looking
+                        break;
+                    }
+                }
+            } else if (type == NDFToken.TokenType.IS && currentToken.getType() == NDFToken.TokenType.IDENTIFIER) {
+                // Look ahead to see if there's an IS token nearby
+                int lookAheadIndex = currentTokenIndex + 1;
+                while (lookAheadIndex < tokens.size()) {
+                    NDFToken lookAheadToken = tokens.get(lookAheadIndex);
+                    if (lookAheadToken.getType() == NDFToken.TokenType.IS) {
+                        // Found IS token, skip the intervening tokens
+                        while (currentTokenIndex < lookAheadIndex) {
+                            advance();
+                        }
+                        break;
+                    } else if (lookAheadToken.getType() == NDFToken.TokenType.IDENTIFIER ||
+                               isWhitespaceToken(lookAheadToken) ||
+                               lookAheadToken.getType() == NDFToken.TokenType.COMMENT) {
+                        // Continue looking
+                        lookAheadIndex++;
+                    } else {
+                        // Hit something else, stop looking
+                        break;
+                    }
+                }
+            }
+
+            // Check again after potential recovery
+            if (currentToken.getType() != type) {
+                throw new NDFParseException(
+                    "Expected " + type + " but got " + currentToken.getType(),
+                    currentToken
+                );
+            }
         }
 
         NDFToken token = currentToken;
         advance();
         return token;
+    }
+
+    private void skipWhitespaceAndComments() {
+        while (currentTokenIndex < tokens.size() &&
+               (isWhitespaceToken(currentToken) || currentToken.getType() == NDFToken.TokenType.COMMENT)) {
+            advance();
+        }
+    }
+
+    private boolean isWhitespaceToken(NDFToken token) {
+        // A token is considered whitespace if it has significant leading/trailing whitespace
+        // but no meaningful content, or if it's an unknown token that's just whitespace
+        return token.getType() == NDFToken.TokenType.UNKNOWN &&
+               (token.getValue().trim().isEmpty() || token.getValue().matches("\\s+"));
+    }
+
+    // ===== STANDALONE UNITEDESCRIPTOR FUNCTIONALITY =====
+    // Specialized parsing for UniteDescriptor.ndf without affecting other files
+
+    /**
+     * STANDALONE UniteDescriptor parser - handles the unique patterns in UniteDescriptor.ndf
+     */
+    private List<ObjectValue> parseUniteDescriptor() throws IOException, NDFParseException {
+        List<ObjectValue> ndfObjects = new ArrayList<>();
+
+        while (currentToken.getType() != NDFToken.TokenType.EOF) {
+            try {
+                if (currentToken.getType() == NDFToken.TokenType.COMMENT) {
+                    advance();
+                    continue;
+                }
+
+                if (currentToken.getType() == NDFToken.TokenType.EXPORT) {
+                    ndfObjects.add(parseUniteDescriptorExportedObject());
+                } else {
+                    advance(); // Skip any other tokens
+                }
+            } catch (NDFParseException e) {
+                System.err.println("Warning: UniteDescriptor parsing error at line " + currentToken.getLine() + ": " + e.getMessage());
+
+                // Skip to next export
+                while (currentToken.getType() != NDFToken.TokenType.EOF &&
+                       currentToken.getType() != NDFToken.TokenType.EXPORT) {
+                    advance();
+                }
+            }
+        }
+
+        return ndfObjects;
+    }
+
+    /**
+     * Parse exported objects in UniteDescriptor.ndf (TEntityDescriptor objects)
+     */
+    private ObjectValue parseUniteDescriptorExportedObject() throws NDFParseException {
+        int exportTokenIndex = currentTokenIndex;
+
+        expect(NDFToken.TokenType.EXPORT);
+        String descriptorName = expect(NDFToken.TokenType.IDENTIFIER).getValue();
+        expect(NDFToken.TokenType.IS);
+        String typeName = expect(NDFToken.TokenType.IDENTIFIER).getValue();
+
+        ObjectValue descriptor = NDFValue.createObject(typeName);
+        descriptor.setInstanceName(descriptorName);
+        descriptor.setExported(true);
+        descriptor.setOriginalTokenStartIndex(exportTokenIndex);
+
+        expect(NDFToken.TokenType.OPEN_PAREN);
+        parseUniteDescriptorObjectProperties(descriptor);
+        expect(NDFToken.TokenType.CLOSE_PAREN);
+
+        int endTokenIndex = currentTokenIndex - 1;
+        descriptor.setOriginalTokenEndIndex(endTokenIndex);
+
+        return descriptor;
+    }
+
+    /**
+     * Parse object properties in UniteDescriptor.ndf with special handling for ModulesDescriptors
+     */
+    private void parseUniteDescriptorObjectProperties(ObjectValue object) throws NDFParseException {
+        while (currentToken.getType() != NDFToken.TokenType.CLOSE_PAREN) {
+            if (currentToken.getType() == NDFToken.TokenType.COMMENT) {
+                advance();
+                continue;
+            }
+
+            String propertyName = expect(NDFToken.TokenType.IDENTIFIER).getValue();
+            expect(NDFToken.TokenType.EQUALS);
+
+            NDFValue propertyValue;
+            try {
+                if ("ModulesDescriptors".equals(propertyName)) {
+                    // Special handling for ModulesDescriptors array
+                    propertyValue = parseUniteDescriptorModulesArray();
+                } else {
+                    // Use completely standalone UniteDescriptor value parsing
+                    propertyValue = parseUniteDescriptorValueStandalone();
+                }
+
+                object.setProperty(propertyName, propertyValue);
+            } catch (NDFParseException e) {
+                // Log the error and skip this property (same as standard parser)
+                System.err.println("Warning: Failed to parse property '" + propertyName + "': " + e.getMessage());
+                System.err.println("  Skipping property and continuing...");
+
+                // Skip tokens until we find a comma or closing parenthesis
+                while (currentToken.getType() != NDFToken.TokenType.COMMA &&
+                       currentToken.getType() != NDFToken.TokenType.CLOSE_PAREN &&
+                       currentToken.getType() != NDFToken.TokenType.EOF) {
+                    advance();
+                }
+            }
+
+            if (currentToken.getType() == NDFToken.TokenType.COMMA) {
+                advance();
+            }
+        }
+    }
+
+    /**
+     * Parse ModulesDescriptors array with special handling for named object assignments
+     */
+    private ArrayValue parseUniteDescriptorModulesArray() throws NDFParseException {
+        NDFToken openBracketToken = currentToken;
+        expect(NDFToken.TokenType.OPEN_BRACKET);
+
+        ArrayValue array = NDFValue.createArray();
+        array.setOriginalOpeningBracket(openBracketToken.getExactText());
+
+        boolean isMultiLine = openBracketToken.getTrailingWhitespace().contains("\n");
+        array.setOriginallyMultiLine(isMultiLine);
+
+        int elementIndex = 0;
+        while (currentToken.getType() != NDFToken.TokenType.CLOSE_BRACKET) {
+            String elementPrefix = currentToken.getLeadingWhitespace();
+            array.setOriginalElementPrefix(elementIndex, elementPrefix);
+
+            NDFValue element = parseUniteDescriptorModuleElement();
+            boolean hasComma = currentToken.getType() == NDFToken.TokenType.COMMA;
+            String elementSuffix = "";
+
+            if (hasComma) {
+                NDFToken commaToken = currentToken;
+                advance();
+                elementSuffix = commaToken.getExactText();
+            } else {
+                elementSuffix = currentToken.getLeadingWhitespace();
+            }
+
+            array.setOriginalElementSuffix(elementIndex, elementSuffix);
+            array.add(element, hasComma);
+            elementIndex++;
+        }
+
+        NDFToken closeBracketToken = currentToken;
+        expect(NDFToken.TokenType.CLOSE_BRACKET);
+        array.setOriginalClosingBracket(closeBracketToken.getExactText());
+
+        return array;
+    }
+
+    /**
+     * Parse individual module elements - handles the unique UniteDescriptor patterns:
+     * 1. Simple template refs: ~/TargetManagerModuleSelector
+     * 2. Simple objects: TTagsModuleDescriptor(...)
+     * 3. Named assignments with objects: ApparenceModel is VehicleApparenceModuleDescriptor(...)
+     * 4. Named assignments with template refs: FacingInfos is ~/FacingInfosModuleDescriptor
+     */
+    private NDFValue parseUniteDescriptorModuleElement() throws NDFParseException {
+        if (currentToken.getType() == NDFToken.TokenType.TEMPLATE_REF) {
+            // Simple template reference
+            String templatePath = currentToken.getValue();
+            advance();
+            return NDFValue.createTemplateRef(templatePath);
+        } else if (currentToken.getType() == NDFToken.TokenType.IDENTIFIER) {
+            String firstIdentifier = currentToken.getValue();
+            int identifierTokenIndex = currentTokenIndex;
+            advance();
+
+            if (currentToken.getType() == NDFToken.TokenType.IS) {
+                // Named assignment: "Name is Type(...)" or "Name is ~/TemplateRef"
+                advance(); // consume 'is'
+
+                if (currentToken.getType() == NDFToken.TokenType.TEMPLATE_REF) {
+                    // Named assignment with template ref: "FacingInfos is ~/FacingInfosModuleDescriptor"
+                    String templatePath = currentToken.getValue();
+                    advance();
+                    NDFValue.TemplateRefValue templateRef = (NDFValue.TemplateRefValue) NDFValue.createTemplateRef(templatePath);
+                    templateRef.setInstanceName(firstIdentifier);
+                    return templateRef;
+                } else if (currentToken.getType() == NDFToken.TokenType.IDENTIFIER) {
+                    // Named assignment with object: "ApparenceModel is VehicleApparenceModuleDescriptor(...)"
+                    String typeName = currentToken.getValue();
+                    advance();
+
+                    ObjectValue namedObject = parseUniteDescriptorObject(typeName, identifierTokenIndex);
+                    namedObject.setInstanceName(firstIdentifier);
+                    return namedObject;
+                } else {
+                    throw new NDFParseException("Expected IDENTIFIER or TEMPLATE_REF after 'is' but got " + currentToken.getType() + " at line " + currentToken.getLine() + ", column " + currentToken.getColumn(), currentToken);
+                }
+            } else if (currentToken.getType() == NDFToken.TokenType.OPEN_PAREN) {
+                // Simple object: "Type(...)"
+                return parseUniteDescriptorObject(firstIdentifier, identifierTokenIndex);
+            } else {
+                // Just an identifier (shouldn't happen in ModulesDescriptors, but handle gracefully)
+                return NDFValue.createTemplateRef(firstIdentifier);
+            }
+        } else {
+            // Fallback to standard value parsing
+            return parseValue();
+        }
+    }
+
+    /**
+     * Parse objects within UniteDescriptor.ndf using UniteDescriptor-specific property parsing
+     */
+    private ObjectValue parseUniteDescriptorObject(String typeName, int startTokenIndex) throws NDFParseException {
+        ObjectValue object = NDFValue.createObject(typeName);
+        object.setOriginalTokenStartIndex(startTokenIndex);
+
+        expect(NDFToken.TokenType.OPEN_PAREN);
+        parseUniteDescriptorObjectProperties(object);
+        expect(NDFToken.TokenType.CLOSE_PAREN);
+
+        int endTokenIndex = currentTokenIndex - 1;
+        object.setOriginalTokenEndIndex(endTokenIndex);
+
+        return object;
+    }
+
+    /**
+     * COMPLETELY STANDALONE UniteDescriptor value parsing
+     * Handles all the unique patterns in UniteDescriptor.ndf without using standard parsing
+     */
+    private NDFValue parseUniteDescriptorValueStandalone() throws NDFParseException {
+        // Handle different value types with UniteDescriptor-specific logic
+
+        // 1. Handle pipe-separated values (like GameplayBehavior=EGameplayBehavior/Nothing | EGameplayBehavior/TacticalAttackNearCover)
+        if (currentToken.getType() == NDFToken.TokenType.IDENTIFIER || currentToken.getType() == NDFToken.TokenType.ENUM_VALUE) {
+            // Look ahead to see if there's a pipe after this value
+            int lookAheadIndex = currentTokenIndex + 1;
+            while (lookAheadIndex < tokens.size()) {
+                NDFToken lookAheadToken = tokens.get(lookAheadIndex);
+                if (lookAheadToken.getType() == NDFToken.TokenType.PIPE) {
+                    // This is a pipe-separated value, parse it specially
+                    return parseUniteDescriptorPipeSeparatedEnum();
+                } else if (lookAheadToken.getType() == NDFToken.TokenType.COMMA ||
+                          lookAheadToken.getType() == NDFToken.TokenType.CLOSE_PAREN ||
+                          lookAheadToken.getType() == NDFToken.TokenType.CLOSE_BRACKET) {
+                    // End of value, no pipe found
+                    break;
+                } else if (!isWhitespaceOrComment(lookAheadToken)) {
+                    // Non-whitespace, non-comment token that's not a pipe
+                    break;
+                }
+                lookAheadIndex++;
+            }
+        }
+
+        // 2. Handle template references with pipes (like TerrainListMask = ~/ETerrainType/None | ~/ETerrainType/ForetLegere)
+        if (currentToken.getType() == NDFToken.TokenType.TEMPLATE_REF) {
+            // Look ahead to see if there's a pipe after this template ref
+            int lookAheadIndex = currentTokenIndex + 1;
+            while (lookAheadIndex < tokens.size()) {
+                NDFToken lookAheadToken = tokens.get(lookAheadIndex);
+                if (lookAheadToken.getType() == NDFToken.TokenType.PIPE) {
+                    // This is a pipe-separated template ref, parse it specially
+                    return parseUniteDescriptorPipeSeparatedTemplateRefs();
+                } else if (lookAheadToken.getType() == NDFToken.TokenType.COMMA ||
+                          lookAheadToken.getType() == NDFToken.TokenType.CLOSE_PAREN ||
+                          lookAheadToken.getType() == NDFToken.TokenType.CLOSE_BRACKET) {
+                    // End of value, no pipe found - treat as simple template ref
+                    break;
+                } else if (!isWhitespaceOrComment(lookAheadToken)) {
+                    // Non-whitespace, non-comment token that's not a pipe
+                    break;
+                }
+                lookAheadIndex++;
+            }
+
+            // Not a pipe-separated template ref, treat as simple template ref
+            String templateValue = currentToken.getValue();
+            advance();
+            return NDFValue.createTemplateRef(templateValue);
+        }
+
+        // 3. Handle objects (like TBlindageProperties(...))
+        if (currentToken.getType() == NDFToken.TokenType.IDENTIFIER) {
+            // Look ahead to see if this is an object
+            int lookAheadIndex = currentTokenIndex + 1;
+            while (lookAheadIndex < tokens.size()) {
+                NDFToken lookAheadToken = tokens.get(lookAheadIndex);
+                if (lookAheadToken.getType() == NDFToken.TokenType.OPEN_PAREN) {
+                    // This is an object, parse it with UniteDescriptor logic
+                    String typeName = currentToken.getValue();
+                    int startTokenIndex = currentTokenIndex;
+                    advance();
+                    return parseUniteDescriptorObjectStandalone(typeName, startTokenIndex);
+                } else if (!isWhitespaceOrComment(lookAheadToken)) {
+                    // Not an object, treat as enum or identifier
+                    break;
+                }
+                lookAheadIndex++;
+            }
+
+            // Not an object, check if it's a simple identifier or enum
+            String identifierValue = currentToken.getValue();
+            advance();
+            // For UniteDescriptor, treat as raw expression since we don't know the enum type
+            return NDFValue.createRawExpression(identifierValue);
+        }
+
+        // 4. Handle arrays (like [value1, value2])
+        if (currentToken.getType() == NDFToken.TokenType.OPEN_BRACKET) {
+            return parseUniteDescriptorArrayStandalone();
+        }
+
+        // 5. Handle MAP constructs
+        if (currentToken.getType() == NDFToken.TokenType.MAP) {
+            return parseUniteDescriptorMapStandalone(); // Parse as proper map, not array
+        }
+
+        // 6. Handle basic values (numbers, strings, booleans, etc.)
+        return parseUniteDescriptorBasicValue();
+    }
+
+    /**
+     * Parse pipe-separated enum values like: EGameplayBehavior/Nothing | EGameplayBehavior/TacticalAttackNearCover
+     */
+    private NDFValue parseUniteDescriptorPipeSeparatedEnum() throws NDFParseException {
+        StringBuilder pipeSeparatedValue = new StringBuilder();
+
+        // Parse the first enum value
+        pipeSeparatedValue.append(currentToken.getValue());
+        advance();
+
+        // Parse additional pipe-separated enum values
+        while (currentToken.getType() == NDFToken.TokenType.PIPE) {
+            pipeSeparatedValue.append(" | ");
+            advance(); // consume pipe
+
+            // Skip whitespace
+            while (currentToken.getType() == NDFToken.TokenType.UNKNOWN && isWhitespaceToken(currentToken)) {
+                advance();
+            }
+
+            if (currentToken.getType() == NDFToken.TokenType.IDENTIFIER ||
+                currentToken.getType() == NDFToken.TokenType.ENUM_VALUE ||
+                currentToken.getType() == NDFToken.TokenType.TEMPLATE_REF) {
+                pipeSeparatedValue.append(currentToken.getValue());
+                advance();
+            } else {
+                throw new NDFParseException("Expected IDENTIFIER, ENUM_VALUE, or TEMPLATE_REF after pipe in enum", currentToken);
+            }
+        }
+
+        return NDFValue.createRawExpression(pipeSeparatedValue.toString());
+    }
+
+    /**
+     * Parse pipe-separated template refs like: ~/ETerrainType/None | ~/ETerrainType/ForetLegere | ~/ETerrainType/ForetDense
+     */
+    private NDFValue parseUniteDescriptorPipeSeparatedTemplateRefs() throws NDFParseException {
+        StringBuilder pipeSeparatedValue = new StringBuilder();
+
+        // Parse the first template ref
+        pipeSeparatedValue.append(currentToken.getValue());
+        advance();
+
+        // Parse additional pipe-separated template refs
+        while (currentToken.getType() == NDFToken.TokenType.PIPE) {
+            pipeSeparatedValue.append(" | ");
+            advance(); // consume pipe
+
+            // Skip whitespace
+            while (currentToken.getType() == NDFToken.TokenType.UNKNOWN && isWhitespaceToken(currentToken)) {
+                advance();
+            }
+
+            if (currentToken.getType() == NDFToken.TokenType.TEMPLATE_REF ||
+                currentToken.getType() == NDFToken.TokenType.IDENTIFIER ||
+                currentToken.getType() == NDFToken.TokenType.ENUM_VALUE) {
+                pipeSeparatedValue.append(currentToken.getValue());
+                advance();
+            } else {
+                throw new NDFParseException("Expected TEMPLATE_REF, IDENTIFIER, or ENUM_VALUE after pipe", currentToken);
+            }
+        }
+
+        return NDFValue.createRawExpression(pipeSeparatedValue.toString());
+    }
+
+    /**
+     * Parse objects in UniteDescriptor.ndf with standalone logic
+     */
+    private NDFValue.ObjectValue parseUniteDescriptorObjectStandalone(String typeName, int startTokenIndex) throws NDFParseException {
+        NDFValue.ObjectValue object = NDFValue.createObject(typeName);
+        object.setOriginalTokenStartIndex(startTokenIndex);
+
+        expect(NDFToken.TokenType.OPEN_PAREN);
+        parseUniteDescriptorObjectProperties(object);
+        expect(NDFToken.TokenType.CLOSE_PAREN);
+
+        int endTokenIndex = currentTokenIndex - 1;
+        object.setOriginalTokenEndIndex(endTokenIndex);
+
+        return object;
+    }
+
+    /**
+     * Parse arrays in UniteDescriptor.ndf with standalone logic
+     */
+    private NDFValue parseUniteDescriptorArrayStandalone() throws NDFParseException {
+        expect(NDFToken.TokenType.OPEN_BRACKET);
+
+        List<NDFValue> elements = new ArrayList<>();
+
+        while (currentToken.getType() != NDFToken.TokenType.CLOSE_BRACKET && currentToken.getType() != NDFToken.TokenType.EOF) {
+            // Skip whitespace and comments
+            if (currentToken.getType() == NDFToken.TokenType.UNKNOWN && isWhitespaceToken(currentToken)) {
+                advance();
+                continue;
+            }
+            if (currentToken.getType() == NDFToken.TokenType.COMMENT) {
+                advance();
+                continue;
+            }
+
+            // Parse array element using standalone logic
+            // Handle tuples like (EVisionUnitType/Standard, 3500.0)
+            if (currentToken.getType() == NDFToken.TokenType.OPEN_PAREN) {
+                NDFValue element = parseUniteDescriptorTupleStandalone();
+                elements.add(element);
+            } else {
+                NDFValue element = parseUniteDescriptorValueStandalone();
+                elements.add(element);
+            }
+
+            // Skip optional comma
+            if (currentToken.getType() == NDFToken.TokenType.COMMA) {
+                advance();
+            }
+        }
+
+        expect(NDFToken.TokenType.CLOSE_BRACKET);
+
+        // Create array and add elements
+        NDFValue.ArrayValue array = NDFValue.createArray();
+        for (NDFValue element : elements) {
+            array.add(element);
+        }
+        return array;
+    }
+
+    /**
+     * Parse tuples in UniteDescriptor.ndf like (EVisionUnitType/Standard, 3500.0)
+     */
+    private NDFValue parseUniteDescriptorTupleStandalone() throws NDFParseException {
+        expect(NDFToken.TokenType.OPEN_PAREN);
+
+        List<NDFValue> elements = new ArrayList<>();
+
+        while (currentToken.getType() != NDFToken.TokenType.CLOSE_PAREN && currentToken.getType() != NDFToken.TokenType.EOF) {
+            // Skip whitespace and comments
+            if (currentToken.getType() == NDFToken.TokenType.UNKNOWN && isWhitespaceToken(currentToken)) {
+                advance();
+                continue;
+            }
+            if (currentToken.getType() == NDFToken.TokenType.COMMENT) {
+                advance();
+                continue;
+            }
+
+            // Parse tuple element using standalone logic
+            NDFValue element = parseUniteDescriptorValueStandalone();
+            elements.add(element);
+
+            // Skip optional comma
+            if (currentToken.getType() == NDFToken.TokenType.COMMA) {
+                advance();
+            }
+        }
+
+        expect(NDFToken.TokenType.CLOSE_PAREN);
+
+        // Create tuple and add elements
+        NDFValue.TupleValue tuple = NDFValue.createTuple();
+        for (NDFValue element : elements) {
+            tuple.add(element);
+        }
+        return tuple;
+    }
+
+    /**
+     * Parse MAP constructs in UniteDescriptor.ndf like MAP [(key1, value1), (key2, value2)]
+     * This creates proper MapValue objects instead of arrays to fix type mismatch errors
+     */
+    private NDFValue.MapValue parseUniteDescriptorMapStandalone() throws NDFParseException {
+        expect(NDFToken.TokenType.MAP);
+        expect(NDFToken.TokenType.OPEN_BRACKET);
+
+        NDFValue.MapValue map = NDFValue.createMap();
+
+        while (currentToken.getType() != NDFToken.TokenType.CLOSE_BRACKET && currentToken.getType() != NDFToken.TokenType.EOF) {
+            // Skip whitespace and comments
+            if (currentToken.getType() == NDFToken.TokenType.UNKNOWN && isWhitespaceToken(currentToken)) {
+                advance();
+                continue;
+            }
+            if (currentToken.getType() == NDFToken.TokenType.COMMENT) {
+                advance();
+                continue;
+            }
+
+            // Parse map entry as tuple (key, value)
+            expect(NDFToken.TokenType.OPEN_PAREN);
+            NDFValue key = parseUniteDescriptorValueStandalone();
+            expect(NDFToken.TokenType.COMMA);
+            NDFValue value = parseUniteDescriptorValueStandalone();
+            expect(NDFToken.TokenType.CLOSE_PAREN);
+
+            // Check for comma after the entry
+            boolean hasComma = currentToken.getType() == NDFToken.TokenType.COMMA;
+            if (hasComma) {
+                advance(); // Consume the comma
+            }
+
+            map.add(key, value, hasComma);
+        }
+
+        expect(NDFToken.TokenType.CLOSE_BRACKET);
+        return map;
+    }
+
+    /**
+     * Parse basic values (numbers, strings, booleans, etc.) in UniteDescriptor.ndf
+     */
+    private NDFValue parseUniteDescriptorBasicValue() throws NDFParseException {
+        switch (currentToken.getType()) {
+            case NUMBER_LITERAL:
+                String numberValue = currentToken.getValue();
+                advance();
+                try {
+                    double numValue = Double.parseDouble(numberValue);
+                    return NDFValue.createNumber(numValue, numberValue);
+                } catch (NumberFormatException e) {
+                    // Fallback to raw expression if parsing fails
+                    return NDFValue.createRawExpression(numberValue);
+                }
+
+            case STRING_LITERAL:
+                String stringValue = currentToken.getValue();
+                boolean useDoubleQuotes = currentToken.getOriginalText().startsWith("\"");
+                advance();
+                return NDFValue.createString(stringValue, useDoubleQuotes);
+
+            case BOOLEAN_LITERAL:
+                String boolValue = currentToken.getValue();
+                advance();
+                return NDFValue.createBoolean(Boolean.parseBoolean(boolValue));
+
+            case IDENTIFIER:
+                String identifierValue = currentToken.getValue();
+                advance();
+                // Treat as raw expression for UniteDescriptor
+                return NDFValue.createRawExpression(identifierValue);
+
+            case ENUM_VALUE:
+                String enumValue = currentToken.getValue();
+                advance();
+                return NDFValue.createRawExpression(enumValue);
+
+            case TEMPLATE_REF:
+                String templateValue = currentToken.getValue();
+                advance();
+                return NDFValue.createTemplateRef(templateValue);
+
+            case RESOURCE_REF:
+                String resourceValue = currentToken.getValue();
+                advance();
+                return NDFValue.createResourceRef(resourceValue);
+
+            case GUID:
+                String guidValue = currentToken.getValue();
+                advance();
+                return NDFValue.createGUID(guidValue);
+
+            case MAP:
+                return parseUniteDescriptorMapStandalone(); // Parse as proper map, not array
+
+            default:
+                throw new NDFParseException("Unexpected token type in UniteDescriptor basic value: " + currentToken.getType(), currentToken);
+        }
+    }
+
+    /**
+     * Check if a token is whitespace or comment
+     */
+    private boolean isWhitespaceOrComment(NDFToken token) {
+        return token.getType() == NDFToken.TokenType.COMMENT || isWhitespaceToken(token);
     }
 
 
