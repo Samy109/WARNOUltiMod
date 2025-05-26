@@ -5,6 +5,17 @@ import com.warnomodmaker.parser.NDFWriter;
 
 public class PropertyUpdater {
 
+    // File type context for property navigation
+    private static NDFValue.NDFFileType currentFileType = NDFValue.NDFFileType.UNKNOWN;
+
+    public static void setFileType(NDFValue.NDFFileType fileType) {
+        currentFileType = fileType;
+    }
+
+    public static NDFValue.NDFFileType getFileType() {
+        return currentFileType;
+    }
+
     public enum ModificationType {
         SET("Set to value"),
         MULTIPLY("Multiply by"),
@@ -352,6 +363,28 @@ public class PropertyUpdater {
             return null;
         }
 
+        // Use file-type-aware navigation
+        return getPropertyValueWithFileType(ndfObject, propertyPath, currentFileType);
+    }
+
+    public static NDFValue getPropertyValue(ObjectValue ndfObject, String propertyPath, NDFValue.NDFFileType fileType) {
+        return getPropertyValueWithFileType(ndfObject, propertyPath, fileType);
+    }
+
+    private static NDFValue getPropertyValueWithFileType(ObjectValue ndfObject, String propertyPath, NDFValue.NDFFileType fileType) {
+        if (ndfObject == null || propertyPath == null || propertyPath.isEmpty()) {
+            return null;
+        }
+
+        // Route to appropriate navigation logic based on file type
+        if (fileType == NDFValue.NDFFileType.UNITE_DESCRIPTOR) {
+            return getUniteDescriptorPropertyValue(ndfObject, propertyPath);
+        } else {
+            return getStandardPropertyValue(ndfObject, propertyPath);
+        }
+    }
+
+    private static NDFValue getStandardPropertyValue(ObjectValue ndfObject, String propertyPath) {
         String[] pathParts = propertyPath.split("\\.");
 
         // Use the same navigation logic as update
@@ -385,6 +418,73 @@ public class PropertyUpdater {
         return null;
     }
 
+    private static NDFValue getUniteDescriptorPropertyValue(ObjectValue ndfObject, String propertyPath) {
+        // UniteDescriptor files have different internal structure due to pipe-separated parsing
+        // Handle the most common patterns for custom property lookup
+
+        // Simple property access (no dots)
+        if (!propertyPath.contains(".")) {
+            return ndfObject.getProperty(propertyPath);
+        }
+
+        // Handle array access patterns like ModulesDescriptors[0]
+        if (propertyPath.matches("^[^.]+\\[\\d+\\]$")) {
+            String arrayName = propertyPath.substring(0, propertyPath.indexOf('['));
+            int startIndex = propertyPath.indexOf('[') + 1;
+            int endIndex = propertyPath.indexOf(']');
+            int index = Integer.parseInt(propertyPath.substring(startIndex, endIndex));
+
+            NDFValue arrayValue = ndfObject.getProperty(arrayName);
+            if (arrayValue instanceof ArrayValue) {
+                ArrayValue array = (ArrayValue) arrayValue;
+                if (index >= 0 && index < array.getElements().size()) {
+                    return array.getElements().get(index);
+                }
+            }
+            return null;
+        }
+
+        // Handle nested property access like ModulesDescriptors[0].TagSet
+        String[] pathParts = propertyPath.split("\\.");
+        if (pathParts.length == 2) {
+            String firstPart = pathParts[0];
+            String secondPart = pathParts[1];
+
+            // Check if first part is array access
+            if (firstPart.matches("^[^.]+\\[\\d+\\]$")) {
+                String arrayName = firstPart.substring(0, firstPart.indexOf('['));
+                int startIndex = firstPart.indexOf('[') + 1;
+                int endIndex = firstPart.indexOf(']');
+                int index = Integer.parseInt(firstPart.substring(startIndex, endIndex));
+
+                NDFValue arrayValue = ndfObject.getProperty(arrayName);
+                if (arrayValue instanceof ArrayValue) {
+                    ArrayValue array = (ArrayValue) arrayValue;
+                    if (index >= 0 && index < array.getElements().size()) {
+                        NDFValue element = array.getElements().get(index);
+                        if (element instanceof ObjectValue) {
+                            ObjectValue elementObj = (ObjectValue) element;
+                            return elementObj.getProperty(secondPart);
+                        }
+                    }
+                }
+                return null;
+            } else {
+                // Simple nested access like SomeObject.Property
+                NDFValue firstValue = ndfObject.getProperty(firstPart);
+                if (firstValue instanceof ObjectValue) {
+                    ObjectValue firstObj = (ObjectValue) firstValue;
+                    return firstObj.getProperty(secondPart);
+                }
+                return null;
+            }
+        }
+
+        // For more complex paths, fall back to standard navigation
+        // This handles cases the specialized logic doesn't cover
+        return getStandardPropertyValue(ndfObject, propertyPath);
+    }
+
 
     private static double calculateNewValue(double currentValue, ModificationType modificationType, double value) {
         switch (modificationType) {
@@ -408,6 +508,10 @@ public class PropertyUpdater {
 
     public static boolean hasProperty(ObjectValue ndfObject, String propertyPath) {
         return getPropertyValue(ndfObject, propertyPath) != null;
+    }
+
+    public static boolean hasProperty(ObjectValue ndfObject, String propertyPath, NDFValue.NDFFileType fileType) {
+        return getPropertyValue(ndfObject, propertyPath, fileType) != null;
     }
 
 

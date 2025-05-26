@@ -68,6 +68,9 @@ public class MassModifyDialog extends JDialog {
         this.modificationTracker = modificationTracker;
         this.fileType = fileType;
         this.modified = false;
+
+        // Set file type context in PropertyUpdater for proper navigation
+        PropertyUpdater.setFileType(fileType);
         this.favoriteProperties = new ArrayList<>();
         this.selectedTags = new HashSet<>();
         this.useAnyTagsMode = true;
@@ -771,11 +774,19 @@ public class MassModifyDialog extends JDialog {
         }
 
         // Apply the same comprehensive filtering as PropertyScanner
+        // Skip module type checking for core structural properties
+        String lowerPath = propertyPath.toLowerCase();
+        if (lowerPath.equals("modulesdescriptors") || lowerPath.matches("modulesdescriptors\\[\\d+\\]")) {
+            return isModifiableProperty(value, propertyPath); // Skip module type check for core structural access
+        }
+
         return isModifiableProperty(value, propertyPath) && hasRequiredModuleType(unit, propertyPath);
     }
 
 
     private boolean isModifiableProperty(NDFValue value, String propertyPath) {
+        System.out.println("DEBUG: isModifiableProperty called with path: " + propertyPath + ", value type: " + value.getType());
+
         // 1. BOOLEAN PROPERTIES: Only count if True
         if (value.getType() == NDFValue.ValueType.BOOLEAN) {
             BooleanValue boolValue = (BooleanValue) value;
@@ -807,15 +818,32 @@ public class MassModifyDialog extends JDialog {
             return true;
         }
 
-        // 5. COMPLEX OBJECTS: Exclude containers, but allow modifiable arrays
-        if (value.getType() == NDFValue.ValueType.OBJECT ||
-            value.getType() == NDFValue.ValueType.MAP) {
+        // 5. ARRAY PROPERTIES: Allow specific modifiable arrays AND core structural arrays
+        if (value.getType() == NDFValue.ValueType.ARRAY) {
+            String lowerPath = propertyPath.toLowerCase();
+            // Always allow ModulesDescriptors - it's a core structural array that should be accessible
+            if (lowerPath.equals("modulesdescriptors")) {
+                System.out.println("DEBUG: ModulesDescriptors special case triggered for path: " + propertyPath);
+                return true;
+            }
+            System.out.println("DEBUG: Array path '" + propertyPath + "' (lower: '" + lowerPath + "') not matching 'modulesdescriptors'");
+            return isModifiableArray(value, propertyPath);
+        }
+
+        // 6. OBJECT PROPERTIES: Allow access to core structural objects and module elements
+        if (value.getType() == NDFValue.ValueType.OBJECT) {
+            String lowerPath = propertyPath.toLowerCase();
+            // Allow access to individual modules within ModulesDescriptors array
+            if (lowerPath.matches("modulesdescriptors\\[\\d+\\]")) {
+                return true;
+            }
+            // Generally exclude other complex objects to avoid clutter
             return false;
         }
 
-        // 6. ARRAY PROPERTIES: Allow specific modifiable arrays (same logic as PropertyScanner)
-        if (value.getType() == NDFValue.ValueType.ARRAY) {
-            return isModifiableArray(value, propertyPath);
+        // 7. MAP PROPERTIES: Generally exclude to avoid clutter
+        if (value.getType() == NDFValue.ValueType.MAP) {
+            return false;
         }
 
         return true;
@@ -829,6 +857,11 @@ public class MassModifyDialog extends JDialog {
 
         ArrayValue arrayValue = (ArrayValue) value;
         String lowerPath = propertyPath.toLowerCase();
+
+        // Core structural arrays that should always be accessible
+        if (lowerPath.equals("modulesdescriptors")) {
+            return true;
+        }
 
         // SpecialtiesList arrays are modifiable
         if (lowerPath.contains("specialtieslist")) {

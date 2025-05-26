@@ -39,6 +39,7 @@ public class UnitEditor extends JPanel {
 
     private TreePath currentSelectedPath;
     private boolean suppressSelectionEvents = false;
+    private String propertyFilter;
 
 
     public UnitEditor() {
@@ -100,6 +101,12 @@ public class UnitEditor extends JPanel {
         updatePropertyTree();
         clearEditor();
         updateBorderTitle();
+    }
+
+    public void setPropertyFilter(String filter) {
+        this.propertyFilter = filter;
+        updatePropertyTree();
+        clearEditor();
     }
 
 
@@ -248,8 +255,10 @@ public class UnitEditor extends JPanel {
                 String propertyName = entry.getKey();
                 NDFValue propertyValue = entry.getValue();
 
-                DefaultMutableTreeNode propertyNode = createPropertyNode(propertyName, propertyValue);
-                rootNode.add(propertyNode);
+                DefaultMutableTreeNode propertyNode = createPropertyNode(propertyName, propertyValue, "");
+                if (propertyNode != null) {
+                    rootNode.add(propertyNode);
+                }
             }
         }
 
@@ -260,9 +269,19 @@ public class UnitEditor extends JPanel {
     }
 
 
-    private DefaultMutableTreeNode createPropertyNode(String propertyName, NDFValue propertyValue) {
+    private DefaultMutableTreeNode createPropertyNode(String propertyName, NDFValue propertyValue, String currentPath) {
+        String fullPath = currentPath.isEmpty() ? propertyName : currentPath + "." + propertyName;
+
+        // If we have a filter, check if this property or any of its children match
+        if (propertyFilter != null && !propertyFilter.isEmpty()) {
+            if (!propertyMatchesFilter(propertyName, propertyValue, fullPath)) {
+                return null; // Skip this property if it doesn't match the filter
+            }
+        }
+
         PropertyNode node = new PropertyNode(propertyName, propertyValue);
         DefaultMutableTreeNode treeNode = new DefaultMutableTreeNode(node);
+
         switch (propertyValue.getType()) {
             case OBJECT:
                 ObjectValue objectValue = (ObjectValue) propertyValue;
@@ -271,8 +290,10 @@ public class UnitEditor extends JPanel {
                     String childName = entry.getKey();
                     NDFValue childValue = entry.getValue();
 
-                    DefaultMutableTreeNode childNode = createPropertyNode(childName, childValue);
-                    treeNode.add(childNode);
+                    DefaultMutableTreeNode childNode = createPropertyNode(childName, childValue, fullPath);
+                    if (childNode != null) {
+                        treeNode.add(childNode);
+                    }
                 }
                 break;
 
@@ -283,8 +304,10 @@ public class UnitEditor extends JPanel {
                     NDFValue element = arrayValue.getElements().get(i);
                     String childName = "[" + i + "]";
 
-                    DefaultMutableTreeNode childNode = createPropertyNode(childName, element);
-                    treeNode.add(childNode);
+                    DefaultMutableTreeNode childNode = createPropertyNode(childName, element, fullPath);
+                    if (childNode != null) {
+                        treeNode.add(childNode);
+                    }
                 }
                 break;
 
@@ -295,26 +318,97 @@ public class UnitEditor extends JPanel {
                     Map.Entry<NDFValue, NDFValue> entry = mapValue.getEntries().get(i);
                     String childName = "(" + entry.getKey() + ")";
 
-                    DefaultMutableTreeNode childNode = createPropertyNode(childName, entry.getValue());
-                    treeNode.add(childNode);
+                    DefaultMutableTreeNode childNode = createPropertyNode(childName, entry.getValue(), fullPath);
+                    if (childNode != null) {
+                        treeNode.add(childNode);
+                    }
                 }
                 break;
 
             case TUPLE:
-                // CRITICAL FIX: Handle tuples like (EBaseHitValueModifier,Moving, 7)
                 TupleValue tupleValue = (TupleValue) propertyValue;
 
                 for (int i = 0; i < tupleValue.getElements().size(); i++) {
                     NDFValue element = tupleValue.getElements().get(i);
                     String childName = "[" + i + "]";
 
-                    DefaultMutableTreeNode childNode = createPropertyNode(childName, element);
-                    treeNode.add(childNode);
+                    DefaultMutableTreeNode childNode = createPropertyNode(childName, element, fullPath);
+                    if (childNode != null) {
+                        treeNode.add(childNode);
+                    }
                 }
                 break;
         }
 
         return treeNode;
+    }
+
+    private boolean propertyMatchesFilter(String propertyName, NDFValue propertyValue, String fullPath) {
+        String filter = propertyFilter.toLowerCase();
+
+        // Check if the property name contains the filter text
+        if (propertyName.toLowerCase().contains(filter)) {
+            return true;
+        }
+
+        // Check if the full path contains the filter text
+        if (fullPath.toLowerCase().contains(filter)) {
+            return true;
+        }
+
+        // Recursively check children to see if any match
+        return hasChildMatchingFilter(propertyValue, fullPath, filter);
+    }
+
+    private boolean hasChildMatchingFilter(NDFValue value, String currentPath, String filter) {
+        switch (value.getType()) {
+            case OBJECT:
+                ObjectValue objectValue = (ObjectValue) value;
+                for (Map.Entry<String, NDFValue> entry : objectValue.getProperties().entrySet()) {
+                    String childName = entry.getKey();
+                    String childPath = currentPath + "." + childName;
+
+                    if (childName.toLowerCase().contains(filter) ||
+                        childPath.toLowerCase().contains(filter) ||
+                        hasChildMatchingFilter(entry.getValue(), childPath, filter)) {
+                        return true;
+                    }
+                }
+                break;
+
+            case ARRAY:
+                ArrayValue arrayValue = (ArrayValue) value;
+                for (int i = 0; i < arrayValue.getElements().size(); i++) {
+                    String childPath = currentPath + "[" + i + "]";
+                    if (hasChildMatchingFilter(arrayValue.getElements().get(i), childPath, filter)) {
+                        return true;
+                    }
+                }
+                break;
+
+            case MAP:
+                MapValue mapValue = (MapValue) value;
+                for (int i = 0; i < mapValue.getEntries().size(); i++) {
+                    Map.Entry<NDFValue, NDFValue> entry = mapValue.getEntries().get(i);
+                    String childPath = currentPath + "(" + entry.getKey() + ")";
+                    if (hasChildMatchingFilter(entry.getValue(), childPath, filter)) {
+                        return true;
+                    }
+                }
+                break;
+
+            case TUPLE:
+                TupleValue tupleValue = (TupleValue) value;
+                for (int i = 0; i < tupleValue.getElements().size(); i++) {
+                    String childPath = currentPath + "[" + i + "]";
+                    if (hasChildMatchingFilter(tupleValue.getElements().get(i), childPath, filter)) {
+                        return true;
+                    }
+                }
+                break;
+        }
+
+        return false;
     }
 
 
@@ -339,12 +433,7 @@ public class UnitEditor extends JPanel {
             currentSelectedPath = path;
             selectedParentObject = findParentObject(path);
 
-            // Debug output
-            System.out.println("Property selected:");
-            System.out.println("  Path: " + selectedPath);
-            System.out.println("  Name: " + selectedPropertyName);
-            System.out.println("  Value: " + selectedValue);
-            System.out.println("  Parent: " + (selectedParentObject != null ? "found" : "null"));
+
 
             updateEditor(propertyNode);
         } else {
@@ -385,21 +474,10 @@ public class UnitEditor extends JPanel {
     private ObjectValue findParentObject(TreePath treePath) {
         Object[] nodes = treePath.getPath();
 
-        // Debug output
-        System.out.println("Finding parent object for path with " + nodes.length + " nodes");
-        for (int i = 0; i < nodes.length; i++) {
-            DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes[i];
-            if (node.getUserObject() instanceof PropertyNode) {
-                PropertyNode pn = (PropertyNode) node.getUserObject();
-                System.out.println("  Node " + i + ": " + pn.getName());
-            } else {
-                System.out.println("  Node " + i + ": " + node.getUserObject());
-            }
-        }
+
 
         // If we're at the root level (direct property of unitDescriptor)
         if (nodes.length == 2) {
-            System.out.println("  Returning unitDescriptor as parent (root level)");
             return ndfObject;
         }
 
@@ -414,22 +492,15 @@ public class UnitEditor extends JPanel {
                 PropertyNode propertyNode = (PropertyNode) node.getUserObject();
                 String propertyName = propertyNode.getName();
 
-                System.out.println("  Processing node " + i + ": " + propertyName);
-
                 // Skip "Type" node
                 if ("Type".equals(propertyName)) {
-                    System.out.println("    Skipping Type node");
                     continue;
                 }
 
                 NDFValue value = currentObject.getProperty(propertyName);
-                System.out.println("    Property value type: " + (value != null ? value.getClass().getSimpleName() : "null"));
-
                 if (value instanceof ObjectValue) {
                     currentObject = (ObjectValue) value;
-                    System.out.println("    Updated current object");
                 } else if (value instanceof ArrayValue) {
-                    System.out.println("    Found array, need to get array element");
                     ArrayValue arrayValue = (ArrayValue) value;
 
                     // The next node should be the array index like "[19]"
@@ -441,38 +512,29 @@ public class UnitEditor extends JPanel {
                             if (indexStr.startsWith("[") && indexStr.endsWith("]")) {
                                 try {
                                     int index = Integer.parseInt(indexStr.substring(1, indexStr.length() - 1));
-                                    System.out.println("    Getting array element at index: " + index);
-
                                     NDFValue arrayElement = arrayValue.getElements().get(index);
                                     if (arrayElement instanceof ObjectValue) {
                                         currentObject = (ObjectValue) arrayElement;
-                                        System.out.println("    Got array element as ObjectValue");
                                         i++; // Skip the index node since we processed it
                                     } else {
-                                        System.out.println("    Array element is not an ObjectValue");
                                         return null;
                                     }
                                 } catch (NumberFormatException | IndexOutOfBoundsException ex) {
-                                    System.out.println("    Failed to parse array index: " + ex.getMessage());
                                     return null;
                                 }
                             } else {
-                                System.out.println("    Next node is not an array index: " + indexStr);
                                 return null;
                             }
                         }
                     } else {
-                        System.out.println("    No next node for array index");
                         return null;
                     }
                 } else {
-                    System.out.println("    Value is not an ObjectValue, returning null");
                     return null;
                 }
             }
         }
 
-        System.out.println("  Returning current object as parent");
         return currentObject;
     }
 
@@ -536,11 +598,6 @@ public class UnitEditor extends JPanel {
 
 
     private void applyValue(ActionEvent e) {
-        // Debug output
-        System.out.println("Apply button clicked:");
-        System.out.println("  selectedPath: " + selectedPath);
-        System.out.println("  selectedValue: " + selectedValue);
-        System.out.println("  ndfObject: " + (ndfObject != null ? "not null" : "null"));
 
         if (selectedPath == null || selectedValue == null || ndfObject == null) {
             String message = "No property selected for editing\n";
@@ -566,10 +623,7 @@ public class UnitEditor extends JPanel {
                 actualPath = selectedPath.substring(5);
             }
 
-            System.out.println("Using PropertyUpdater for individual change:");
-            System.out.println("  actualPath: " + actualPath);
-            System.out.println("  oldValue: " + selectedValue);
-            System.out.println("  newValue: " + newValue);
+
 
             // Use PropertyUpdater.updateProperty with tracking - same as mass changes!
             boolean success = PropertyUpdater.updateProperty(ndfObject, actualPath, newValue, modificationTracker);

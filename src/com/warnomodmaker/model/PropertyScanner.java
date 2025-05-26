@@ -5,7 +5,7 @@ import java.util.*;
 
 public class PropertyScanner {
 
-    
+
     public static class PropertyInfo {
         public final String name;
         public final String path;
@@ -59,7 +59,7 @@ public class PropertyScanner {
         this.categorizedProperties = new HashMap<>();
     }
 
-    
+
     public void scanProperties() {
         discoveredProperties.clear();
         categorizedProperties.clear();
@@ -126,7 +126,7 @@ public class PropertyScanner {
         }
     }
 
-    
+
     private void scanObject(ObjectValue object, String basePath,
                            Map<String, Integer> occurrences, Map<String, NDFValue.ValueType> types) {
         if (object == null) return;
@@ -162,7 +162,7 @@ public class PropertyScanner {
         }
     }
 
-    
+
     private void scanModulesDescriptors(ArrayValue modulesArray,
                                       Map<String, Integer> occurrences, Map<String, NDFValue.ValueType> types) {
         for (NDFValue element : modulesArray.getElements()) {
@@ -173,7 +173,7 @@ public class PropertyScanner {
         }
     }
 
-    
+
     private boolean isEditableType(NDFValue.ValueType type) {
         return type == NDFValue.ValueType.NUMBER ||
                type == NDFValue.ValueType.STRING ||
@@ -184,14 +184,14 @@ public class PropertyScanner {
                type == NDFValue.ValueType.ARRAY; // Include arrays (like TagSet) as they can be modified
     }
 
-    
+
     private String normalizePropertyPath(String path) {
         // Replace specific array indices like [0], [1], [19] with [*]
         // This groups similar properties together regardless of their array position
         return path.replaceAll("\\[\\d+\\]", "[*]");
     }
 
-    
+
     private String getPropertyDisplayName(String path) {
         String[] parts = path.split("\\.");
         String lastPart = parts[parts.length - 1];
@@ -220,7 +220,7 @@ public class PropertyScanner {
                       .replaceAll("([A-Z])([A-Z][a-z])", "$1 $2");
     }
 
-    
+
     private boolean isResistanceProperty(String path) {
         String lowerPath = path.toLowerCase();
         return lowerPath.contains("resistance") ||
@@ -230,7 +230,7 @@ public class PropertyScanner {
                 lowerPath.contains("resistancerear") || lowerPath.contains("resistancetop"));
     }
 
-    
+
     private boolean isDamageProperty(String path) {
         String lowerPath = path.toLowerCase();
         return lowerPath.contains("damage") &&
@@ -238,7 +238,7 @@ public class PropertyScanner {
                !lowerPath.contains("resistance"); // Exclude resistance damage properties
     }
 
-    
+
     private String categorizeProperty(String path, String name) {
         String lowerPath = path.toLowerCase();
         String lowerName = name.toLowerCase();
@@ -248,7 +248,7 @@ public class PropertyScanner {
         return categorizeGenericProperty(lowerPath, lowerName);
     }
 
-    
+
     private String categorizeWeaponProperty(String lowerPath, String lowerName) {
         // Weapon-specific categories - Salvo configuration
         if (lowerPath.contains("salves") || lowerName.contains("salves") ||
@@ -276,7 +276,7 @@ public class PropertyScanner {
         return "Weapon System";
     }
 
-    
+
     private String categorizeAmmunitionProperty(String lowerPath, String lowerName) {
         // Ammunition-specific categories
         if (lowerPath.contains("damage") || lowerName.contains("damage") ||
@@ -313,13 +313,13 @@ public class PropertyScanner {
         return "Ammunition System";
     }
 
-    
+
     private String categorizeMissileProperty(String lowerPath, String lowerName) {
         // Similar to unit properties but missile-focused
         return categorizeUnitProperty(lowerPath, lowerName);
     }
 
-    
+
     private String categorizeMissileCarriageProperty(String lowerPath, String lowerName) {
         if (lowerPath.contains("weapon") || lowerName.contains("weapon")) {
             return "Weapon Configuration";
@@ -327,7 +327,7 @@ public class PropertyScanner {
         return "Missile Carriage";
     }
 
-    
+
     private String categorizeGenericProperty(String lowerPath, String lowerName) {
         // First try unit-specific categorization for backward compatibility
         String unitCategory = categorizeUnitProperty(lowerPath, lowerName);
@@ -362,7 +362,7 @@ public class PropertyScanner {
         return "Other";
     }
 
-    
+
     private String categorizeUnitProperty(String lowerPath, String lowerName) {
 
         // 0. TAGS & CLASSIFICATION - Unit tags and AI classification
@@ -526,32 +526,32 @@ public class PropertyScanner {
         return "Other";
     }
 
-    
+
     private String generateDescription(String path, String name, int count) {
         return String.format("%s (found in %d units)", name, count);
     }
 
-    
+
     public Collection<PropertyInfo> getAllProperties() {
         return discoveredProperties.values();
     }
 
-    
+
     public Map<String, PropertyInfo> getDiscoveredProperties() {
         return discoveredProperties;
     }
 
-    
+
     public Map<String, List<PropertyInfo>> getCategorizedProperties() {
         return categorizedProperties;
     }
 
-    
+
     public PropertyInfo getProperty(String path) {
         return discoveredProperties.get(path);
     }
 
-    
+
     public List<PropertyInfo> searchProperties(String query) {
         String lowerQuery = query.toLowerCase();
         List<PropertyInfo> results = new ArrayList<>();
@@ -578,7 +578,7 @@ public class PropertyScanner {
         return results;
     }
 
-    
+
     public String getScanningStats() {
         StringBuilder stats = new StringBuilder();
         stats.append("Property Scanning Statistics:\n");
@@ -605,7 +605,7 @@ public class PropertyScanner {
         return stats.toString();
     }
 
-    
+
     private int countUnitsWithProperty(String propertyPath) {
         int count = 0;
         for (ObjectValue unit : unitDescriptors) {
@@ -617,8 +617,8 @@ public class PropertyScanner {
         return count;
     }
 
-    
-    private boolean hasPropertyDirect(ObjectValue unit, String propertyPath) {
+
+    public boolean hasPropertyDirect(ObjectValue unit, String propertyPath) {
         // Wildcard paths: check if ANY array element has the property
         if (propertyPath.contains("[*]")) {
             return hasPropertyWithWildcards(unit, propertyPath);
@@ -643,7 +643,7 @@ public class PropertyScanner {
         return true;
     }
 
-    
+
     private boolean isModifiableProperty(NDFValue value, String propertyPath) {
         // 1. BOOLEAN PROPERTIES: Only count if True (False means unit doesn't have capability)
         if (value.getType() == NDFValue.ValueType.BOOLEAN) {
@@ -702,7 +702,7 @@ public class PropertyScanner {
         return true;
     }
 
-    
+
     private boolean isModifiableArray(NDFValue value, String propertyPath) {
         if (!(value instanceof ArrayValue)) {
             return false;
@@ -759,7 +759,7 @@ public class PropertyScanner {
         return false;
     }
 
-    
+
     private boolean hasRequiredModuleType(ObjectValue unit, String propertyPath) {
         // For non-unit descriptor files, skip module type checking entirely
         // Weapon descriptors, ammunition, missiles, etc. should not have unit-type restrictions
@@ -802,7 +802,7 @@ public class PropertyScanner {
         return isPropertyValidForUnitType(propertyPath, hasTankFlags, hasInfantryFlags, hasHelicopterFlags, hasPlaneFlags, hasCanonFlags);
     }
 
-    
+
     private boolean isPropertyValidForUnitType(String propertyPath, boolean hasTankFlags,
                                              boolean hasInfantryFlags, boolean hasHelicopterFlags, boolean hasPlaneFlags, boolean hasCanonFlags) {
         String lowerPath = propertyPath.toLowerCase();
@@ -897,7 +897,7 @@ public class PropertyScanner {
         return true;
     }
 
-    
+
     private boolean hasPropertyWithWildcards(ObjectValue unit, String propertyPath) {
         // Split on [*] to get the parts
         String[] mainParts = propertyPath.split("\\[\\*\\]");
