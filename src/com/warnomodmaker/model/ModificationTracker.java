@@ -22,7 +22,7 @@ public class ModificationTracker {
         this.listeners = new CopyOnWriteArrayList<>();
     }
 
-    
+
     public void recordModification(String unitName, String propertyPath,
                                  NDFValue oldValue, NDFValue newValue) {
         recordModification(unitName, propertyPath, oldValue, newValue, ModificationType.SET, null);
@@ -48,12 +48,12 @@ public class ModificationTracker {
         return new ArrayList<>(modifications);
     }
 
-    
+
     public List<ModificationRecord> getLatestModifications() {
         return new ArrayList<>(latestModifications.values());
     }
 
-    
+
     public List<ModificationRecord> getModificationsForUnit(String unitName) {
         List<ModificationRecord> unitMods = new ArrayList<>();
         for (ModificationRecord record : modifications) {
@@ -64,7 +64,7 @@ public class ModificationTracker {
         return unitMods;
     }
 
-    
+
     public List<ModificationRecord> getModificationsForProperty(String propertyPath) {
         List<ModificationRecord> propertyMods = new ArrayList<>();
         for (ModificationRecord record : modifications) {
@@ -75,22 +75,36 @@ public class ModificationTracker {
         return propertyMods;
     }
 
-    
+
     public boolean hasModifications() {
         return !modifications.isEmpty();
     }
 
-    
+
     public int getModificationCount() {
         return modifications.size();
     }
 
-    
+
     public int getUniqueModificationCount() {
         return latestModifications.size();
     }
 
-    
+
+    public boolean hasModificationsForObject(NDFValue.ObjectValue object) {
+        if (object == null) return false;
+        String unitName = object.getInstanceName();
+        if (unitName == null) return false;
+
+        for (ModificationRecord record : modifications) {
+            if (unitName.equals(record.getUnitName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
     public void clearModifications() {
         modifications.clear();
         latestModifications.clear();
@@ -101,7 +115,7 @@ public class ModificationTracker {
         }
     }
 
-    
+
     public boolean removeModification(ModificationRecord record) {
         boolean removed = modifications.remove(record);
         if (removed) {
@@ -126,7 +140,7 @@ public class ModificationTracker {
         return removed;
     }
 
-    
+
     public ModificationStats getStats() {
         Set<String> uniqueUnits = new HashSet<>();
         Set<String> uniqueProperties = new HashSet<>();
@@ -150,24 +164,24 @@ public class ModificationTracker {
         );
     }
 
-    
+
     private String normalizePropertyPath(String propertyPath) {
         // Convert specific array indices back to wildcards for counting
         // ModulesDescriptors[15].GameplayBehavior -> ModulesDescriptors[*].GameplayBehavior
         return propertyPath.replaceAll("\\[\\d+\\]", "[*]");
     }
 
-    
+
     public void addListener(ModificationListener listener) {
         listeners.add(listener);
     }
 
-    
+
     public void removeListener(ModificationListener listener) {
         listeners.remove(listener);
     }
 
-    
+
     public static class ModificationStats {
         public final int totalModifications;
         public final int uniqueUnits;

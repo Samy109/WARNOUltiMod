@@ -60,6 +60,7 @@ public class FileTabPanel extends JPanel {
     public void updateFromTabState() {
         if (tabState.hasData()) {
             objectBrowser.setUnitDescriptors(tabState.getUnitDescriptors(), tabState.getFileType());
+            objectBrowser.setModificationTracker(tabState.getModificationTracker());
             objectEditor.setUnitDescriptor(null, tabState.getModificationTracker());
 
             // Restore selection if available
@@ -67,6 +68,7 @@ public class FileTabPanel extends JPanel {
         } else {
             // Clear components
             objectBrowser.setUnitDescriptors(null, NDFValue.NDFFileType.UNKNOWN);
+            objectBrowser.setModificationTracker(null);
             objectEditor.setUnitDescriptor(null, null);
         }
     }
@@ -187,5 +189,10 @@ public class FileTabPanel extends JPanel {
 
     public void setDividerLocation(int location) {
         splitPane.setDividerLocation(location);
+    }
+
+
+    public void performGlobalSearch(String searchText) {
+        objectBrowser.performGlobalSearch(searchText);
     }
 }

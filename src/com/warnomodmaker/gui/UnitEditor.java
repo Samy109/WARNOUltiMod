@@ -1,5 +1,6 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.gui.renderers.EnhancedTreeCellRenderer;
 import com.warnomodmaker.model.NDFValue;
 import com.warnomodmaker.model.NDFValue.*;
 import com.warnomodmaker.model.PropertyUpdater;
@@ -40,13 +41,16 @@ public class UnitEditor extends JPanel {
     private TreePath currentSelectedPath;
     private boolean suppressSelectionEvents = false;
     private String propertyFilter;
+    private EnhancedTreeCellRenderer treeCellRenderer;
 
 
     public UnitEditor() {
+        // Initialize propertyChangeSupport first, before any UI setup
+        propertyChangeSupport = new PropertyChangeSupport(this);
+
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createTitledBorder("Object Properties"));
         ndfObject = null;
-        propertyChangeSupport = new PropertyChangeSupport(this);
         selectedPath = null;
         selectedValue = null;
         splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
@@ -56,6 +60,10 @@ public class UnitEditor extends JPanel {
         propertyTree = new JTree(treeModel);
         propertyTree.setRootVisible(false);
         propertyTree.setShowsRootHandles(true);
+
+        // Set up enhanced tree cell renderer
+        treeCellRenderer = new EnhancedTreeCellRenderer();
+        propertyTree.setCellRenderer(treeCellRenderer);
         propertyTree.addTreeSelectionListener(new TreeSelectionListener() {
             @Override
             public void valueChanged(TreeSelectionEvent e) {
@@ -125,12 +133,16 @@ public class UnitEditor extends JPanel {
 
 
     public void addPropertyChangeListener(PropertyChangeListener listener) {
-        propertyChangeSupport.addPropertyChangeListener(listener);
+        if (propertyChangeSupport != null) {
+            propertyChangeSupport.addPropertyChangeListener(listener);
+        }
     }
 
 
     public void removePropertyChangeListener(PropertyChangeListener listener) {
-        propertyChangeSupport.removePropertyChangeListener(listener);
+        if (propertyChangeSupport != null) {
+            propertyChangeSupport.removePropertyChangeListener(listener);
+        }
     }
 
 
@@ -194,8 +206,8 @@ public class UnitEditor extends JPanel {
             currentSelectedPath = newPath;
             selectedPath = propertyPath;
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) newPath.getLastPathComponent();
-            if (node != null && node.getUserObject() instanceof PropertyNode) {
-                PropertyNode propertyNode = (PropertyNode) node.getUserObject();
+            if (node != null && node.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
+                EnhancedTreeCellRenderer.PropertyNode propertyNode = (EnhancedTreeCellRenderer.PropertyNode) node.getUserObject();
                 selectedValue = propertyNode.getValue();
                 selectedPropertyName = propertyNode.getName();
                 selectedParentObject = findParentObject(newPath);
@@ -248,7 +260,7 @@ public class UnitEditor extends JPanel {
 
         if (ndfObject != null) {
             DefaultMutableTreeNode typeNode = new DefaultMutableTreeNode(
-                new PropertyNode("Type", ndfObject.getTypeName())
+                new EnhancedTreeCellRenderer.PropertyNode("Type", NDFValue.createString(ndfObject.getTypeName()))
             );
             rootNode.add(typeNode);
             for (Map.Entry<String, NDFValue> entry : ndfObject.getProperties().entrySet()) {
@@ -279,7 +291,7 @@ public class UnitEditor extends JPanel {
             }
         }
 
-        PropertyNode node = new PropertyNode(propertyName, propertyValue);
+        EnhancedTreeCellRenderer.PropertyNode node = new EnhancedTreeCellRenderer.PropertyNode(propertyName, propertyValue);
         DefaultMutableTreeNode treeNode = new DefaultMutableTreeNode(node);
 
         switch (propertyValue.getType()) {
@@ -424,8 +436,8 @@ public class UnitEditor extends JPanel {
 
         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
 
-        if (node != null && node.getUserObject() instanceof PropertyNode) {
-            PropertyNode propertyNode = (PropertyNode) node.getUserObject();
+        if (node != null && node.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
+            EnhancedTreeCellRenderer.PropertyNode propertyNode = (EnhancedTreeCellRenderer.PropertyNode) node.getUserObject();
 
             selectedPath = getPropertyPath(path);
             selectedValue = propertyNode.getValue();
@@ -451,8 +463,8 @@ public class UnitEditor extends JPanel {
         for (int i = 1; i < nodes.length; i++) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes[i];
 
-            if (node.getUserObject() instanceof PropertyNode) {
-                PropertyNode propertyNode = (PropertyNode) node.getUserObject();
+            if (node.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
+                EnhancedTreeCellRenderer.PropertyNode propertyNode = (EnhancedTreeCellRenderer.PropertyNode) node.getUserObject();
                 String nodeName = propertyNode.getName();
                 if (nodeName.startsWith("[") && nodeName.endsWith("]")) {
                     // This is an array index, append it directly to the path without a dot
@@ -488,8 +500,8 @@ public class UnitEditor extends JPanel {
         for (int i = 1; i < nodes.length - 1; i++) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes[i];
 
-            if (node.getUserObject() instanceof PropertyNode) {
-                PropertyNode propertyNode = (PropertyNode) node.getUserObject();
+            if (node.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
+                EnhancedTreeCellRenderer.PropertyNode propertyNode = (EnhancedTreeCellRenderer.PropertyNode) node.getUserObject();
                 String propertyName = propertyNode.getName();
 
                 // Skip "Type" node
@@ -506,8 +518,8 @@ public class UnitEditor extends JPanel {
                     // The next node should be the array index like "[19]"
                     if (i + 1 < nodes.length - 1) {
                         DefaultMutableTreeNode nextNode = (DefaultMutableTreeNode) nodes[i + 1];
-                        if (nextNode.getUserObject() instanceof PropertyNode) {
-                            PropertyNode nextPropertyNode = (PropertyNode) nextNode.getUserObject();
+                        if (nextNode.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
+                            EnhancedTreeCellRenderer.PropertyNode nextPropertyNode = (EnhancedTreeCellRenderer.PropertyNode) nextNode.getUserObject();
                             String indexStr = nextPropertyNode.getName();
                             if (indexStr.startsWith("[") && indexStr.endsWith("]")) {
                                 try {
@@ -539,7 +551,7 @@ public class UnitEditor extends JPanel {
     }
 
 
-    private void updateEditor(PropertyNode propertyNode) {
+    private void updateEditor(EnhancedTreeCellRenderer.PropertyNode propertyNode) {
         NDFValue value = propertyNode.getValue();
 
         // Only allow editing of simple types
@@ -799,31 +811,5 @@ public class UnitEditor extends JPanel {
     }
 
 
-    private static class PropertyNode {
-        private final String name;
-        private final NDFValue value;
-
-        public PropertyNode(String name, NDFValue value) {
-            this.name = name;
-            this.value = value;
-        }
-
-        public PropertyNode(String name, String value) {
-            this.name = name;
-            this.value = NDFValue.createString(value);
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public NDFValue getValue() {
-            return value;
-        }
-
-        @Override
-        public String toString() {
-            return name + ": " + (value != null ? value.toString() : "null");
-        }
-    }
+    // Using PropertyNode from EnhancedTreeCellRenderer
 }

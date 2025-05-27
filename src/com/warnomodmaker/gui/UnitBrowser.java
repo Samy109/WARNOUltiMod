@@ -1,8 +1,10 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.gui.renderers.EnhancedListCellRenderer;
 import com.warnomodmaker.model.NDFValue;
 import com.warnomodmaker.model.NDFValue.ObjectValue;
 import com.warnomodmaker.model.PropertyScanner;
+import com.warnomodmaker.model.ModificationTracker;
 import java.util.Map;
 import com.warnomodmaker.model.NDFValue.NumberValue;
 import com.warnomodmaker.model.NDFValue.NDFFileType;
@@ -35,6 +37,8 @@ public class UnitBrowser extends JPanel {
     private JLabel statusLabel;
     private Timer searchTimer;
     private SwingWorker<?, ?> currentSearchWorker;
+    private ModificationTracker modificationTracker;
+    private EnhancedListCellRenderer cellRenderer;
 
     // Search types
     private static final String SEARCH_BY_NAME = "Search by Name";
@@ -118,7 +122,8 @@ public class UnitBrowser extends JPanel {
         add(searchPanel, BorderLayout.NORTH);
         listModel = new DefaultListModel<>();
         objectList = new JList<>(listModel);
-        objectList.setCellRenderer(new UnitListCellRenderer());
+        cellRenderer = new EnhancedListCellRenderer();
+        objectList.setCellRenderer(cellRenderer);
         objectList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         objectList.addListSelectionListener(new ListSelectionListener() {
             @Override
@@ -204,6 +209,20 @@ public class UnitBrowser extends JPanel {
 
 
     public void refresh() {
+        filterUnits();
+    }
+
+
+    public void setModificationTracker(ModificationTracker tracker) {
+        this.modificationTracker = tracker;
+        cellRenderer.setModificationTracker(tracker);
+        objectList.repaint();
+    }
+
+
+    public void performGlobalSearch(String searchText) {
+        searchField.setText(searchText);
+        cellRenderer.setHighlightText(searchText);
         filterUnits();
     }
 

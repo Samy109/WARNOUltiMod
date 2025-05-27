@@ -1,5 +1,7 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.gui.components.StatusBar;
+import com.warnomodmaker.gui.components.EnhancedTabbedPane;
 import com.warnomodmaker.model.FileTabState;
 import com.warnomodmaker.model.NDFValue;
 import com.warnomodmaker.model.ModificationTracker;
@@ -25,11 +27,12 @@ import java.util.Set;
 public class MainWindow extends JFrame {
 
     private List<FileTabState> tabStates;
-    private JTabbedPane tabbedPane;
+    private EnhancedTabbedPane tabbedPane;
     private int nextTabId = 1;
 
     private JPanel mainPanel;
     private JMenuBar menuBar;
+    private StatusBar statusBar;
 
     public MainWindow() {
         setTitle("WARNO Mod Maker");
@@ -44,6 +47,13 @@ public class MainWindow extends JFrame {
             @Override
             public void windowClosing(WindowEvent e) {
                 exitApplication();
+            }
+
+            @Override
+            public void windowClosed(WindowEvent e) {
+                if (statusBar != null) {
+                    statusBar.dispose();
+                }
             }
         });
         addComponentListener(new ComponentAdapter() {
@@ -63,6 +73,7 @@ public class MainWindow extends JFrame {
         });
         tabStates = new ArrayList<>();
         createMenuBar();
+        createStatusBar();
         createMainPanel();
         updateTitle();
     }
@@ -159,11 +170,24 @@ public class MainWindow extends JFrame {
     }
 
 
+
+
+
+    private void createStatusBar() {
+        statusBar = new StatusBar();
+    }
+
+
     private void createMainPanel() {
         mainPanel = new JPanel(new BorderLayout());
-        tabbedPane = new JTabbedPane();
-        tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+        tabbedPane = new EnhancedTabbedPane();
         tabbedPane.addChangeListener(this::onTabChanged);
+
+        // Listen for tab close events
+        tabbedPane.addPropertyChangeListener("tabClose", e -> {
+            int tabIndex = (Integer) e.getNewValue();
+            closeTab(tabIndex);
+        });
         tabbedPane.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -187,7 +211,10 @@ public class MainWindow extends JFrame {
         });
         setupTabKeyBindings();
 
+        // Add components to main panel
         mainPanel.add(tabbedPane, BorderLayout.CENTER);
+        mainPanel.add(statusBar, BorderLayout.SOUTH);
+
         showWelcomeTab();
 
         setContentPane(mainPanel);
@@ -303,6 +330,10 @@ public class MainWindow extends JFrame {
     }
 
 
+
+
+
+
     private void showTagAndOrderEditor(ActionEvent e) {
         FileTabState currentTab = getCurrentTabState();
         if (currentTab == null || !currentTab.hasData()) {
@@ -337,6 +368,9 @@ public class MainWindow extends JFrame {
             JOptionPane.INFORMATION_MESSAGE
         );
     }
+
+
+
 
 
     private void exitApplication() {
@@ -608,17 +642,18 @@ public class MainWindow extends JFrame {
             tabState.setModified(true);
             updateTabTitle(tabState);
             updateTitle();
+            statusBar.updateFileInfo(tabState);
         });
         tabStates.add(tabState);
         String tabTitle = tabState.getTabTitle();
-        tabbedPane.addTab(tabTitle, tabPanel);
-        tabbedPane.setToolTipTextAt(tabbedPane.getTabCount() - 1, tabState.getTabTooltip());
+        tabbedPane.addTab(tabTitle, tabPanel, tabState);
         removeWelcomeTab();
 
         // Select the new tab
         tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
 
         updateTitle();
+        statusBar.updateFileInfo(tabState);
     }
 
 
@@ -783,8 +818,8 @@ public class MainWindow extends JFrame {
     private void updateTabTitle(FileTabState tabState) {
         int tabIndex = tabStates.indexOf(tabState);
         if (tabIndex >= 0 && tabIndex < tabbedPane.getTabCount()) {
-            tabbedPane.setTitleAt(tabIndex, tabState.getTabTitle());
-            tabbedPane.setToolTipTextAt(tabIndex, tabState.getTabTooltip());
+            Component component = tabbedPane.getComponentAt(tabIndex);
+            tabbedPane.updateTabState(component, tabState);
         }
     }
 
@@ -886,7 +921,7 @@ public class MainWindow extends JFrame {
 
     private void onTabChanged(ChangeEvent e) {
         updateTitle();
-        // Could add logic here to save/restore UI state per tab
+        statusBar.updateFileInfo(getCurrentTabState());
     }
 
 

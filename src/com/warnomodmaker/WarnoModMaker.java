@@ -2,6 +2,7 @@ package com.warnomodmaker;
 
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.warnomodmaker.gui.MainWindow;
+import com.warnomodmaker.gui.theme.WarnoTheme;
 
 import javax.swing.*;
 import java.awt.*;
@@ -11,7 +12,10 @@ public class WarnoModMaker {
     public static void main(String[] args) {
 
         try {
-            FlatDarkLaf.setup();
+            // Try to use our custom theme first, fallback to FlatDarkLaf
+            if (!WarnoTheme.setup()) {
+                FlatDarkLaf.setup();
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
