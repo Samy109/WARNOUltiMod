@@ -8,6 +8,7 @@ import com.warnomodmaker.model.ModificationTracker;
 import java.util.Map;
 import com.warnomodmaker.model.NDFValue.NumberValue;
 import com.warnomodmaker.model.NDFValue.NDFFileType;
+import com.warnomodmaker.model.PropertyUpdater;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -149,6 +150,9 @@ public class UnitBrowser extends JPanel {
         // Store the original list and file type
         this.ndfObjects = ndfObjects != null ? ndfObjects : new ArrayList<>();
         this.currentFileType = fileType;
+
+        // Set the file type context in PropertyUpdater for proper modification tracking
+        PropertyUpdater.setFileType(fileType);
 
         // Initialize PropertyScanner for property search
         if (!this.ndfObjects.isEmpty()) {

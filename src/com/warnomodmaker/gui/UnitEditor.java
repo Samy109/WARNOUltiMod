@@ -585,7 +585,31 @@ public class UnitEditor extends JPanel {
         // Only allow editing of simple types
         boolean editable = isEditableType(value);
 
-        valueField.setText(value != null ? value.toString() : "");
+        // Format the display value appropriately
+        String displayValue = "";
+        if (value != null) {
+            if (value.getType() == NDFValue.ValueType.TEMPLATE_REF) {
+                // For template references, ensure they show with ~/ prefix
+                String refValue = value.toString();
+                if (!refValue.startsWith("~/") && !refValue.startsWith("$/")) {
+                    displayValue = "~/" + refValue;
+                } else {
+                    displayValue = refValue;
+                }
+            } else if (value.getType() == NDFValue.ValueType.RESOURCE_REF) {
+                // For resource references, ensure they show with $/ prefix
+                String refValue = value.toString();
+                if (!refValue.startsWith("$/")) {
+                    displayValue = "$/" + refValue;
+                } else {
+                    displayValue = refValue;
+                }
+            } else {
+                displayValue = value.toString();
+            }
+        }
+
+        valueField.setText(displayValue);
         valueField.setEditable(editable);
         applyButton.setEnabled(editable);
     }
@@ -714,16 +738,22 @@ public class UnitEditor extends JPanel {
                 }
 
             case TEMPLATE_REF:
-                if (!text.startsWith("~/")) {
-                    throw new IllegalArgumentException("Template reference must start with '~/'");
+                // Auto-add ~/ prefix if missing
+                if (text.startsWith("~/") || text.startsWith("$/")) {
+                    return NDFValue.createTemplateRef(text);
+                } else {
+                    // Automatically add ~/ prefix for template references
+                    return NDFValue.createTemplateRef("~/" + text);
                 }
-                return NDFValue.createTemplateRef(text);
 
             case RESOURCE_REF:
-                if (!text.startsWith("$/")) {
-                    throw new IllegalArgumentException("Resource reference must start with '$/'");
+                // Auto-add $/ prefix if missing
+                if (text.startsWith("$/")) {
+                    return NDFValue.createResourceRef(text);
+                } else {
+                    // Automatically add $/ prefix for resource references
+                    return NDFValue.createResourceRef("$/" + text);
                 }
-                return NDFValue.createResourceRef(text);
 
             case GUID:
                 if (!text.startsWith("GUID:{") || !text.endsWith("}")) {
