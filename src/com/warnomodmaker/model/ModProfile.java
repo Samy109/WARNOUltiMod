@@ -3,6 +3,7 @@ package com.warnomodmaker.model;
 import com.warnomodmaker.model.PropertyUpdater.ModificationType;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -115,7 +116,7 @@ public class ModProfile {
 
     
     public void saveToFile(File file) throws IOException {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
             writer.println("{");
             writer.println("  \"formatVersion\": \"" + FORMAT_VERSION + "\",");
             writer.println("  \"profileName\": \"" + escapeJson(profileName) + "\",");
@@ -158,7 +159,7 @@ public class ModProfile {
         ModProfile profile = new ModProfile();
         List<ModificationRecord> mods = new ArrayList<>();
 
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
             StringBuilder jsonContent = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {

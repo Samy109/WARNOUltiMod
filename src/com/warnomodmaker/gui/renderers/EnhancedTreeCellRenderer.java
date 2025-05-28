@@ -178,9 +178,9 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
             case TEMPLATE_REF:
                 String refValue = value.toString();
                 if (refValue.length() > 25) {
-                    return "→ " + refValue.substring(0, 22) + "...";
+                    return "=> " + refValue.substring(0, 22) + "...";
                 }
-                return "→ " + refValue;
+                return "=> " + refValue;
 
             default:
                 return "";

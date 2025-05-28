@@ -18,6 +18,7 @@ import javax.swing.event.ChangeListener;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -753,7 +754,7 @@ public class MainWindow extends JFrame {
                 try {
                     // Determine file type
                     fileType = NDFValue.NDFFileType.fromFilename(file.getName());
-                    try (Reader reader = new BufferedReader(new FileReader(file))) {
+                    try (Reader reader = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
                         parser = new NDFParser(reader);
                         parser.setFileType(fileType);
                         ndfObjects = parser.parse();
@@ -846,7 +847,7 @@ public class MainWindow extends JFrame {
 
     private void saveTabToFile(FileTabState tabState, File file) {
         try {
-            try (Writer writer = new BufferedWriter(new FileWriter(file))) {
+            try (Writer writer = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
                 NDFWriter ndfWriter = new NDFWriter(writer);
 
                 // Use exact formatting preservation if available
@@ -1004,7 +1005,7 @@ public class MainWindow extends JFrame {
 
                     // Determine file type
                     fileType = NDFValue.NDFFileType.fromFilename(file.getName());
-                    try (Reader reader = new BufferedReader(new FileReader(file))) {
+                    try (Reader reader = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
                         parser = new NDFParser(reader);
                         parser.setFileType(fileType);
                         ndfObjects = parser.parse();
