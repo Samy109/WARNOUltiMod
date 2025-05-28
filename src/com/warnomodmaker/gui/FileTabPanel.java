@@ -145,8 +145,9 @@ public class FileTabPanel extends JPanel {
         // Mark tab as modified
         tabState.setModified(true);
 
-        // Refresh browser to show any changes
-        objectBrowser.refresh();
+        // Update browser visual representation without changing selection
+        // Only repaint to show modification indicators, don't refresh the entire list
+        objectBrowser.repaintList();
 
         // Notify modification listeners
         notifyModificationListeners(e);

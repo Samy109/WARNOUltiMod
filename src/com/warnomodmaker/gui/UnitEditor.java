@@ -106,9 +106,26 @@ public class UnitEditor extends JPanel {
     public void setUnitDescriptor(ObjectValue ndfObject, ModificationTracker modificationTracker) {
         this.ndfObject = ndfObject;
         this.modificationTracker = modificationTracker;
+
+        // Clear any stale state when setting a new object
+        clearEditorState();
+
         updatePropertyTree();
         clearEditor();
         updateBorderTitle();
+    }
+
+    /**
+     * Clears all internal state related to property selection and navigation.
+     * This prevents stale references when switching between objects or reloading files.
+     */
+    private void clearEditorState() {
+        selectedPath = null;
+        selectedValue = null;
+        selectedParentObject = null;
+        selectedPropertyName = null;
+        currentSelectedPath = null;
+        suppressSelectionEvents = false;
     }
 
     public void setPropertyFilter(String filter) {
@@ -197,6 +214,11 @@ public class UnitEditor extends JPanel {
 
 
     private void restoreSelectionAndUpdateEditor(String propertyPath) {
+        // Safety check: don't try to restore if we don't have a valid object
+        if (ndfObject == null || propertyPath == null) {
+            return;
+        }
+
         TreePath newPath = findTreePathByPropertyPath(propertyPath);
 
         if (newPath != null) {
@@ -210,7 +232,18 @@ public class UnitEditor extends JPanel {
                 EnhancedTreeCellRenderer.PropertyNode propertyNode = (EnhancedTreeCellRenderer.PropertyNode) node.getUserObject();
                 selectedValue = propertyNode.getValue();
                 selectedPropertyName = propertyNode.getName();
-                selectedParentObject = findParentObject(newPath);
+
+                // Use try-catch to handle any issues with finding parent object
+                try {
+                    selectedParentObject = findParentObject(newPath);
+                } catch (Exception e) {
+                    // If we can't find the parent object, clear the selection
+                    selectedParentObject = null;
+                    clearEditor();
+                    suppressSelectionEvents = false;
+                    return;
+                }
+
                 valueField.setText(selectedValue != null ? selectedValue.toString() : "");
 
                 // Re-enable the apply button if the value is editable
@@ -514,7 +547,10 @@ public class UnitEditor extends JPanel {
     private ObjectValue findParentObject(TreePath treePath) {
         Object[] nodes = treePath.getPath();
 
-
+        // Safety check for null or invalid tree path
+        if (nodes == null || nodes.length == 0 || ndfObject == null) {
+            return null;
+        }
 
         // If we're at the root level (direct property of unitDescriptor)
         if (nodes.length == 2) {
@@ -535,6 +571,11 @@ public class UnitEditor extends JPanel {
                 // Skip "Type" node
                 if ("Type".equals(propertyName)) {
                     continue;
+                }
+
+                // Safety check: ensure currentObject is not null before accessing properties
+                if (currentObject == null) {
+                    return null;
                 }
 
                 NDFValue value = currentObject.getProperty(propertyName);

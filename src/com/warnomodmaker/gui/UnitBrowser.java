@@ -263,6 +263,15 @@ public class UnitBrowser extends JPanel {
         objectList.repaint();
     }
 
+    /**
+     * Repaints the object list to update visual indicators without changing selection.
+     * This is used when modifications are made to update the display of which objects
+     * have been modified without triggering selection changes.
+     */
+    public void repaintList() {
+        objectList.repaint();
+    }
+
 
     public void performGlobalSearch(String searchText) {
         searchField.setText(searchText);

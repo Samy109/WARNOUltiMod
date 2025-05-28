@@ -342,6 +342,12 @@ public class ProfileLoadDialog extends JDialog {
             return null;
         }
 
+        // First, try converting specific array indices to wildcards
+        String wildcardPath = normalizeArrayIndices(targetPath);
+        if (!wildcardPath.equals(targetPath) && hasPropertyWithWildcards(unit, wildcardPath)) {
+            return wildcardPath;
+        }
+
         PropertyScanner scanner = new PropertyScanner(List.of(unit));
         scanner.scanProperties();
 
@@ -874,6 +880,46 @@ public class ProfileLoadDialog extends JDialog {
 
     private String normalizeArrayIndices(String path) {
         return path.replaceAll("\\[\\d+\\]", "[*]");
+    }
+
+    /**
+     * Check if a unit has a property using wildcard paths like "ModulesDescriptors[*].TagSet"
+     */
+    private boolean hasPropertyWithWildcards(ObjectValue unit, String propertyPath) {
+        // If no wildcards, use regular property checking
+        if (!propertyPath.contains("[*]")) {
+            return PropertyUpdater.hasProperty(unit, propertyPath);
+        }
+
+        // Split on [*] to get the parts
+        String[] mainParts = propertyPath.split("\\[\\*\\]");
+        if (mainParts.length < 2) {
+            return false; // Invalid format
+        }
+
+        String arrayPropertyName = mainParts[0]; // "ModulesDescriptors"
+        String remainingPath = mainParts[1]; // ".TagSet" or ".BlindageProperties.ExplosiveReactiveArmor"
+        if (remainingPath.startsWith(".")) {
+            remainingPath = remainingPath.substring(1);
+        }
+
+        NDFValue arrayValue = unit.getProperty(arrayPropertyName);
+        if (!(arrayValue instanceof NDFValue.ArrayValue)) {
+            return false; // Not an array
+        }
+
+        NDFValue.ArrayValue array = (NDFValue.ArrayValue) arrayValue;
+        for (int i = 0; i < array.getElements().size(); i++) {
+            NDFValue element = array.getElements().get(i);
+            if (element instanceof NDFValue.ObjectValue) {
+                NDFValue.ObjectValue elementObj = (NDFValue.ObjectValue) element;
+                if (PropertyUpdater.hasProperty(elementObj, remainingPath)) {
+                    return true; // Found at least one element with this property
+                }
+            }
+        }
+
+        return false; // Not found in any array element
     }
 
 
