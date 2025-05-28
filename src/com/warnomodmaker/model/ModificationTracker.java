@@ -105,6 +105,50 @@ public class ModificationTracker {
     }
 
 
+    public boolean hasModificationForProperty(String unitName, String propertyPath) {
+        if (unitName == null || propertyPath == null) return false;
+
+        // Normalize the property path to handle different array index formats
+        String normalizedPath = normalizeArrayIndexFormat(propertyPath);
+
+        for (ModificationRecord record : modifications) {
+            if (unitName.equals(record.getUnitName())) {
+                String recordPath = normalizeArrayIndexFormat(record.getPropertyPath());
+                if (normalizedPath.equals(recordPath)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+
+    public boolean hasModificationForPropertyOrChildren(String unitName, String propertyPath) {
+        if (unitName == null || propertyPath == null) return false;
+
+        // Normalize the property path to handle different array index formats
+        String normalizedPath = normalizeArrayIndexFormat(propertyPath);
+
+        for (ModificationRecord record : modifications) {
+            if (unitName.equals(record.getUnitName())) {
+                String recordPath = normalizeArrayIndexFormat(record.getPropertyPath());
+                // Check if the record path starts with the given path (child property)
+                if (recordPath.startsWith(normalizedPath)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+
+    private String normalizeArrayIndexFormat(String path) {
+        if (path == null) return null;
+        // Convert "Value.[1].MeshDescriptor" to "Value[1].MeshDescriptor" for consistent comparison
+        return path.replace(".[", "[").replace("].", "]");
+    }
+
+
     public void clearModifications() {
         modifications.clear();
         latestModifications.clear();

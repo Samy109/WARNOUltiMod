@@ -433,13 +433,7 @@ public class NDFParser {
             object.setOriginalPropertySuffix(propertyName, propertySuffix);
             object.setProperty(propertyName, propertyValue, hasComma);
 
-            // Debug logging for BaseHitValueModifiers
-            if ("BaseHitValueModifiers".equals(propertyName)) {
-                System.err.println("DEBUG: Successfully stored BaseHitValueModifiers property");
-                System.err.println("  Object: " + object.getInstanceName());
-                System.err.println("  Value type: " + propertyValue.getClass().getSimpleName());
-                System.err.println("  Properties count after storage: " + object.getProperties().size());
-            }
+
         }
     }
 

@@ -18,20 +18,20 @@ public class ModificationRecord {
     private final ModificationType modificationType;
     private final String modificationDetails; // For mass modifications, stores the operation details
 
-    
+
     public ModificationRecord(String unitName, String propertyPath,
                             NDFValue oldValue, NDFValue newValue) {
         this(unitName, propertyPath, oldValue, newValue, ModificationType.SET, null);
     }
 
-    
+
     public ModificationRecord(String unitName, String propertyPath,
                             NDFValue oldValue, NDFValue newValue,
                             ModificationType modificationType, String modificationDetails) {
         this.unitName = unitName;
         this.propertyPath = propertyPath;
-        this.oldValue = oldValue != null ? oldValue.toString() : "null";
-        this.newValue = newValue != null ? newValue.toString() : "null";
+        this.oldValue = oldValue != null ? getValueForStorage(oldValue) : "null";
+        this.newValue = newValue != null ? getValueForStorage(newValue) : "null";
         this.oldValueType = oldValue != null ? oldValue.getType().name() : "NULL";
         this.newValueType = newValue != null ? newValue.getType().name() : "NULL";
         this.timestamp = LocalDateTime.now();
@@ -39,7 +39,7 @@ public class ModificationRecord {
         this.modificationDetails = modificationDetails;
     }
 
-    
+
     public ModificationRecord(String unitName, String propertyPath,
                             String oldValue, String newValue,
                             String oldValueType, String newValueType,
@@ -65,12 +65,12 @@ public class ModificationRecord {
     public ModificationType getModificationType() { return modificationType; }
     public String getModificationDetails() { return modificationDetails; }
 
-    
+
     public String getFormattedTimestamp() {
         return timestamp.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
     }
 
-    
+
     public String getDescription() {
         StringBuilder sb = new StringBuilder();
         sb.append(unitName).append(" -> ").append(propertyPath);
@@ -87,7 +87,7 @@ public class ModificationRecord {
         return sb.toString();
     }
 
-    
+
     private String getDisplayValue(String value) {
         if (value == null) {
             return "null";
@@ -101,7 +101,7 @@ public class ModificationRecord {
         return value;
     }
 
-    
+
     public boolean isValid() {
         return unitName != null && !unitName.trim().isEmpty() &&
                propertyPath != null && !propertyPath.trim().isEmpty() &&
@@ -110,9 +110,24 @@ public class ModificationRecord {
                timestamp != null && modificationType != null;
     }
 
-    
+
     public String getKey() {
         return unitName + ":" + propertyPath;
+    }
+
+
+    private static String getValueForStorage(NDFValue value) {
+        // For string values, store the raw string content without quotes
+        // This ensures consistent comparison regardless of quote type
+        if (value instanceof NDFValue.StringValue) {
+            NDFValue.StringValue stringValue = (NDFValue.StringValue) value;
+            // Store the raw value with a prefix indicating quote type for reconstruction
+            String prefix = stringValue.useDoubleQuotes() ? "DQ:" : "SQ:";
+            return prefix + stringValue.getValue();
+        }
+
+        // For other value types, use the standard toString representation
+        return value.toString();
     }
 
     @Override

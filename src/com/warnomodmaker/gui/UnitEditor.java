@@ -292,6 +292,34 @@ public class UnitEditor extends JPanel {
         }
 
         EnhancedTreeCellRenderer.PropertyNode node = new EnhancedTreeCellRenderer.PropertyNode(propertyName, propertyValue);
+
+        // Check if this property has been modified
+        if (modificationTracker != null && ndfObject != null) {
+            String unitName = ndfObject.getInstanceName();
+            if (unitName != null) {
+                // Check both the full path and without the "Type." prefix for compatibility
+                boolean isModified = modificationTracker.hasModificationForProperty(unitName, fullPath);
+                if (!isModified && fullPath.startsWith("Type.")) {
+                    // Also check without the "Type." prefix since that's how modifications are stored
+                    String pathWithoutType = fullPath.substring(5);
+                    isModified = modificationTracker.hasModificationForProperty(unitName, pathWithoutType);
+                }
+
+                // Also check if any child property has been modified (hierarchical highlighting)
+                if (!isModified) {
+                    isModified = modificationTracker.hasModificationForPropertyOrChildren(unitName, fullPath);
+                    if (!isModified && fullPath.startsWith("Type.")) {
+                        String pathWithoutType = fullPath.substring(5);
+                        isModified = modificationTracker.hasModificationForPropertyOrChildren(unitName, pathWithoutType);
+                    }
+                }
+
+                if (isModified) {
+                    node.setModified(true);
+                }
+            }
+        }
+
         DefaultMutableTreeNode treeNode = new DefaultMutableTreeNode(node);
 
         switch (propertyValue.getType()) {

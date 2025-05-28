@@ -229,21 +229,21 @@ public class TagAndOrderEditorDialog extends JDialog {
         // Help text in scrollable area
         JTextArea helpText = new JTextArea(
             "What this does:\n" +
-            "• Basic Orders: The standard orders a unit can use (move, attack, etc.)\n" +
-            "• Advanced Orders: Special orders that can be unlocked (smoke grenades, special abilities)\n\n" +
+            "- Basic Orders: The standard orders a unit can use (move, attack, etc.)\n" +
+            "- Advanced Orders: Special orders that can be unlocked (smoke grenades, special abilities)\n\n" +
             "How to use:\n" +
             "1. Click 'Change' next to the order type you want to modify\n" +
             "2. Enter the path to an existing OrderAvailability descriptor\n" +
             "3. Click 'Apply Changes' to update all selected units\n\n" +
             "Example order sets:\n" +
-            "• ~/Descriptor_OrderAvailability_Infantry_SmokeGrenade (adds smoke grenades)\n" +
-            "• ~/Descriptor_OrderAvailability_Recon_Enhanced (enhanced recon abilities)\n" +
-            "• ~/Descriptor_OrderAvailability_Tank_Standard (standard tank orders)\n\n" +
+            "- ~/Descriptor_OrderAvailability_Infantry_SmokeGrenade (adds smoke grenades)\n" +
+            "- ~/Descriptor_OrderAvailability_Recon_Enhanced (enhanced recon abilities)\n" +
+            "- ~/Descriptor_OrderAvailability_Tank_Standard (standard tank orders)\n\n" +
             "Important Notes:\n" +
-            "• Order sets must already exist in the game files\n" +
-            "• Changes affect ALL units in your current selection\n" +
-            "• Use tag filtering to limit which units are modified\n" +
-            "• Test changes on a small group first before applying to many units"
+            "- Order sets must already exist in the game files\n" +
+            "- Changes affect ALL units in your current selection\n" +
+            "- Use tag filtering to limit which units are modified\n" +
+            "- Test changes on a small group first before applying to many units"
         );
         helpText.setEditable(false);
         helpText.setFont(helpText.getFont().deriveFont(Font.PLAIN, 11f));

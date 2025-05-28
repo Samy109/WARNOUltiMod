@@ -24,7 +24,6 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
     private static final String ICON_GUID = "[G]";
     private static final String ICON_MAP = "[M]";
     private static final String ICON_TUPLE = "[T]";
-    private static final String ICON_MODIFIED = "*";
 
     private boolean showModificationIndicators = true;
 
@@ -80,17 +79,16 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
         // Create HTML formatted text with icon and value preview
         StringBuilder html = new StringBuilder("<html>");
 
-        // Add modification indicator if needed
-        if (showModificationIndicators && propertyNode.isModified()) {
-            html.append("<font color='").append(colorToHex(WarnoTheme.WARNING_ORANGE)).append("'>")
-                .append(ICON_MODIFIED).append("</font> ");
-        }
-
         // Add type icon
         html.append(icon).append(" ");
 
-        // Add property name (bold)
-        html.append("<b>").append(escapeHtml(propertyName)).append("</b>");
+        // Add property name (bold) with modification color if needed
+        if (showModificationIndicators && propertyNode.isModified()) {
+            html.append("<b><font color='").append(colorToHex(WarnoTheme.WARNING_ORANGE)).append("'>")
+                .append(escapeHtml(propertyName)).append("</font></b>");
+        } else {
+            html.append("<b>").append(escapeHtml(propertyName)).append("</b>");
+        }
 
         // Add value preview for simple types
         String valuePreview = getValuePreview(propertyValue);

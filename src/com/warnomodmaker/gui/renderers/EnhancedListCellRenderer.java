@@ -62,17 +62,20 @@ public class EnhancedListCellRenderer extends DefaultListCellRenderer {
         // Create HTML formatted text with multiple lines
         StringBuilder html = new StringBuilder("<html>");
 
-        // First line: Name (bold) with modification indicator if needed
+        // First line: Name (bold) with modification color if needed
         html.append("<div style='margin-bottom: 2px;'>");
-        if (isModified) {
-            html.append("<font color='").append(colorToHex(WarnoTheme.WARNING_ORANGE)).append("'>*</font> ");
-        }
 
         // Highlight matching text if search is active
         if (highlightText != null && !highlightText.isEmpty() && name.toLowerCase().contains(highlightText.toLowerCase())) {
-            html.append(highlightMatchingText(name, highlightText, isSelected));
+            html.append(highlightMatchingText(name, highlightText, isSelected, isModified));
         } else {
-            html.append("<b>").append(escapeHtml(name)).append("</b>");
+            // Apply modification color to the entire name if modified
+            if (isModified) {
+                html.append("<b><font color='").append(colorToHex(WarnoTheme.WARNING_ORANGE)).append("'>")
+                    .append(escapeHtml(name)).append("</font></b>");
+            } else {
+                html.append("<b>").append(escapeHtml(name)).append("</b>");
+            }
         }
         html.append("</div>");
 
@@ -104,16 +107,28 @@ public class EnhancedListCellRenderer extends DefaultListCellRenderer {
         return typeName;
     }
 
-    private String highlightMatchingText(String text, String highlight, boolean isSelected) {
+    private String highlightMatchingText(String text, String highlight, boolean isSelected, boolean isModified) {
         if (highlight == null || highlight.isEmpty()) {
-            return "<b>" + escapeHtml(text) + "</b>";
+            if (isModified) {
+                return "<b><font color='" + colorToHex(WarnoTheme.WARNING_ORANGE) + "'>" + escapeHtml(text) + "</font></b>";
+            } else {
+                return "<b>" + escapeHtml(text) + "</b>";
+            }
         }
 
         String highlightColor = isSelected ? "#FFFF00" : "#FFA500"; // Yellow or orange
         String textLower = text.toLowerCase();
         String highlightLower = highlight.toLowerCase();
 
-        StringBuilder result = new StringBuilder("<b>");
+        StringBuilder result = new StringBuilder();
+
+        // Start with bold and modification color if needed
+        if (isModified) {
+            result.append("<b><font color='").append(colorToHex(WarnoTheme.WARNING_ORANGE)).append("'>");
+        } else {
+            result.append("<b>");
+        }
+
         int lastIndex = 0;
         int index;
 
@@ -135,7 +150,13 @@ public class EnhancedListCellRenderer extends DefaultListCellRenderer {
             result.append(escapeHtml(text.substring(lastIndex)));
         }
 
-        result.append("</b>");
+        // Close tags
+        if (isModified) {
+            result.append("</font></b>");
+        } else {
+            result.append("</b>");
+        }
+
         return result.toString();
     }
 

@@ -7,6 +7,7 @@ import com.warnomodmaker.model.NDFValue;
 import com.warnomodmaker.model.ModificationTracker;
 import com.warnomodmaker.model.ModificationRecord;
 import com.warnomodmaker.model.ModProfile;
+import com.warnomodmaker.model.PropertyScanner;
 import com.warnomodmaker.model.UserPreferences;
 import com.warnomodmaker.parser.NDFParser;
 import com.warnomodmaker.parser.NDFWriter;
@@ -231,11 +232,36 @@ public class MainWindow extends JFrame {
         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             File file = fileChooser.getSelectedFile();
             prefs.setLastNDFDirectory(file.getParent());
+
+            // Check if file is already open
             for (int i = 0; i < tabStates.size(); i++) {
                 FileTabState tabState = tabStates.get(i);
                 if (tabState.getFile() != null && tabState.getFile().equals(file)) {
-                    // File already open, switch to that tab
-                    tabbedPane.setSelectedIndex(i);
+                    // File already open - check if it has been modified
+                    if (tabState.isModified()) {
+                        String fileName = tabState.getFile() != null ? tabState.getFile().getName() : "Untitled";
+                        int result = JOptionPane.showConfirmDialog(
+                            this,
+                            "The file '" + fileName + "' has been modified. Save changes before editing?",
+                            "Save Changes",
+                            JOptionPane.YES_NO_CANCEL_OPTION
+                        );
+
+                        if (result == JOptionPane.YES_OPTION) {
+                            // Save the file first, then reload fresh
+                            saveTabToFile(tabState, tabState.getFile());
+                            reloadTabFromDisk(i, file);
+                        } else if (result == JOptionPane.NO_OPTION) {
+                            // Don't save, just reload fresh
+                            reloadTabFromDisk(i, file);
+                        } else {
+                            // Cancel - just switch to the existing tab
+                            tabbedPane.setSelectedIndex(i);
+                        }
+                    } else {
+                        // File not modified, just switch to that tab
+                        tabbedPane.setSelectedIndex(i);
+                    }
                     return;
                 }
             }
@@ -386,7 +412,7 @@ public class MainWindow extends JFrame {
             message.append("The following files have been modified:\n\n");
             for (FileTabState tabState : modifiedTabs) {
                 String fileName = tabState.getFile() != null ? tabState.getFile().getName() : "Untitled";
-                message.append("• ").append(fileName).append("\n");
+                message.append("- ").append(fileName).append("\n");
             }
             message.append("\nSave changes before exiting?");
 
@@ -657,6 +683,30 @@ public class MainWindow extends JFrame {
     }
 
 
+    private void createNewTabWithPreprocessedData(File file, List<NDFValue.ObjectValue> ndfObjects,
+                                                 NDFValue.NDFFileType fileType, NDFParser parser,
+                                                 PropertyScanner propertyScanner, DefaultListModel<NDFValue.ObjectValue> listModel) {
+        FileTabState tabState = new FileTabState(file, ndfObjects, fileType, parser);
+        FileTabPanel tabPanel = new FileTabPanel(tabState, propertyScanner, listModel);
+        tabPanel.addModificationListener(e -> {
+            tabState.setModified(true);
+            updateTabTitle(tabState);
+            updateTitle();
+            statusBar.updateFileInfo(tabState);
+        });
+        tabStates.add(tabState);
+        String tabTitle = tabState.getTabTitle();
+        tabbedPane.addTab(tabTitle, tabPanel, tabState);
+        removeWelcomeTab();
+
+        // Select the new tab
+        tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
+
+        updateTitle();
+        statusBar.updateFileInfo(tabState);
+    }
+
+
     private void showWelcomeTab() {
         if (tabbedPane.getTabCount() == 0) {
             JPanel welcomePanel = new JPanel(new BorderLayout());
@@ -664,7 +714,7 @@ public class MainWindow extends JFrame {
                 "<html><div style='text-align: center; padding: 50px;'>" +
                 "<h2>Welcome to WARNO Mod Maker</h2>" +
                 "<p>Open an NDF file to get started</p>" +
-                "<p>Use Ctrl+O or File → Open to load a file</p>" +
+                "<p>Use Ctrl+O or File -> Open to load a file</p>" +
                 "</div></html>",
                 SwingConstants.CENTER
             );
@@ -686,13 +736,11 @@ public class MainWindow extends JFrame {
 
     private void loadFileInBackground(File file) {
         JDialog progressDialog = new JDialog(this, "Loading File", true);
-        JProgressBar progressBar = new JProgressBar();
-        progressBar.setIndeterminate(true);
-        progressBar.setString("Loading " + file.getName() + "...");
-        progressBar.setStringPainted(true);
+        JLabel progressLabel = new JLabel("Loading " + file.getName() + "...", SwingConstants.CENTER);
+        progressLabel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        progressDialog.add(progressBar);
-        progressDialog.setSize(300, 100);
+        progressDialog.add(progressLabel);
+        progressDialog.setSize(400, 100);
         progressDialog.setLocationRelativeTo(this);
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
             private List<NDFValue.ObjectValue> ndfObjects;
@@ -718,35 +766,79 @@ public class MainWindow extends JFrame {
 
             @Override
             protected void done() {
-                progressDialog.dispose();
+                try {
+                    if (error != null) {
+                        progressDialog.dispose();
 
-                if (error != null) {
-                    String errorMessage = error.getMessage();
-                    if (errorMessage == null || errorMessage.trim().isEmpty()) {
-                        errorMessage = error.getClass().getSimpleName() + " occurred during file loading";
+                        String errorMessage = error.getMessage();
+                        if (errorMessage == null || errorMessage.trim().isEmpty()) {
+                            errorMessage = error.getClass().getSimpleName() + " occurred during file loading";
+                        }
+
+                        JOptionPane.showMessageDialog(
+                            MainWindow.this,
+                            "Error opening file: " + errorMessage,
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE
+                        );
+                        error.printStackTrace();
+                    } else {
+                        // Update progress text to show UI initialization
+                        progressLabel.setText("Initializing UI with " + ndfObjects.size() + " objects...");
+
+                        // Use a normal Java Thread for heavy operations
+                        new Thread(() -> {
+                            try {
+                                // Do heavy work in background thread
+                                // 1. Property scanning
+                                PropertyScanner propertyScanner = new PropertyScanner(ndfObjects, fileType);
+                                propertyScanner.scanProperties();
+
+                                // 2. Create list model
+                                DefaultListModel<NDFValue.ObjectValue> listModel = new DefaultListModel<>();
+                                for (NDFValue.ObjectValue obj : ndfObjects) {
+                                    listModel.addElement(obj);
+                                }
+
+                                // Now update UI on EDT with pre-processed data
+                                SwingUtilities.invokeLater(() -> {
+                                    createNewTabWithPreprocessedData(file, ndfObjects, fileType, parser, propertyScanner, listModel);
+                                    progressDialog.dispose();
+
+                                    String objectTypeName = getObjectTypeNameForFile(file.getName(), fileType);
+                                    JOptionPane.showMessageDialog(
+                                        MainWindow.this,
+                                        "Loaded " + ndfObjects.size() + " " + objectTypeName + ".",
+                                        "File Loaded",
+                                        JOptionPane.INFORMATION_MESSAGE
+                                    );
+                                });
+                            } catch (Exception ex) {
+                                SwingUtilities.invokeLater(() -> {
+                                    progressDialog.dispose();
+                                    JOptionPane.showMessageDialog(
+                                        MainWindow.this,
+                                        "Error initializing UI: " + ex.getMessage(),
+                                        "Error",
+                                        JOptionPane.ERROR_MESSAGE
+                                    );
+                                });
+                            }
+                        }).start();
                     }
-
+                } catch (Exception ex) {
+                    progressDialog.dispose();
                     JOptionPane.showMessageDialog(
                         MainWindow.this,
-                        "Error opening file: " + errorMessage,
+                        "Error processing file: " + ex.getMessage(),
                         "Error",
                         JOptionPane.ERROR_MESSAGE
-                    );
-                    error.printStackTrace();
-                } else {
-                    createNewTab(file, ndfObjects, fileType, parser);
-
-                    String objectTypeName = fileType.getDisplayName().toLowerCase() + " descriptors";
-                    JOptionPane.showMessageDialog(
-                        MainWindow.this,
-                        "Loaded " + ndfObjects.size() + " " + objectTypeName + ".",
-                        "File Loaded",
-                        JOptionPane.INFORMATION_MESSAGE
                     );
                 }
             }
         };
 
+        // Start worker first, then show dialog (modal dialog blocks execution)
         worker.execute();
         progressDialog.setVisible(true);
     }
@@ -824,7 +916,7 @@ public class MainWindow extends JFrame {
     }
 
 
-    private void refreshCurrentTab() {
+    void refreshCurrentTab() {
         FileTabPanel currentPanel = getCurrentTabPanel();
         if (currentPanel != null) {
             currentPanel.refresh();
@@ -876,6 +968,104 @@ public class MainWindow extends JFrame {
     }
 
 
+
+
+
+    private void reloadTabFromDisk(int tabIndex, File file) {
+        if (tabIndex < 0 || tabIndex >= tabStates.size()) {
+            return;
+        }
+
+        // Switch to the tab first
+        tabbedPane.setSelectedIndex(tabIndex);
+
+        // Load the file in background and replace the tab content
+        JDialog progressDialog = new JDialog(this, "Reloading File", true);
+        JProgressBar progressBar = new JProgressBar();
+        progressBar.setIndeterminate(true);
+        progressBar.setString("Reloading " + file.getName() + "...");
+        progressBar.setStringPainted(true);
+
+        progressDialog.add(progressBar);
+        progressDialog.setSize(400, 100);
+        progressDialog.setLocationRelativeTo(this);
+
+        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            private List<NDFValue.ObjectValue> ndfObjects;
+            private NDFValue.NDFFileType fileType;
+            private NDFParser parser;
+            private Exception error;
+
+            @Override
+            protected Void doInBackground() throws Exception {
+                try {
+                    // Small delay to ensure dialog is visible
+                    Thread.sleep(100);
+
+                    // Determine file type
+                    fileType = NDFValue.NDFFileType.fromFilename(file.getName());
+                    try (Reader reader = new BufferedReader(new FileReader(file))) {
+                        parser = new NDFParser(reader);
+                        parser.setFileType(fileType);
+                        ndfObjects = parser.parse();
+                    }
+                } catch (Exception e) {
+                    error = e;
+                }
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+
+                if (error != null) {
+                    String errorMessage = error.getMessage();
+                    if (errorMessage == null || errorMessage.trim().isEmpty()) {
+                        errorMessage = error.getClass().getSimpleName() + " occurred during file loading";
+                    }
+
+                    JOptionPane.showMessageDialog(
+                        MainWindow.this,
+                        "Error reloading file: " + errorMessage,
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE
+                    );
+                    error.printStackTrace();
+                } else {
+                    // Replace the existing tab content with fresh data
+                    FileTabState tabState = tabStates.get(tabIndex);
+                    tabState.setUnitDescriptors(ndfObjects);
+                    tabState.setFileType(fileType);
+                    tabState.setParser(parser);
+                    tabState.setModified(false);
+                    tabState.getModificationTracker().clearModifications();
+
+                    // Refresh the tab panel with the fresh data
+                    FileTabPanel tabPanel = (FileTabPanel) tabbedPane.getComponentAt(tabIndex);
+                    tabPanel.updateFromTabState();
+
+                    updateTabTitle(tabState);
+                    updateTitle();
+                    statusBar.updateFileInfo(tabState);
+
+                    String objectTypeName = getObjectTypeNameForFile(file.getName(), fileType);
+                    JOptionPane.showMessageDialog(
+                        MainWindow.this,
+                        "Reloaded " + ndfObjects.size() + " " + objectTypeName + " from disk.",
+                        "File Reloaded",
+                        JOptionPane.INFORMATION_MESSAGE
+                    );
+                }
+            }
+        };
+
+        // Start worker first, then show dialog (modal dialog blocks execution)
+        worker.execute();
+        progressDialog.setVisible(true);
+    }
+
+
     private void closeAllTabs(ActionEvent e) {
         List<FileTabState> modifiedTabs = new ArrayList<>();
         for (FileTabState tabState : tabStates) {
@@ -889,7 +1079,7 @@ public class MainWindow extends JFrame {
             message.append("The following files have been modified:\n\n");
             for (FileTabState tabState : modifiedTabs) {
                 String fileName = tabState.getFile() != null ? tabState.getFile().getName() : "Untitled";
-                message.append("• ").append(fileName).append("\n");
+                message.append("- ").append(fileName).append("\n");
             }
             message.append("\nSave changes before closing?");
 
@@ -1034,7 +1224,7 @@ public class MainWindow extends JFrame {
             message.append("The following files have been modified:\n\n");
             for (FileTabState tabState : modifiedTabs) {
                 String fileName = tabState.getFile() != null ? tabState.getFile().getName() : "Untitled";
-                message.append("• ").append(fileName).append("\n");
+                message.append("- ").append(fileName).append("\n");
             }
             message.append("\nSave changes before closing?");
 
@@ -1074,5 +1264,19 @@ public class MainWindow extends JFrame {
         }
 
         updateTitle();
+    }
+
+
+    private String getObjectTypeNameForFile(String fileName, NDFValue.NDFFileType fileType) {
+        if (fileType != NDFValue.NDFFileType.UNKNOWN) {
+            return fileType.getDisplayName().toLowerCase() + " descriptors";
+        }
+
+        // For unknown file types, use the file name without extension
+        String baseName = fileName;
+        if (baseName.toLowerCase().endsWith(".ndf")) {
+            baseName = baseName.substring(0, baseName.length() - 4);
+        }
+        return baseName + " objects";
     }
 }

@@ -1,12 +1,16 @@
 @echo off
-echo Building WARNO Mod Maker...
+echo Building WARNO Mod Maker (fat JAR)...
+
+rem Define paths
+set FLATLAF_JAR=lib\flatlaf-3.6.jar
+set BUILD_DIR=build
 
 rem Create build directory
-if not exist build mkdir build
+if not exist %BUILD_DIR% mkdir %BUILD_DIR%
 
-rem Compile all Java files recursively
+rem Compile Java files with FlatLaf on classpath
 echo Compiling Java files...
-javac -d build -source 11 -target 11 -cp src src/com/warnomodmaker/*.java src/com/warnomodmaker/model/*.java src/com/warnomodmaker/parser/*.java src/com/warnomodmaker/gui/*.java
+javac -d %BUILD_DIR% -source 11 -target 11 -cp %FLATLAF_JAR%;src src/com/warnomodmaker/*.java src/com/warnomodmaker/model/*.java src/com/warnomodmaker/parser/*.java src/com/warnomodmaker/gui/*.java
 
 if %ERRORLEVEL% neq 0 (
     echo Compilation failed!
@@ -15,23 +19,33 @@ if %ERRORLEVEL% neq 0 (
 
 echo Compilation successful!
 
+rem Extract FlatLaf classes into build dir
+echo Unpacking FlatLaf...
+mkdir temp_flatlaf
+cd temp_flatlaf
+jar xf ..\%FLATLAF_JAR%
+cd ..
+
+xcopy /E /Y temp_flatlaf\* %BUILD_DIR% >nul
+rmdir /S /Q temp_flatlaf
+
 rem Create manifest file
 echo Creating manifest...
-echo Main-Class: com.warnomodmaker.WarnoModMaker > build/MANIFEST.MF
-echo. >> build/MANIFEST.MF
+echo Main-Class: com.warnomodmaker.WarnoModMaker > %BUILD_DIR%\MANIFEST.MF
+echo. >> %BUILD_DIR%\MANIFEST.MF
 
-rem Create JAR file
-echo Creating JAR file...
-jar cfm WarnoModMaker.jar build/MANIFEST.MF -C build .
+rem Create fat JAR
+echo Creating fat JAR...
+jar cfm WarnoModMaker-fat.jar %BUILD_DIR%\MANIFEST.MF -C %BUILD_DIR% .
 
 if %ERRORLEVEL% neq 0 (
     echo JAR creation failed!
     exit /b %ERRORLEVEL%
 )
 
-echo JAR file created successfully: WarnoModMaker.jar
+echo Fat JAR created successfully: WarnoModMaker-fat.jar
 echo.
 echo To run the application:
-echo   java -jar WarnoModMaker.jar
+echo   java -jar WarnoModMaker-fat.jar
 echo.
 echo Build complete!

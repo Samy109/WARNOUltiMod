@@ -2,6 +2,7 @@ package com.warnomodmaker.gui;
 
 import com.warnomodmaker.model.FileTabState;
 import com.warnomodmaker.model.NDFValue;
+import com.warnomodmaker.model.PropertyScanner;
 
 import javax.swing.*;
 import java.awt.*;
@@ -33,6 +34,17 @@ public class FileTabPanel extends JPanel {
     }
 
 
+    public FileTabPanel(FileTabState tabState, PropertyScanner propertyScanner, DefaultListModel<NDFValue.ObjectValue> listModel) {
+        this.tabState = tabState;
+        this.modificationListeners = new ArrayList<>();
+        this.tabStateChangeListeners = new ArrayList<>();
+
+        initializeUI();
+        setupEventHandlers();
+        updateFromTabStateWithPreprocessedData(propertyScanner, listModel);
+    }
+
+
     private void initializeUI() {
         setLayout(new BorderLayout());
         objectBrowser = new UnitBrowser();
@@ -60,6 +72,23 @@ public class FileTabPanel extends JPanel {
     public void updateFromTabState() {
         if (tabState.hasData()) {
             objectBrowser.setUnitDescriptors(tabState.getUnitDescriptors(), tabState.getFileType());
+            objectBrowser.setModificationTracker(tabState.getModificationTracker());
+            objectEditor.setUnitDescriptor(null, tabState.getModificationTracker());
+
+            // Restore selection if available
+            restoreSelection();
+        } else {
+            // Clear components
+            objectBrowser.setUnitDescriptors(null, NDFValue.NDFFileType.UNKNOWN);
+            objectBrowser.setModificationTracker(null);
+            objectEditor.setUnitDescriptor(null, null);
+        }
+    }
+
+
+    public void updateFromTabStateWithPreprocessedData(PropertyScanner propertyScanner, DefaultListModel<NDFValue.ObjectValue> listModel) {
+        if (tabState.hasData()) {
+            objectBrowser.setUnitDescriptorsWithPreprocessedData(tabState.getUnitDescriptors(), tabState.getFileType(), propertyScanner, listModel);
             objectBrowser.setModificationTracker(tabState.getModificationTracker());
             objectEditor.setUnitDescriptor(null, tabState.getModificationTracker());
 

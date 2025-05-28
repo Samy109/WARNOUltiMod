@@ -182,6 +182,46 @@ public class UnitBrowser extends JPanel {
 
         // Make sure tree starts with no filter (fully populated)
         notifyPropertyFilterListeners(null);
+
+        // Update status label with proper object type name
+        String displayTypeName = getObjectTypeNameForDisplay(currentFileType);
+        statusLabel.setText(this.ndfObjects.size() + " " + displayTypeName + " loaded");
+    }
+
+
+    public void setUnitDescriptorsWithPreprocessedData(List<ObjectValue> ndfObjects, NDFFileType fileType,
+                                                      PropertyScanner propertyScanner, DefaultListModel<ObjectValue> listModel) {
+        // Store the original list and file type
+        this.ndfObjects = ndfObjects != null ? ndfObjects : new ArrayList<>();
+        this.currentFileType = fileType;
+
+        // Use the pre-processed PropertyScanner
+        this.propertyScanner = propertyScanner;
+
+        // Store a separate copy of the original objects
+        this.originalObjects = new ArrayList<>(this.ndfObjects);
+        this.filteredObjects = new ArrayList<>(this.ndfObjects);
+        String borderTitle = fileType != NDFFileType.UNKNOWN ? fileType.getDisplayName() + "s" : "Objects";
+        setBorder(BorderFactory.createTitledBorder(borderTitle));
+
+        // Use the pre-processed list model - this is the key optimization!
+        objectList.setModel(listModel);
+        this.listModel = listModel;
+
+        // Select the first object if available and ensure tree is fully populated
+        if (!this.ndfObjects.isEmpty()) {
+            objectList.setSelectedIndex(0);
+            // Manually trigger selection event to populate the tree
+            ObjectValue firstObject = this.ndfObjects.get(0);
+            notifySelectionListeners(firstObject);
+        }
+
+        // Make sure tree starts with no filter (fully populated)
+        notifyPropertyFilterListeners(null);
+
+        // Update status label with proper object type name
+        String displayTypeName = getObjectTypeNameForDisplay(currentFileType);
+        statusLabel.setText(this.ndfObjects.size() + " " + displayTypeName + " loaded");
     }
 
 
@@ -313,8 +353,7 @@ public class UnitBrowser extends JPanel {
                     // Replace the entire model at once - this is much more efficient
                     objectList.setModel(newModel);
                     listModel = newModel;
-                    String objectTypeName = currentFileType != NDFFileType.UNKNOWN ?
-                        currentFileType.getDisplayName().toLowerCase() + "s" : "objects";
+                    String objectTypeName = getObjectTypeNameForDisplay(currentFileType);
                     statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found");
 
                     // Select the first object if available
@@ -454,8 +493,7 @@ public class UnitBrowser extends JPanel {
         objectList.setModel(newModel);
         listModel = newModel;
         filteredObjects = new ArrayList<>(originalObjects);
-        String objectTypeName = currentFileType != NDFFileType.UNKNOWN ?
-            currentFileType.getDisplayName().toLowerCase() + "s" : "objects";
+        String objectTypeName = getObjectTypeNameForDisplay(currentFileType);
         statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found");
 
         // Select the first object if available
@@ -517,8 +555,7 @@ public class UnitBrowser extends JPanel {
 
                     objectList.setModel(newModel);
                     listModel = newModel;
-                    String objectTypeName = currentFileType != NDFFileType.UNKNOWN ?
-                        currentFileType.getDisplayName().toLowerCase() + "s" : "objects";
+                    String objectTypeName = getObjectTypeNameForDisplay(currentFileType);
                     // Truncate long property names to prevent UI overlap
                     String displayText = searchText.length() > 15 ? searchText.substring(0, 15) + "..." : searchText;
                     statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " contain '" + displayText + "'");
@@ -616,5 +653,13 @@ public class UnitBrowser extends JPanel {
         }
 
         return false;
+    }
+
+
+    private String getObjectTypeNameForDisplay(NDFFileType fileType) {
+        if (fileType != NDFFileType.UNKNOWN) {
+            return fileType.getDisplayName().toLowerCase() + "s";
+        }
+        return "objects";
     }
 }

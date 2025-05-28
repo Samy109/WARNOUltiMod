@@ -18,6 +18,7 @@ public class ProfileLoadDialog extends JDialog {
     private final List<ObjectValue> unitDescriptors;
     private final ModificationTracker modificationTracker;
     private final List<ValidationResult> validationResults;
+    private final MainWindow parentWindow;
     private boolean applied = false;
     private JTable validationTable;
     private ValidationTableModel tableModel;
@@ -26,7 +27,7 @@ public class ProfileLoadDialog extends JDialog {
     private JButton cancelButton;
     private JButton fixPathsButton;
 
-    
+
     public static class ValidationResult {
         public ModificationRecord modification; // Non-final to allow auto-fix updates
         public final boolean isValid;
@@ -43,7 +44,7 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    
+
     public ProfileLoadDialog(JFrame parent, ModProfile profile, List<ObjectValue> unitDescriptors, ModificationTracker modificationTracker) {
         super(parent, "Load Profile: " + profile.getProfileName(), true);
 
@@ -51,12 +52,13 @@ public class ProfileLoadDialog extends JDialog {
         this.unitDescriptors = unitDescriptors;
         this.modificationTracker = modificationTracker;
         this.validationResults = new ArrayList<>();
+        this.parentWindow = (MainWindow) parent;
 
         initializeGUI();
         validateProfile();
     }
 
-    
+
     private void initializeGUI() {
         setSize(900, 600);
         setLocationRelativeTo(getParent());
@@ -137,7 +139,7 @@ public class ProfileLoadDialog extends JDialog {
         setContentPane(mainPanel);
     }
 
-    
+
     private JPanel createInfoPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createTitledBorder("Profile Information"));
@@ -177,7 +179,7 @@ public class ProfileLoadDialog extends JDialog {
         return panel;
     }
 
-    
+
     private JPanel createBottomPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
@@ -207,7 +209,7 @@ public class ProfileLoadDialog extends JDialog {
         return panel;
     }
 
-    
+
     private void validateProfile() {
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
             @Override
@@ -238,7 +240,7 @@ public class ProfileLoadDialog extends JDialog {
         worker.execute();
     }
 
-    
+
     private ValidationResult validateModification(ModificationRecord modification) {
         String unitName = modification.getUnitName();
         String propertyPath = modification.getPropertyPath();
@@ -257,7 +259,7 @@ public class ProfileLoadDialog extends JDialog {
         }
         NDFValue currentValue = PropertyUpdater.getPropertyValue(unit, propertyPath);
         if (currentValue != null) {
-            String currentValueStr = currentValue.toString();
+            String currentValueStr = getValueForComparison(currentValue);
             String expectedOldValue = modification.getOldValue();
 
             // If the current value doesn't match the expected old value, warn the user
@@ -272,7 +274,7 @@ public class ProfileLoadDialog extends JDialog {
         return new ValidationResult(modification, true, "Ready to apply", null);
     }
 
-    
+
     private ObjectValue findUnitByName(String unitName) {
         for (ObjectValue unit : unitDescriptors) {
             if (unitName.equals(unit.getInstanceName())) {
@@ -282,7 +284,7 @@ public class ProfileLoadDialog extends JDialog {
         return null;
     }
 
-    
+
     private String findSimilarUnitName(String targetName) {
         if (targetName == null || targetName.trim().isEmpty()) {
             return null;
@@ -306,7 +308,7 @@ public class ProfileLoadDialog extends JDialog {
         return candidates.isEmpty() ? null : candidates.get(0).value;
     }
 
-    
+
     private double calculateUnitNameSimilarity(String target, String candidate) {
         // 1. Exact match
         if (target.equals(candidate)) {
@@ -334,7 +336,7 @@ public class ProfileLoadDialog extends JDialog {
         return Math.max(levenshteinScore * 0.4 + tokenScore * 0.4 + affixScore * 0.2, 0.0);
     }
 
-    
+
     private String findSimilarPropertyPath(ObjectValue unit, String targetPath) {
         if (targetPath == null || targetPath.trim().isEmpty()) {
             return null;
@@ -358,7 +360,7 @@ public class ProfileLoadDialog extends JDialog {
         return candidates.isEmpty() ? null : candidates.get(0).value;
     }
 
-    
+
     private double calculatePropertyPathSimilarity(String target, String candidate) {
         // 1. Exact match
         if (target.equals(candidate)) {
@@ -397,7 +399,7 @@ public class ProfileLoadDialog extends JDialog {
                        Math.max(substringScore, levenshteinScore * 0.3));
     }
 
-    
+
     private void updateStatus() {
         int total = validationResults.size();
         int valid = (int) validationResults.stream().mapToInt(r -> r.isValid ? 1 : 0).sum();
@@ -406,7 +408,7 @@ public class ProfileLoadDialog extends JDialog {
         statusLabel.setText(String.format("Total: %d, Valid: %d, Selected for application: %d", total, valid, selected));
     }
 
-    
+
     private void autoFixPaths(ActionEvent e) {
         List<ValidationResult> fixableResults = validationResults.stream()
             .filter(r -> !r.isValid && r.suggestedFix != null && !r.suggestedFix.isEmpty())
@@ -426,9 +428,9 @@ public class ProfileLoadDialog extends JDialog {
                 message.append("... and ").append(fixableResults.size() - shown).append(" more\n");
                 break;
             }
-            message.append("• ").append(result.modification.getUnitName()).append("\n");
+            message.append("- ").append(result.modification.getUnitName()).append("\n");
             message.append("  ").append(result.issue).append("\n");
-            message.append("  → ").append(result.suggestedFix).append("\n\n");
+            message.append("  -> ").append(result.suggestedFix).append("\n\n");
             shown++;
         }
 
@@ -442,7 +444,7 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    
+
     private void performAutoFix(List<ValidationResult> fixableResults) {
         int fixedCount = 0;
         List<String> failedFixes = new ArrayList<>();
@@ -469,7 +471,7 @@ public class ProfileLoadDialog extends JDialog {
             resultMessage.append("Failed to fix: ").append(failedFixes.size()).append(" issues\n\n");
             resultMessage.append("Failed fixes:\n");
             for (String failure : failedFixes) {
-                resultMessage.append("• ").append(failure).append("\n");
+                resultMessage.append("- ").append(failure).append("\n");
             }
         }
 
@@ -477,7 +479,7 @@ public class ProfileLoadDialog extends JDialog {
             "Auto-Fix Results", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    
+
     private void applyModifications(ActionEvent e) {
         List<ValidationResult> toApply = validationResults.stream()
             .filter(r -> r.shouldApply && r.isValid)
@@ -498,42 +500,98 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    
+
     private void applySelectedModifications(List<ValidationResult> toApply) {
-        int appliedCount = 0;
+        // Create progress dialog with static text
+        JDialog progressDialog = new JDialog(this, "Applying Profile", true);
+        JLabel progressLabel = new JLabel("Applying " + toApply.size() + " modifications...", SwingConstants.CENTER);
+        progressLabel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        for (ValidationResult validationResult : toApply) {
-            ModificationRecord mod = validationResult.modification;
-            ObjectValue unit = findUnitByName(mod.getUnitName());
+        progressDialog.add(progressLabel);
+        progressDialog.setSize(400, 100);
+        progressDialog.setLocationRelativeTo(this);
 
-            if (unit != null) {
-                try {
-                    NDFValue newValue = parseValueFromString(mod.getNewValue(), mod.getNewValueType());
+        SwingWorker<Integer, Void> worker = new SwingWorker<Integer, Void>() {
+            @Override
+            protected Integer doInBackground() throws Exception {
+                int appliedCount = 0;
 
-                    // Apply the modification
-                    if (PropertyUpdater.updateProperty(unit, mod.getPropertyPath(), newValue, modificationTracker)) {
-                        appliedCount++;
+                for (ValidationResult validationResult : toApply) {
+                    ModificationRecord mod = validationResult.modification;
+                    ObjectValue unit = findUnitByName(mod.getUnitName());
+
+                    if (unit != null) {
+                        try {
+                            NDFValue newValue = parseValueFromString(mod.getNewValue(), mod.getNewValueType());
+
+                            // Apply the modification
+                            if (PropertyUpdater.updateProperty(unit, mod.getPropertyPath(), newValue, modificationTracker)) {
+                                appliedCount++;
+                            }
+                        } catch (Exception ex) {
+                            System.err.println("Failed to apply modification: " + ex.getMessage());
+                        }
                     }
+                }
+
+                return appliedCount;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    int appliedCount = get();
+                    applied = true;
+
+                    // Update progress text to show UI refresh
+                    progressLabel.setText("Refreshing UI...");
+
+                    // Trigger UI refresh in the main window
+                    if (parentWindow != null) {
+                        parentWindow.refreshCurrentTab();
+                    }
+
+                    // Small delay to ensure UI refresh completes
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ie) {
+                        // Ignore
+                    }
+
+                    // Dispose dialog and close profile dialog
+                    progressDialog.dispose();
+                    dispose();
                 } catch (Exception ex) {
-                    System.err.println("Failed to apply modification: " + ex.getMessage());
+                    progressDialog.dispose();
+                    JOptionPane.showMessageDialog(ProfileLoadDialog.this,
+                        "Error applying profile: " + ex.getMessage(),
+                        "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
-        }
+        };
 
-        applied = true;
-
-        JOptionPane.showMessageDialog(this,
-            String.format("Successfully applied %d out of %d modifications.", appliedCount, toApply.size()),
-            "Modifications Applied", JOptionPane.INFORMATION_MESSAGE);
-
-        dispose();
+        // Start worker first, then show dialog (modal dialog blocks execution)
+        worker.execute();
+        progressDialog.setVisible(true);
     }
 
-    
+
     private NDFValue parseValueFromString(String valueStr, String valueType) {
         switch (valueType) {
             case "STRING":
-                return NDFValue.createString(valueStr.replace("'", ""));
+                // Handle quote type prefixes for string values
+                if (valueStr.startsWith("DQ:")) {
+                    // Double quotes
+                    String rawValue = valueStr.substring(3);
+                    return NDFValue.createString(rawValue, true);
+                } else if (valueStr.startsWith("SQ:")) {
+                    // Single quotes
+                    String rawValue = valueStr.substring(3);
+                    return NDFValue.createString(rawValue, false);
+                } else {
+                    // Legacy format without prefix - default to single quotes
+                    return NDFValue.createString(valueStr.replace("'", ""), false);
+                }
             case "NUMBER":
                 // Preserve format information when parsing numbers from profiles
                 double numValue = Double.parseDouble(valueStr);
@@ -548,16 +606,23 @@ public class ProfileLoadDialog extends JDialog {
             case "GUID":
                 return NDFValue.createGUID(valueStr);
             default:
-                return NDFValue.createString(valueStr);
+                // For unknown types, try to parse as string with quote type detection
+                if (valueStr.startsWith("DQ:") || valueStr.startsWith("SQ:")) {
+                    boolean useDoubleQuotes = valueStr.startsWith("DQ:");
+                    String rawValue = valueStr.substring(3);
+                    return NDFValue.createString(rawValue, useDoubleQuotes);
+                } else {
+                    return NDFValue.createString(valueStr);
+                }
         }
     }
 
-    
+
     public boolean wasApplied() {
         return applied;
     }
 
-    
+
     private class ValidationTableModel extends AbstractTableModel {
         private final String[] columnNames = {"Apply", "Unit", "Property", "Status", "Issue/Suggestion"};
 
@@ -612,7 +677,7 @@ public class ProfileLoadDialog extends JDialog {
             return text.length() > maxLength ? text.substring(0, maxLength - 3) + "..." : text;
         }
 
-        
+
         private String cleanPropertyPath(String propertyPath) {
             if (propertyPath == null) return "";
             if (propertyPath.startsWith("ModulesDescriptors[")) {
@@ -635,7 +700,7 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    
+
     private static class StatusCellRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
@@ -645,8 +710,10 @@ public class ProfileLoadDialog extends JDialog {
             if (!isSelected) {
                 if ("Valid".equals(value)) {
                     setBackground(new Color(220, 255, 220)); // Light green
+                    setForeground(Color.BLACK); // Dark black text for better contrast
                 } else {
                     setBackground(new Color(255, 220, 220)); // Light red
+                    setForeground(Color.BLACK); // Dark black text for better contrast
                 }
             }
 
@@ -654,7 +721,7 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    
+
     private boolean applyAutoFix(ValidationResult result) {
         String suggestion = result.suggestedFix;
         ModificationRecord oldModification = result.modification;
@@ -700,7 +767,7 @@ public class ProfileLoadDialog extends JDialog {
         return false; // Couldn't apply the fix
     }
 
-    
+
     private static class ScoredMatch {
         final String value;
         final double score;
@@ -711,7 +778,7 @@ public class ProfileLoadDialog extends JDialog {
         }
     }
 
-    
+
     private int levenshteinDistance(String a, String b) {
         if (a.length() == 0) return b.length();
         if (b.length() == 0) return a.length();
@@ -738,7 +805,7 @@ public class ProfileLoadDialog extends JDialog {
         return matrix[a.length()][b.length()];
     }
 
-    
+
     private double calculateTokenSimilarity(String target, String candidate) {
         String[] targetTokens = target.split("[\\s_-]+");
         String[] candidateTokens = candidate.split("[\\s_-]+");
@@ -758,7 +825,7 @@ public class ProfileLoadDialog extends JDialog {
         return (double) matches / Math.max(targetTokens.length, candidateTokens.length);
     }
 
-    
+
     private double calculateAffixSimilarity(String target, String candidate) {
         int commonPrefix = 0;
         int minLength = Math.min(target.length(), candidate.length());
@@ -783,7 +850,7 @@ public class ProfileLoadDialog extends JDialog {
         return (double) (commonPrefix + commonSuffix) / Math.max(target.length(), candidate.length());
     }
 
-    
+
     private double calculatePathStructuralSimilarity(String[] targetParts, String[] candidateParts) {
         if (targetParts.length != candidateParts.length) {
             return 0.0; // Different structure
@@ -804,8 +871,22 @@ public class ProfileLoadDialog extends JDialog {
         return (double) matches / targetParts.length;
     }
 
-    
+
     private String normalizeArrayIndices(String path) {
         return path.replaceAll("\\[\\d+\\]", "[*]");
+    }
+
+
+    private String getValueForComparison(NDFValue value) {
+        // For string values, extract the raw string content with quote type prefix
+        // This ensures consistent comparison and preserves quote type information
+        if (value instanceof NDFValue.StringValue) {
+            NDFValue.StringValue stringValue = (NDFValue.StringValue) value;
+            String prefix = stringValue.useDoubleQuotes() ? "DQ:" : "SQ:";
+            return prefix + stringValue.getValue();
+        }
+
+        // For other value types, use the standard toString representation
+        return value.toString();
     }
 }

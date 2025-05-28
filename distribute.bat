@@ -11,9 +11,9 @@ if exist WARNO-Mod-Maker rmdir /s /q WARNO-Mod-Maker
 if exist WarnoModMaker.jar del WarnoModMaker.jar
 if exist WARNO-Mod-Maker.zip del WARNO-Mod-Maker.zip
 
-rem Step 2: Build the JAR file
+rem Step 2: Build the fat JAR
 echo.
-echo Building JAR file...
+echo Building fat JAR...
 call build.bat
 
 if %ERRORLEVEL% neq 0 (
@@ -21,7 +21,13 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
-rem Step 3: Create redistributable package with jpackage using IntelliJ's Java 24
+rem Step 3: Rename fat JAR to expected name
+echo.
+echo Renaming fat JAR for distribution...
+if exist WarnoModMaker.jar del WarnoModMaker.jar
+rename WarnoModMaker-fat.jar WarnoModMaker.jar
+
+rem Step 4: Create redistributable package with jpackage using IntelliJ's Java 24
 echo.
 echo Creating redistributable package with jpackage...
 
@@ -57,12 +63,12 @@ if %ERRORLEVEL% neq 0 (
 rem Clean up temporary input directory
 rmdir /s /q temp_input
 
-rem Step 4: Clean up any unwanted directories in the package
+rem Step 5: Clean up any unwanted directories in the package
 echo.
 echo Cleaning package structure...
 if exist WARNO-Mod-Maker\resources rmdir /s /q WARNO-Mod-Maker\resources
 
-rem Step 5: Create ZIP distribution
+rem Step 6: Create ZIP distribution
 echo.
 echo Creating ZIP distribution...
 powershell -Command "Compress-Archive -Path 'WARNO-Mod-Maker' -DestinationPath 'WARNO-Mod-Maker.zip' -Force"
