@@ -95,7 +95,54 @@ public abstract class NDFValue {
         NULL
     }
 
-    
+    // ENHANCED MEMORY MODEL: Store formatting metadata alongside values
+    // This allows perfect formatting preservation even for modified objects
+    protected String originalPrefix = "";     // Whitespace/indentation before this value
+    protected String originalSuffix = "";     // Whitespace/newlines after this value
+    protected boolean hasOriginalFormatting = false; // Track if formatting was captured
+
+    /**
+     * Set the original formatting that surrounded this value in the source file
+     * @param prefix The whitespace/indentation that appeared before this value
+     * @param suffix The whitespace/newlines that appeared after this value
+     */
+    public void setOriginalFormatting(String prefix, String suffix) {
+        this.originalPrefix = prefix != null ? prefix : "";
+        this.originalSuffix = suffix != null ? suffix : "";
+        this.hasOriginalFormatting = true;
+    }
+
+    /**
+     * Get the original prefix (whitespace/indentation before this value)
+     */
+    public String getOriginalPrefix() {
+        return originalPrefix;
+    }
+
+    /**
+     * Get the original suffix (whitespace/newlines after this value)
+     */
+    public String getOriginalSuffix() {
+        return originalSuffix;
+    }
+
+    /**
+     * Check if this value has original formatting information
+     */
+    public boolean hasOriginalFormatting() {
+        return hasOriginalFormatting;
+    }
+
+    /**
+     * Clear formatting information (used when creating new values)
+     */
+    public void clearOriginalFormatting() {
+        this.originalPrefix = "";
+        this.originalSuffix = "";
+        this.hasOriginalFormatting = false;
+    }
+
+
     public abstract ValueType getType();
 
     
