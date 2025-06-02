@@ -46,7 +46,7 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
 
             if (userObject instanceof PropertyNode) {
                 PropertyNode propertyNode = (PropertyNode) userObject;
-                formatPropertyNode(propertyNode, selected);
+                formatPropertyNode(propertyNode, selected, tree);
             } else {
                 // Root or other nodes
                 setText(userObject.toString());
@@ -68,7 +68,7 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
         return this;
     }
 
-    private void formatPropertyNode(PropertyNode propertyNode, boolean selected) {
+    private void formatPropertyNode(PropertyNode propertyNode, boolean selected, JTree tree) {
         String propertyName = propertyNode.getName();
         NDFValue propertyValue = propertyNode.getValue();
 
@@ -76,21 +76,18 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
         String icon = getTypeIcon(propertyValue);
         String displayText = formatDisplayText(propertyName, propertyValue);
 
-        // Create HTML formatted text with icon and value preview
         StringBuilder html = new StringBuilder("<html>");
 
-        // Add type icon
         html.append(icon).append(" ");
 
-        // Add property name (bold) with modification color if needed
+        String displayName = propertyName;
         if (showModificationIndicators && propertyNode.isModified()) {
             html.append("<b><font color='").append(colorToHex(WarnoTheme.WARNING_ORANGE)).append("'>")
-                .append(escapeHtml(propertyName)).append("</font></b>");
+                .append(escapeHtml(displayName)).append("</font></b>");
         } else {
-            html.append("<b>").append(escapeHtml(propertyName)).append("</b>");
+            html.append("<b>").append(escapeHtml(displayName)).append("</b>");
         }
 
-        // Add value preview for simple types
         String valuePreview = getValuePreview(propertyValue);
         if (!valuePreview.isEmpty()) {
             String color = selected ? "#FFFFFF" : colorToHex(WarnoTheme.ACCENT_BLUE_LIGHT);
@@ -100,7 +97,7 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
 
         html.append("</html>");
         setText(html.toString());
-        setIcon(null); // We're using text-based icons in the HTML
+        setIcon(null);
     }
 
     private String getTypeIcon(NDFValue value) {
@@ -121,8 +118,14 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
                 return ICON_ENUM;
             case TEMPLATE_REF:
                 return ICON_REFERENCE;
+            case RESOURCE_REF:
+                return ICON_REFERENCE;
             case GUID:
                 return ICON_GUID;
+            case RAW_EXPRESSION:
+                return "[R]";
+            case NULL:
+                return "[∅]";
             case MAP:
                 return ICON_MAP;
             case TUPLE:
@@ -149,8 +152,8 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
         switch (value.getType()) {
             case STRING:
                 String strValue = value.toString();
-                if (strValue.length() > 30) {
-                    return "= \"" + strValue.substring(0, 27) + "...\"";
+                if (strValue.length() > 40) {
+                    return "= \"" + strValue.substring(0, 37) + "...\"";
                 }
                 return "= " + strValue;
 
@@ -177,10 +180,34 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
 
             case TEMPLATE_REF:
                 String refValue = value.toString();
-                if (refValue.length() > 25) {
-                    return "=> " + refValue.substring(0, 22) + "...";
+                if (refValue.length() > 35) {
+                    return "=> " + refValue.substring(0, 32) + "...";
                 }
                 return "=> " + refValue;
+
+            case RESOURCE_REF:
+                String resourceValue = value.toString();
+                if (resourceValue.length() > 35) {
+                    return "=> " + resourceValue.substring(0, 32) + "...";
+                }
+                return "=> " + resourceValue;
+
+            case GUID:
+                String guidValue = value.toString();
+                if (guidValue.length() > 25) {
+                    return "= " + guidValue.substring(0, 22) + "...";
+                }
+                return "= " + guidValue;
+
+            case RAW_EXPRESSION:
+                String rawValue = value.toString();
+                if (rawValue.length() > 30) {
+                    return "= " + rawValue.substring(0, 27) + "...";
+                }
+                return "= " + rawValue;
+
+            case NULL:
+                return "= nil";
 
             default:
                 return "";

@@ -8,9 +8,6 @@ import javax.swing.border.BevelBorder;
 import java.awt.*;
 import java.text.DecimalFormat;
 
-/**
- * Status bar component showing file information, memory usage, and operation status
- */
 public class StatusBar extends JPanel {
 
     private JLabel fileInfoLabel;

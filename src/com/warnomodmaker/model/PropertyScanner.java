@@ -427,7 +427,6 @@ public class PropertyScanner {
             return "Movement";
         }
 
-        // 4. VISION & DETECTION - Reconnaissance capabilities
         if (lowerPath.contains("visionrangesgru") || lowerPath.contains("opticalstrengths") ||
             lowerPath.contains("identifybaseprobability") || lowerPath.contains("timebetweeneachidentifyroll") ||
             lowerPath.contains("unitconcealmentbonus") || lowerPath.contains("scanner") ||
@@ -438,7 +437,6 @@ public class PropertyScanner {
             return "Vision & Detection";
         }
 
-        // 5. AI BEHAVIOR - Combat AI and tactics
         if (lowerPath.contains("distancetofleegru") || lowerPath.contains("maxdistanceforoffensivereactiongru") ||
             lowerPath.contains("maxdistanceforengagementgru") || lowerPath.contains("canassist") ||
             lowerPath.contains("assistrequestbroadcastradiusgru") || lowerPath.contains("automaticbehavior") ||
@@ -564,7 +562,6 @@ public class PropertyScanner {
             }
         }
 
-        // Sort by relevance (exact matches first, then by occurrence count)
         results.sort((a, b) -> {
             boolean aExact = a.name.toLowerCase().equals(lowerQuery);
             boolean bExact = b.name.toLowerCase().equals(lowerQuery);
@@ -619,12 +616,10 @@ public class PropertyScanner {
 
 
     public boolean hasPropertyDirect(ObjectValue unit, String propertyPath) {
-        // Wildcard paths: check if ANY array element has the property
         if (propertyPath.contains("[*]")) {
             return hasPropertyWithWildcards(unit, propertyPath);
         }
 
-        // Regular paths: check if property exists
         if (!PropertyUpdater.hasProperty(unit, propertyPath)) {
             return false;
         }
@@ -633,13 +628,10 @@ public class PropertyScanner {
             return false;
         }
 
-        // Apply comprehensive filtering based on WARNO data patterns
         if (!isModifiableProperty(value, propertyPath)) {
             return false;
         }
 
-        // GENERIC APPROACH: No file-type-specific filtering
-        // All NDF file types are treated equally - if the property exists and is modifiable, count it
         return true;
     }
 
@@ -851,16 +843,14 @@ public class PropertyScanner {
             return true; // All unit types have movement
         }
 
-        // BASIC MOVEMENT - All units can move
         if (lowerPath.contains("maxspeedinkmph") || lowerPath.contains("speedbonusfactoronroad") ||
             lowerPath.contains("maxaccelerationgru") || lowerPath.contains("maxdecelerationgru")) {
-            return true; // All unit types have basic movement
+            return true;
         }
 
-        // VISION & DETECTION - All units have vision
         if (lowerPath.contains("visionrangesgru") || lowerPath.contains("opticalstrengths") ||
             lowerPath.contains("identifybaseprobability") || lowerPath.contains("unitconcealmentbonus")) {
-            return true; // All unit types have vision/detection
+            return true;
         }
 
         // DAMAGE & HEALTH - All units have health
@@ -875,16 +865,14 @@ public class PropertyScanner {
             return true; // Most units have weapons
         }
 
-        // AI BEHAVIOR - All units have AI behavior
         if (lowerPath.contains("distancetofleegru") || lowerPath.contains("maxdistanceforoffensivereactiongru") ||
             lowerPath.contains("canassist") || lowerPath.contains("automaticbehavior")) {
-            return true; // All unit types have AI behavior
+            return true;
         }
 
-        // PRODUCTION & COST - All units have production costs
         if (lowerPath.contains("productiontime") || lowerPath.contains("productionressourcesneeded") ||
             lowerPath.contains("factory") || lowerPath.contains("cost")) {
-            return true; // All unit types have production properties
+            return true;
         }
 
         // STRATEGIC VALUES - All units have strategic values

@@ -45,7 +45,6 @@ public class UnitEditor extends JPanel {
 
 
     public UnitEditor() {
-        // Initialize propertyChangeSupport first, before any UI setup
         propertyChangeSupport = new PropertyChangeSupport(this);
 
         setLayout(new BorderLayout());
@@ -61,7 +60,6 @@ public class UnitEditor extends JPanel {
         propertyTree.setRootVisible(false);
         propertyTree.setShowsRootHandles(true);
 
-        // Set up enhanced tree cell renderer
         treeCellRenderer = new EnhancedTreeCellRenderer();
         propertyTree.setCellRenderer(treeCellRenderer);
         propertyTree.addTreeSelectionListener(new TreeSelectionListener() {
@@ -74,8 +72,24 @@ public class UnitEditor extends JPanel {
             }
         });
 
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                if (propertyTree != null) {
+                    propertyTree.repaint();
+                }
+            }
+        });
+
         JScrollPane treeScrollPane = new JScrollPane(propertyTree);
         splitPane.setLeftComponent(treeScrollPane);
+
+        splitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
+            if (propertyTree != null) {
+                SwingUtilities.invokeLater(() -> propertyTree.repaint());
+            }
+        });
+
         editorPanel = new JPanel(new BorderLayout());
         editorPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
@@ -324,7 +338,9 @@ public class UnitEditor extends JPanel {
             }
         }
 
-        EnhancedTreeCellRenderer.PropertyNode node = new EnhancedTreeCellRenderer.PropertyNode(propertyName, propertyValue);
+        // Create enhanced display name for better usability
+        String displayName = createEnhancedDisplayName(propertyName, propertyValue, currentPath);
+        EnhancedTreeCellRenderer.PropertyNode node = new EnhancedTreeCellRenderer.PropertyNode(displayName, propertyValue);
 
         // Check if this property has been modified
         if (modificationTracker != null && ndfObject != null) {
@@ -414,6 +430,85 @@ public class UnitEditor extends JPanel {
         }
 
         return treeNode;
+    }
+
+    private String createEnhancedDisplayName(String propertyName, NDFValue propertyValue, String currentPath) {
+        if (propertyName.startsWith("[") && propertyName.endsWith("]")) {
+            return createArrayElementDisplayName(propertyName, propertyValue, currentPath);
+        }
+
+        if (propertyName.startsWith("(") && propertyName.endsWith(")")) {
+            return createMapKeyDisplayName(propertyName, propertyValue);
+        }
+
+        return propertyName;
+    }
+
+    private String createArrayElementDisplayName(String indexName, NDFValue elementValue, String currentPath) {
+        String index = indexName.substring(1, indexName.length() - 1);
+
+        if (currentPath.endsWith("ModulesDescriptors")) {
+            return createModuleDisplayName(index, elementValue);
+        }
+
+        if (elementValue.getType() == NDFValue.ValueType.OBJECT) {
+            ObjectValue objValue = (ObjectValue) elementValue;
+            String typeName = objValue.getTypeName();
+            if (typeName != null && !typeName.isEmpty()) {
+                return "[" + index + "] " + typeName;
+            }
+        } else if (elementValue.getType() == NDFValue.ValueType.TEMPLATE_REF) {
+            String templateRef = elementValue.toString();
+            String displayRef = extractTemplateDisplayName(templateRef);
+            return "[" + index + "] " + displayRef;
+        } else if (elementValue.getType() == NDFValue.ValueType.STRING) {
+            String strValue = elementValue.toString();
+            if (strValue.length() > 20) {
+                strValue = strValue.substring(0, 17) + "...";
+            }
+            return "[" + index + "] " + strValue;
+        }
+
+        return "[" + index + "]";
+    }
+
+    private String createModuleDisplayName(String index, NDFValue moduleValue) {
+        if (moduleValue.getType() == NDFValue.ValueType.OBJECT) {
+            ObjectValue objValue = (ObjectValue) moduleValue;
+            String typeName = objValue.getTypeName();
+
+            String instanceName = objValue.getInstanceName();
+            if (instanceName != null && !instanceName.isEmpty()) {
+                return "[" + index + "] " + instanceName + " (" + typeName + ")";
+            } else {
+                return "[" + index + "] " + typeName;
+            }
+        } else if (moduleValue.getType() == NDFValue.ValueType.TEMPLATE_REF) {
+            String templateRef = moduleValue.toString();
+            String displayRef = extractTemplateDisplayName(templateRef);
+            return "[" + index + "] " + displayRef;
+        }
+
+        return "[" + index + "] Module";
+    }
+
+    private String createMapKeyDisplayName(String keyName, NDFValue keyValue) {
+        String keyContent = keyName.substring(1, keyName.length() - 1);
+
+        if (keyContent.length() > 25) {
+            keyContent = keyContent.substring(0, 22) + "...";
+        }
+
+        return "(" + keyContent + ")";
+    }
+
+    private String extractTemplateDisplayName(String templateRef) {
+        if (templateRef.startsWith("~/") || templateRef.startsWith("$/")) {
+            String withoutPrefix = templateRef.substring(2);
+            String[] parts = withoutPrefix.split("/");
+            return parts[parts.length - 1];
+        }
+        return templateRef;
     }
 
     private boolean propertyMatchesFilter(String propertyName, NDFValue propertyValue, String fullPath) {
@@ -527,20 +622,39 @@ public class UnitEditor extends JPanel {
             if (node.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
                 EnhancedTreeCellRenderer.PropertyNode propertyNode = (EnhancedTreeCellRenderer.PropertyNode) node.getUserObject();
                 String nodeName = propertyNode.getName();
-                if (nodeName.startsWith("[") && nodeName.endsWith("]")) {
+
+                // Extract the actual property name from enhanced display names
+                String actualPropertyName = extractActualPropertyName(nodeName);
+
+                if (actualPropertyName.startsWith("[") && actualPropertyName.endsWith("]")) {
                     // This is an array index, append it directly to the path without a dot
-                    path.append(nodeName);
+                    path.append(actualPropertyName);
                 } else {
                     // Regular property name
                     if (path.length() > 0) {
                         path.append(".");
                     }
-                    path.append(nodeName);
+                    path.append(actualPropertyName);
                 }
             }
         }
 
         return path.toString();
+    }
+
+    private String extractActualPropertyName(String displayName) {
+        if (displayName.startsWith("[") && displayName.contains("]")) {
+            int closeBracket = displayName.indexOf("]");
+            if (closeBracket != -1) {
+                return displayName.substring(0, closeBracket + 1);
+            }
+        }
+
+        if (displayName.startsWith("(") && displayName.endsWith(")")) {
+            return displayName;
+        }
+
+        return displayName;
     }
 
 
@@ -566,7 +680,10 @@ public class UnitEditor extends JPanel {
 
             if (node.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
                 EnhancedTreeCellRenderer.PropertyNode propertyNode = (EnhancedTreeCellRenderer.PropertyNode) node.getUserObject();
-                String propertyName = propertyNode.getName();
+                String displayName = propertyNode.getName();
+
+                // Extract the actual property name from enhanced display names
+                String propertyName = extractActualPropertyName(displayName);
 
                 // Skip "Type" node
                 if ("Type".equals(propertyName)) {
@@ -589,7 +706,11 @@ public class UnitEditor extends JPanel {
                         DefaultMutableTreeNode nextNode = (DefaultMutableTreeNode) nodes[i + 1];
                         if (nextNode.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
                             EnhancedTreeCellRenderer.PropertyNode nextPropertyNode = (EnhancedTreeCellRenderer.PropertyNode) nextNode.getUserObject();
-                            String indexStr = nextPropertyNode.getName();
+                            String nextDisplayName = nextPropertyNode.getName();
+
+                            // Extract the actual index from enhanced display names
+                            String indexStr = extractActualPropertyName(nextDisplayName);
+
                             if (indexStr.startsWith("[") && indexStr.endsWith("]")) {
                                 try {
                                     int index = Integer.parseInt(indexStr.substring(1, indexStr.length() - 1));
@@ -880,9 +1001,6 @@ public class UnitEditor extends JPanel {
     }
 
 
-    /**
-     * Helper method to get original quote type for tuple elements
-     */
     private boolean getOriginalQuoteType(int elementIndex) {
         if (selectedValue instanceof NDFValue.TupleValue) {
             NDFValue.TupleValue originalTuple = (NDFValue.TupleValue) selectedValue;
@@ -894,13 +1012,9 @@ public class UnitEditor extends JPanel {
                 }
             }
         }
-        return false; // Default to single quotes
+        return false;
     }
 
-
-    /**
-     * Helper method to remove quotes from user input if present
-     */
     private String removeQuotesIfPresent(String input) {
         if ((input.startsWith("\"") && input.endsWith("\"")) ||
             (input.startsWith("'") && input.endsWith("'"))) {

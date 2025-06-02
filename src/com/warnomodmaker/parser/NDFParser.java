@@ -801,10 +801,6 @@ public class NDFParser {
         return object;
     }
 
-    // REMOVED: findTypeNameTokenIndex() method - no longer needed
-    // Now passing token index directly to parseObject()
-
-
     private void advance() {
         currentTokenIndex++;
         if (currentTokenIndex < tokens.size()) {
@@ -825,7 +821,6 @@ public class NDFParser {
 
 
     private NDFToken expect(NDFToken.TokenType type) throws NDFParseException {
-        // Enhanced tolerance: Skip whitespace and comments before checking token type
         skipWhitespaceAndComments();
 
         if (currentToken.getType() != type) {
@@ -896,18 +891,11 @@ public class NDFParser {
     }
 
     private boolean isWhitespaceToken(NDFToken token) {
-        // A token is considered whitespace if it has significant leading/trailing whitespace
-        // but no meaningful content, or if it's an unknown token that's just whitespace
         return token.getType() == NDFToken.TokenType.UNKNOWN &&
                (token.getValue().trim().isEmpty() || token.getValue().matches("\\s+"));
     }
 
-    // ===== STANDALONE UNITEDESCRIPTOR FUNCTIONALITY =====
-    // Specialized parsing for UniteDescriptor.ndf without affecting other files
 
-    /**
-     * STANDALONE UniteDescriptor parser - handles the unique patterns in UniteDescriptor.ndf
-     */
     private List<ObjectValue> parseUniteDescriptor() throws IOException, NDFParseException {
         List<ObjectValue> ndfObjects = new ArrayList<>();
 

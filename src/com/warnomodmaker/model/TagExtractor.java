@@ -10,10 +10,8 @@ public class TagExtractor {
     public static Set<String> extractAllMeaningfulTags(List<ObjectValue> unitDescriptors) {
         Set<String> allTags = new HashSet<>();
 
-        // Extract all unique tags, excluding meaningless ones
         for (ObjectValue unit : unitDescriptors) {
             Set<String> unitTags = extractTagsFromUnit(unit);
-            // Filter out tags containing "UNITE" as they're not meaningful for filtering
             unitTags = unitTags.stream()
                 .filter(tag -> !tag.contains("UNITE"))
                 .collect(Collectors.toSet());
@@ -28,7 +26,6 @@ public class TagExtractor {
         Map<String, Set<String>> categorizedTags = new HashMap<>();
         Set<String> allTags = extractAllMeaningfulTags(unitDescriptors);
 
-        // Categorize tags
         categorizedTags.put("Unit Types", categorizeUnitTypeTags(allTags));
         categorizedTags.put("Weapons & Combat", categorizeWeaponTags(allTags));
         categorizedTags.put("Movement & Mobility", categorizeMobilityTags(allTags));

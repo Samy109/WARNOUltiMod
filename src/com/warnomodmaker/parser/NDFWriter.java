@@ -88,10 +88,8 @@ public class NDFWriter {
 
         if (preserveFormatting && originalTokens != null && !originalTokens.isEmpty() &&
             isCompleteFile && !hasModifiedObjects) {
-            // Only use writeExact for complete file writes with NO modified objects
             writeExact(ndfObjects);
         } else {
-            // Use memory model approach for individual objects, modified objects, or when not preserving formatting
             writePreservedComments();
             for (ObjectValue ndfObject : ndfObjects) {
                 writeNDFObject(ndfObject);
@@ -107,7 +105,7 @@ public class NDFWriter {
             writer.write("\n");
         }
         if (!preservedComments.isEmpty()) {
-            writer.write("\n"); // Extra line after comments
+            writer.write("\n");
         }
     }
 
@@ -869,25 +867,7 @@ public class NDFWriter {
     }
 
 
-    // REMOVED: Old writeValue method - replaced by writeCleanValue for modified objects
-    // This method caused array duplication issues and is no longer used
 
-
-    // REMOVED: Old writeArray method - replaced by writeCleanArray for modified objects
-    // This method was part of the corrupted system that caused array duplication
-
-    // REMOVED: shouldArrayBeSingleLine() and shouldUseCompactArrayFormat()
-    // These methods made formatting decisions which violated 1-1 reproduction requirement
-    // Now using EXACT ORIGINAL FORMATTING PRESERVATION instead
-
-
-    // REMOVED: Old writeTuple method - replaced by writeCleanTuple
-
-
-    // REMOVED: Old writeMap method - replaced by writeCleanMap
-
-
-    // REMOVED: Old writeObject method - replaced by writeCleanObject
 
     // REMOVED: Old writeArrayElementContent method - was part of the corrupted system
 

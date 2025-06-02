@@ -39,7 +39,7 @@ public class NDFTokenizer {
 
         do {
             token = nextToken();
-            tokens.add(token); // Include ALL tokens, including comments
+            tokens.add(token);
         } while (token.getType() != NDFToken.TokenType.EOF);
 
         return tokens;
@@ -47,7 +47,6 @@ public class NDFTokenizer {
 
     
     public NDFToken nextToken() throws IOException {
-        // Collect leading whitespace
         String leadingWhitespace = collectWhitespace();
         if (reachedEOF) {
             return new NDFToken(NDFToken.TokenType.EOF, "", line, column, leadingWhitespace, "", "");
@@ -134,7 +133,6 @@ public class NDFTokenizer {
         buffer.append("//");
         StringBuilder originalTextBuffer = new StringBuilder("//");
 
-        // Consume the '//'
         advance();
         advance();
         while (!reachedEOF && currentChar != '\n' && currentChar != '\r') {

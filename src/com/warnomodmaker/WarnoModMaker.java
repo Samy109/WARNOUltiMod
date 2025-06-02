@@ -12,7 +12,6 @@ public class WarnoModMaker {
     public static void main(String[] args) {
 
         try {
-            // Try to use our custom theme first, fallback to FlatDarkLaf
             if (!WarnoTheme.setup()) {
                 FlatDarkLaf.setup();
             }
