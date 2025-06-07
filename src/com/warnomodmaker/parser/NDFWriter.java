@@ -57,10 +57,11 @@ public class NDFWriter {
     public void write(List<ObjectValue> ndfObjects) throws IOException {
         setAllObjects(ndfObjects);
         boolean hasModifiedObjects = ndfObjects.stream().anyMatch(modifiedObjects::contains);
+        boolean hasNewlyAddedObjects = ndfObjects.stream().anyMatch(obj -> !obj.hasOriginalTokenRange());
         boolean isCompleteFile = isCompleteFileWrite(ndfObjects);
 
         if (preserveFormatting && originalTokens != null && !originalTokens.isEmpty() &&
-            isCompleteFile && !hasModifiedObjects) {
+            isCompleteFile && !hasModifiedObjects && !hasNewlyAddedObjects) {
             writeExact(ndfObjects);
         } else {
             writePreservedComments();
@@ -167,6 +168,7 @@ public class NDFWriter {
                 writer.write(instanceName);
                 writer.write(" is ");
                 writer.write(ndfObject.getTypeName());
+                writer.write("\n");
                 writeCleanObjectFromMemoryModel(ndfObject);
             }
         }
@@ -234,106 +236,24 @@ public class NDFWriter {
 
 
     private void writeValueContent(NDFValue value) throws IOException {
-        switch (value.getType()) {
-            case STRING:
-                StringValue stringValue = (StringValue) value;
-                if (stringValue.useDoubleQuotes()) {
-                    writer.write("\"");
-                    writer.write(stringValue.getValue());
-                    writer.write("\"");
-                } else {
-                    writer.write("'");
-                    writer.write(stringValue.getValue());
-                    writer.write("'");
-                }
-                break;
-
-            case NUMBER:
-                NumberValue numberValue = (NumberValue) value;
-                writer.write(numberValue.toString());
-                break;
-
-            case BOOLEAN:
-                BooleanValue booleanValue = (BooleanValue) value;
-                writer.write(booleanValue.toString());
-                break;
-
-            case TEMPLATE_REF:
-                TemplateRefValue templateRefValue = (TemplateRefValue) value;
-                if (templateRefValue.getInstanceName() != null) {
-                    writer.write(templateRefValue.getInstanceName());
-                    writer.write(" is ");
-                }
-                writer.write(templateRefValue.getPath());
-                break;
-
-            case RESOURCE_REF:
-                ResourceRefValue resourceRefValue = (ResourceRefValue) value;
-                writer.write(resourceRefValue.getPath());
-                break;
-
-            case GUID:
-                GUIDValue guidValue = (GUIDValue) value;
-                writer.write(guidValue.getGUID());
-                break;
-
-            case ENUM:
-                EnumValue enumValue = (EnumValue) value;
-                writer.write(enumValue.toString());
-                break;
-
-            case RAW_EXPRESSION:
-                RawExpressionValue rawValue = (RawExpressionValue) value;
-                writer.write(rawValue.getExpression());
-                break;
-
-            case ARRAY:
-                ArrayValue arrayValue = (ArrayValue) value;
-                writeFormattingAwareArray(arrayValue);
-                break;
-
-            case TUPLE:
-                TupleValue tupleValue = (TupleValue) value;
-                writeFormattingAwareTuple(tupleValue);
-                break;
-
-            case MAP:
-                MapValue mapValue = (MapValue) value;
-                writeFormattingAwareMap(mapValue);
-                break;
-
-            case OBJECT:
-                ObjectValue objectValue = (ObjectValue) value;
-                // Special handling for RGBA objects
-                if ("RGBA".equals(objectValue.getTypeName())) {
-                    writeCleanRGBA(objectValue);
-                } else {
-                    writeCleanObject(objectValue);
-                }
-                break;
-
-            case NULL:
-                writer.write("nil");
-                break;
-
-            default:
-                writer.write(value.toString());
-                break;
-        }
+        writeValue(value, false); // Use formatting-aware writing
     }
 
-
     private void writeCleanValue(NDFValue value) throws IOException {
+        writeValue(value, true); // Use clean writing
+    }
+
+    private void writeValue(NDFValue value, boolean useCleanFormatting) throws IOException {
         switch (value.getType()) {
             case STRING:
                 StringValue stringValue = (StringValue) value;
                 if (stringValue.useDoubleQuotes()) {
                     writer.write("\"");
-                    writer.write(stringValue.getValue());
+                    writer.write(escapeStringValue(stringValue.getValue(), true));
                     writer.write("\"");
                 } else {
                     writer.write("'");
-                    writer.write(stringValue.getValue());
+                    writer.write(escapeStringValue(stringValue.getValue(), false));
                     writer.write("'");
                 }
                 break;
@@ -350,11 +270,13 @@ public class NDFWriter {
 
             case TEMPLATE_REF:
                 TemplateRefValue templateRefValue = (TemplateRefValue) value;
-                if (templateRefValue.getInstanceName() != null) {
+                if (templateRefValue.getInstanceName() != null && !templateRefValue.getInstanceName().trim().isEmpty()) {
                     writer.write(templateRefValue.getInstanceName());
                     writer.write(" is ");
+                    writer.write(templateRefValue.getPath());
+                } else {
+                    writer.write(templateRefValue.getPath());
                 }
-                writer.write(templateRefValue.getPath());
                 break;
 
             case RESOURCE_REF:
@@ -379,22 +301,33 @@ public class NDFWriter {
 
             case ARRAY:
                 ArrayValue arrayValue = (ArrayValue) value;
-                writeCleanArray(arrayValue);
+                if (useCleanFormatting) {
+                    writeCleanArray(arrayValue);
+                } else {
+                    writeFormattingAwareArray(arrayValue);
+                }
                 break;
 
             case TUPLE:
                 TupleValue tupleValue = (TupleValue) value;
-                writeCleanTuple(tupleValue);
+                if (useCleanFormatting) {
+                    writeCleanTuple(tupleValue);
+                } else {
+                    writeFormattingAwareTuple(tupleValue);
+                }
                 break;
 
             case MAP:
                 MapValue mapValue = (MapValue) value;
-                writeCleanMap(mapValue);
+                if (useCleanFormatting) {
+                    writeCleanMap(mapValue);
+                } else {
+                    writeFormattingAwareMap(mapValue);
+                }
                 break;
 
             case OBJECT:
                 ObjectValue objectValue = (ObjectValue) value;
-                // Special handling for RGBA objects
                 if ("RGBA".equals(objectValue.getTypeName())) {
                     writeCleanRGBA(objectValue);
                 } else {
@@ -714,11 +647,11 @@ public class NDFWriter {
                 writer.write(objectValue.getInstanceName());
                 writer.write(" is ");
                 writer.write(objectValue.getTypeName());
-                writeCleanObjectFromMemoryModel(objectValue); // Use original formatting for array elements
+                writeCleanObjectFromMemoryModelInline(objectValue); // Use inline formatting for array elements
             } else {
                 // Simple object: "TTagsModuleDescriptor(...)"
                 writer.write(objectValue.getTypeName());
-                writeCleanObjectFromMemoryModel(objectValue); // Use original formatting for array elements
+                writeCleanObjectFromMemoryModelInline(objectValue); // Use inline formatting for array elements
             }
         } else {
             // Fallback to standard clean value writing
@@ -726,6 +659,56 @@ public class NDFWriter {
         }
     }
 
+    /**
+     * Write object content inline (without newline before opening parenthesis)
+     * Used for array elements where the type name and content should be on the same line
+     */
+    private void writeCleanObjectFromMemoryModelInline(ObjectValue object) throws IOException {
+        Map<String, NDFValue> properties = object.getProperties();
+
+        if (properties.isEmpty()) {
+            writer.write("()");
+            return;
+        }
+
+        writer.write("(\n");
+
+        boolean first = true;
+        for (Map.Entry<String, NDFValue> entry : properties.entrySet()) {
+            String propertyName = entry.getKey();
+            NDFValue propertyValue = entry.getValue();
+
+            if (!first) {
+                writer.write("\n");
+            }
+            first = false;
+
+            // Write property with proper indentation for array context
+            writer.write("      "); // Extra indentation for array element properties
+            writer.write(propertyName);
+            writer.write(" = ");
+            writeCleanValue(propertyValue);
+        }
+
+        writer.write("\n    )");
+    }
+
+    /**
+     * Escape string values to prevent parsing issues
+     */
+    private String escapeStringValue(String value, boolean useDoubleQuotes) {
+        if (value == null) {
+            return "";
+        }
+
+        if (useDoubleQuotes) {
+            // Escape double quotes and backslashes
+            return value.replace("\\", "\\\\").replace("\"", "\\\"");
+        } else {
+            // Escape single quotes and backslashes
+            return value.replace("\\", "\\\\").replace("'", "\\'");
+        }
+    }
 
     private void writeConstantDefinition(ObjectValue constantDef) throws IOException {
         // PERFECT SURGICAL FIX: Prioritize token reconstruction for exact formatting preservation

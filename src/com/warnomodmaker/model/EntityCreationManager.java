@@ -916,6 +916,15 @@ public class EntityCreationManager {
                                                    Map<String, Object> customProperties,
                                                    Map<String, List<NDFValue.ObjectValue>> openFiles,
                                                    Map<String, ModificationTracker> trackers) {
+        // Validate input parameters
+        if (entityType == null || entityType.trim().isEmpty()) {
+            return new EntityCreationResult(false, entityName).addError("Entity type cannot be null or empty");
+        }
+
+        if (entityName == null || entityName.trim().isEmpty()) {
+            return new EntityCreationResult(false, entityName).addError("Entity name cannot be null or empty");
+        }
+
         EntityCreationResult result = new EntityCreationResult(true, entityName);
 
         EntityBlueprint blueprint = entityBlueprints.get(entityType);
@@ -946,8 +955,8 @@ public class EntityCreationManager {
                 continue;
             }
 
-            // Generate template name for cross-references
-            String templateName = generateTemplateName(entityName, requirement.getObjectType(), fileType);
+            // Generate unique template name for cross-references
+            String templateName = generateUniqueTemplateName(entityName, requirement.getObjectType(), fileType, openFiles);
             crossFileReferences.put(fileType, templateName);
         }
 
@@ -1085,6 +1094,35 @@ public class EntityCreationManager {
     }
 
     /**
+     * Generate unique template name following WARNO naming conventions, avoiding collisions
+     */
+    private String generateUniqueTemplateName(String entityName, String objectType, String fileType,
+                                            Map<String, List<NDFValue.ObjectValue>> openFiles) {
+        String baseName = generateTemplateName(entityName, objectType, fileType);
+
+        // Check if this file is open and if the name already exists
+        List<NDFValue.ObjectValue> objects = openFiles.get(fileType);
+        if (objects == null || objects.isEmpty()) {
+            return baseName; // File not open or empty, no collision possible
+        }
+
+        // Check for collision
+        if (!hasNameCollisionInFile(objects, baseName)) {
+            return baseName; // No collision, use original name
+        }
+
+        // Generate unique name by appending counter
+        int counter = 1;
+        String uniqueName;
+        do {
+            uniqueName = baseName + "_" + counter;
+            counter++;
+        } while (hasNameCollisionInFile(objects, uniqueName));
+
+        return uniqueName;
+    }
+
+    /**
      * Generate template name following WARNO naming conventions
      */
     private String generateTemplateName(String entityName, String objectType, String fileType) {
@@ -1113,6 +1151,18 @@ public class EntityCreationManager {
                 String cleanType = objectType.replace("T", "").replace("Descriptor", "");
                 return cleanType + "_" + entityName;
         }
+    }
+
+    /**
+     * Check if an object with the given name exists in the file
+     */
+    private boolean hasNameCollisionInFile(List<NDFValue.ObjectValue> objects, String instanceName) {
+        for (NDFValue.ObjectValue obj : objects) {
+            if (instanceName.equals(obj.getInstanceName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1326,8 +1376,9 @@ public class EntityCreationManager {
             createdObjects.put(fileType, objectName);
         }
 
-        public void addError(String error) {
+        public EntityCreationResult addError(String error) {
             errors.add(error);
+            return this;
         }
 
         public void addPendingFileCreation(String fileType, String templateName, String objectType, Map<String, Object> properties) {

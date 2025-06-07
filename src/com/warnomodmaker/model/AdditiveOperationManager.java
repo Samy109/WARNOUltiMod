@@ -55,6 +55,11 @@ public class AdditiveOperationManager {
                                String instanceName, Map<String, Object> properties,
                                ModificationTracker tracker) {
         try {
+            // Check for name collisions first
+            if (hasNameCollision(ndfObjects, instanceName)) {
+                throw new IllegalArgumentException("Object with name '" + instanceName + "' already exists in the file");
+            }
+
             // Get template for object type
             NDFValue.ObjectValue template = templateManager.getTemplate(objectType);
             if (template == null) {
@@ -64,7 +69,10 @@ public class AdditiveOperationManager {
             // Clone template and customize
             NDFValue.ObjectValue newObject = cloneObject(template);
             newObject.setInstanceName(instanceName);
-            newObject.setExported(true);
+
+            // Set export status to match the majority of existing objects in the file
+            boolean shouldExport = determineExportStatus(ndfObjects);
+            newObject.setExported(shouldExport);
 
             // Generate new GUID if needed
             if (newObject.hasProperty("DescriptorId")) {
@@ -105,7 +113,47 @@ public class AdditiveOperationManager {
             return false;
         }
     }
-    
+
+    /**
+     * Determine whether new objects should be exported based on existing objects in the file
+     */
+    private boolean determineExportStatus(List<NDFValue.ObjectValue> existingObjects) {
+        if (existingObjects.isEmpty()) {
+            return true; // Default to exported if no existing objects
+        }
+
+        // Count exported vs non-exported objects
+        int exportedCount = 0;
+        int nonExportedCount = 0;
+
+        for (NDFValue.ObjectValue obj : existingObjects) {
+            if (obj.isExported()) {
+                exportedCount++;
+            } else {
+                nonExportedCount++;
+            }
+        }
+
+        // Use the majority status, defaulting to exported if tied
+        return exportedCount >= nonExportedCount;
+    }
+
+    /**
+     * Check if an object with the given instance name already exists
+     */
+    private boolean hasNameCollision(List<NDFValue.ObjectValue> existingObjects, String instanceName) {
+        if (instanceName == null || instanceName.trim().isEmpty()) {
+            return false; // Empty names are handled by validation elsewhere
+        }
+
+        for (NDFValue.ObjectValue obj : existingObjects) {
+            if (instanceName.equals(obj.getInstanceName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Add a new module to an existing object's ModulesDescriptors array
      */

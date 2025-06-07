@@ -38,6 +38,9 @@ public class NDFParser {
 
         if (fileType == NDFFileType.UNITE_DESCRIPTOR) {
             return parseUniteDescriptor();
+        } else if (fileType == NDFFileType.FIRE_DESCRIPTOR || fileType == NDFFileType.SMOKE_DESCRIPTOR) {
+            // Fire and Smoke descriptors have the same structure as Unite descriptors (exported objects)
+            return parseUniteDescriptor();
         }
 
         List<ObjectValue> ndfObjects = new ArrayList<>();
@@ -67,11 +70,12 @@ public class NDFParser {
                     advance();
                 }
             } catch (NDFParseException e) {
-                // Skip failed object parsing and continue - only log if debugging
-                // System.err.println("Warning: Parsing error at line " + currentToken.getLine() + ": " + e.getMessage());
-                while (currentToken.getType() != NDFToken.TokenType.EOF &&
-                       currentToken.getType() != NDFToken.TokenType.EXPORT &&
-                       currentToken.getType() != NDFToken.TokenType.RESOURCE_REF) {
+                // CRITICAL: Log parsing errors to help debug missing objects
+                System.err.println("WARNING: General parsing error at line " + currentToken.getLine() +
+                                 ", token: " + currentToken.getValue() + " (" + currentToken.getType() + "): " + e.getMessage());
+
+                // Try to recover more gracefully - advance just one token instead of skipping to next major token
+                if (currentToken.getType() != NDFToken.TokenType.EOF) {
                     advance();
                 }
             }
@@ -901,12 +905,13 @@ public class NDFParser {
                     advance(); // Skip any other tokens
                 }
             } catch (NDFParseException e) {
-                // Skip failed object parsing and continue - only log if debugging
-                // System.err.println("Warning: UniteDescriptor parsing error at line " + currentToken.getLine() + ": " + e.getMessage());
+                // CRITICAL: Log parsing errors to help debug missing objects
+                System.err.println("WARNING: UniteDescriptor parsing error at line " + currentToken.getLine() +
+                                 ", token: " + currentToken.getValue() + " (" + currentToken.getType() + "): " + e.getMessage());
 
-                // Skip to next export
-                while (currentToken.getType() != NDFToken.TokenType.EOF &&
-                       currentToken.getType() != NDFToken.TokenType.EXPORT) {
+                // Try to recover more gracefully - advance just one token instead of skipping to next export
+                // This prevents losing entire objects due to minor parsing issues
+                if (currentToken.getType() != NDFToken.TokenType.EOF) {
                     advance();
                 }
             }
