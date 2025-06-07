@@ -23,6 +23,7 @@ import java.util.Set;
 public class UnitEditor extends JPanel {
     private ObjectValue ndfObject;
     private ModificationTracker modificationTracker;
+    private NDFValue.NDFFileType fileType = NDFValue.NDFFileType.UNKNOWN;
     private PropertyChangeSupport propertyChangeSupport;
 
     private JSplitPane splitPane;
@@ -118,8 +119,13 @@ public class UnitEditor extends JPanel {
 
 
     public void setUnitDescriptor(ObjectValue ndfObject, ModificationTracker modificationTracker) {
+        setUnitDescriptor(ndfObject, modificationTracker, NDFValue.NDFFileType.UNKNOWN);
+    }
+
+    public void setUnitDescriptor(ObjectValue ndfObject, ModificationTracker modificationTracker, NDFValue.NDFFileType fileType) {
         this.ndfObject = ndfObject;
         this.modificationTracker = modificationTracker;
+        this.fileType = fileType;
 
         // Clear any stale state when setting a new object
         clearEditorState();
@@ -493,13 +499,8 @@ public class UnitEditor extends JPanel {
     }
 
     private String createMapKeyDisplayName(String keyName, NDFValue keyValue) {
-        String keyContent = keyName.substring(1, keyName.length() - 1);
-
-        if (keyContent.length() > 25) {
-            keyContent = keyContent.substring(0, 22) + "...";
-        }
-
-        return "(" + keyContent + ")";
+        // No truncation - show the full key name
+        return keyName;
     }
 
     private String extractTemplateDisplayName(String templateRef) {
@@ -851,8 +852,8 @@ public class UnitEditor extends JPanel {
 
 
 
-            // Use PropertyUpdater.updateProperty with tracking - same as mass changes!
-            boolean success = PropertyUpdater.updateProperty(ndfObject, actualPath, newValue, modificationTracker);
+            // Use PropertyUpdater.updateProperty with tracking and file type - same as mass changes!
+            boolean success = PropertyUpdater.updateProperty(ndfObject, actualPath, newValue, modificationTracker, fileType);
 
             if (!success) {
                 throw new IllegalArgumentException("Failed to update property at path: " + actualPath);
@@ -988,7 +989,7 @@ public class UnitEditor extends JPanel {
             actualPath = path.substring(5);
         }
         // Note: Don't pass modificationTracker here as we already recorded it in applyValue()
-        boolean success = PropertyUpdater.updateProperty(ndfObject, actualPath, newValue, null);
+        boolean success = PropertyUpdater.updateProperty(ndfObject, actualPath, newValue, null, fileType);
 
         if (!success) {
             throw new IllegalArgumentException("Failed to update property at path: " + path);

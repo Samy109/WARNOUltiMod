@@ -3,9 +3,10 @@ package com.warnomodmaker.model;
 import com.warnomodmaker.model.NDFValue.*;
 import com.warnomodmaker.parser.NDFWriter;
 
+import java.util.Map;
+
 public class PropertyUpdater {
 
-    // File type context for property navigation
     private static NDFValue.NDFFileType currentFileType = NDFValue.NDFFileType.UNKNOWN;
 
     public static void setFileType(NDFValue.NDFFileType fileType) {
@@ -22,7 +23,11 @@ public class PropertyUpdater {
         ADD("Add"),
         SUBTRACT("Subtract"),
         INCREASE_PERCENT("Percentage increase"),
-        DECREASE_PERCENT("Percentage decrease");
+        DECREASE_PERCENT("Percentage decrease"),
+        OBJECT_ADDED("Object Added"),
+        MODULE_ADDED("Module Added"),
+        PROPERTY_ADDED("Property Added"),
+        ARRAY_ELEMENT_ADDED("Array Element Added");
 
         private final String displayName;
 
@@ -47,34 +52,40 @@ public class PropertyUpdater {
 
 
     public static boolean updateProperty(ObjectValue ndfObject, String propertyPath, NDFValue newValue, ModificationTracker tracker) {
+        return updateProperty(ndfObject, propertyPath, newValue, tracker, currentFileType);
+    }
+
+    public static boolean updateProperty(ObjectValue ndfObject, String propertyPath, NDFValue newValue, ModificationTracker tracker, NDFValue.NDFFileType fileType) {
         if (ndfObject == null || propertyPath == null || propertyPath.isEmpty()) {
             return false;
         }
         NDFValue oldValue = null;
         if (tracker != null) {
-            oldValue = getPropertyValue(ndfObject, propertyPath);
+            oldValue = getPropertyValue(ndfObject, propertyPath, fileType);
         }
 
-        // CRITICAL FIX: Handle complex nested paths with multiple array indices
-        boolean success = navigateToPropertyAndUpdate(ndfObject, propertyPath, newValue, tracker, oldValue);
+        // Use file-type-aware navigation for updates - same as getPropertyValue
+        boolean success = navigateToPropertyAndUpdateWithFileType(ndfObject, propertyPath, newValue, tracker, oldValue, fileType);
 
         return success;
     }
 
-    private static boolean navigateToPropertyAndUpdate(ObjectValue ndfObject, String propertyPath, NDFValue newValue, ModificationTracker tracker, NDFValue oldValue) {
-        // Parse the property path to handle complex nested structures
-        String[] pathParts = propertyPath.split("\\.");
+    private static boolean navigateToPropertyAndUpdateWithFileType(ObjectValue ndfObject, String propertyPath, NDFValue newValue, ModificationTracker tracker, NDFValue oldValue, NDFValue.NDFFileType fileType) {
+        // Route to appropriate navigation logic based on file type
+        Object[] navigationResult;
+        if (fileType == NDFValue.NDFFileType.UNITE_DESCRIPTOR) {
+            navigationResult = navigateToUniteDescriptorProperty(ndfObject, propertyPath);
+        } else {
+            String[] pathParts = propertyPath.split("\\.");
+            navigationResult = navigateToProperty(ndfObject, pathParts);
+        }
 
-        // Navigate to the target location
-        Object[] navigationResult = navigateToProperty(ndfObject, pathParts);
         if (navigationResult == null) {
             return false;
         }
 
         Object container = navigationResult[0];
         Object key = navigationResult[1];
-
-        // Update the value based on container type
         boolean success = false;
         if (container instanceof ObjectValue && key instanceof String) {
             ObjectValue obj = (ObjectValue) container;
@@ -95,9 +106,21 @@ public class PropertyUpdater {
                 tuple.getElements().set(index, newValue);
                 success = true;
             }
+        } else if (container instanceof MapValue && key instanceof String) {
+            MapValue map = (MapValue) container;
+            String mapKey = (String) key;
+            // Find the entry with matching key and update its value
+            for (int i = 0; i < map.getEntries().size(); i++) {
+                Map.Entry<NDFValue, NDFValue> entry = map.getEntries().get(i);
+                if (entry.getKey().toString().equals(mapKey)) {
+                    // Replace the entry with a new one with the updated value
+                    map.getEntries().set(i, new java.util.AbstractMap.SimpleEntry<>(entry.getKey(), newValue));
+                    success = true;
+                    break;
+                }
+            }
         }
 
-        // Record the modification if tracker is provided
         if (success && tracker != null && oldValue != null) {
             String objectName = ndfObject.getInstanceName() != null ? ndfObject.getInstanceName() : "Unknown Object";
             tracker.recordModification(objectName, propertyPath, oldValue, newValue);
@@ -114,7 +137,6 @@ public class PropertyUpdater {
             boolean isLastPart = (i == pathParts.length - 1);
 
             if (part.contains("[") && part.contains("]")) {
-                // Handle array/tuple access: PropertyName[index]
                 int bracketStart = part.indexOf('[');
                 String propertyName = part.substring(0, bracketStart);
                 String indexStr = part.substring(bracketStart + 1, part.indexOf(']'));
@@ -129,62 +151,191 @@ public class PropertyUpdater {
                         if (arrayValue instanceof ArrayValue) {
                             ArrayValue array = (ArrayValue) arrayValue;
                             if (isLastPart) {
-                                // Return the array and index for final update
                                 return new Object[]{array, index};
                             } else {
-                                // Navigate into the array element
                                 if (index >= 0 && index < array.getElements().size()) {
                                     currentContainer = array.getElements().get(index);
                                 } else {
-                                    return null; // Index out of bounds
+                                    return null;
                                 }
                             }
                         } else if (arrayValue instanceof TupleValue) {
                             TupleValue tuple = (TupleValue) arrayValue;
                             if (isLastPart) {
-                                // Return the tuple and index for final update
                                 return new Object[]{tuple, index};
                             } else {
-                                // Navigate into the tuple element
                                 if (index >= 0 && index < tuple.getElements().size()) {
                                     currentContainer = tuple.getElements().get(index);
                                 } else {
-                                    return null; // Index out of bounds
+                                    return null;
                                 }
                             }
                         } else {
-                            return null; // Property is not an array or tuple
+                            return null;
                         }
                     } else {
-                        return null; // Current container is not an object
+                        return null;
                     }
                 } catch (NumberFormatException e) {
-                    return null; // Invalid index format
+                    return null;
                 }
             } else {
-                // Handle regular property access
                 if (currentContainer instanceof ObjectValue) {
                     ObjectValue obj = (ObjectValue) currentContainer;
-
                     if (isLastPart) {
-                        // Return the object and property name for final update
                         return new Object[]{obj, part};
                     } else {
-                        // Navigate into the property
                         NDFValue propertyValue = obj.getProperty(part);
                         if (propertyValue instanceof ObjectValue) {
                             currentContainer = propertyValue;
+                        } else if (propertyValue instanceof MapValue) {
+                            currentContainer = propertyValue;
                         } else {
-                            return null; // Property doesn't exist or isn't an object
+                            return null;
+                        }
+                    }
+                } else if (currentContainer instanceof MapValue) {
+                    // MAP key access - treat the part as a map key
+                    MapValue map = (MapValue) currentContainer;
+                    // Remove parentheses from MAP key if present (UI adds them)
+                    String mapKey = part;
+                    if (mapKey.startsWith("(") && mapKey.endsWith(")")) {
+                        mapKey = mapKey.substring(1, mapKey.length() - 1);
+                    }
+                    if (isLastPart) {
+                        return new Object[]{map, mapKey};
+                    } else {
+                        // Find the value for this key and continue navigation
+                        for (Map.Entry<NDFValue, NDFValue> entry : map.getEntries()) {
+                            if (entry.getKey().toString().equals(mapKey)) {
+                                currentContainer = entry.getValue();
+                                break;
+                            }
+                        }
+                        if (currentContainer == map) {
+                            // Key not found
+                            return null;
                         }
                     }
                 } else {
-                    return null; // Current container is not an object
+                    return null;
                 }
             }
         }
 
         return null; // Should not reach here
+    }
+
+    /**
+     * Navigate to a property in UniteDescriptor files for updates.
+     * This mirrors the logic in getUniteDescriptorPropertyValue but returns navigation result for updates.
+     */
+    private static Object[] navigateToUniteDescriptorProperty(ObjectValue ndfObject, String propertyPath) {
+        if (ndfObject == null || propertyPath == null || propertyPath.isEmpty()) {
+            return null;
+        }
+
+        // Simple property access (no dots)
+        if (!propertyPath.contains(".")) {
+            return new Object[]{ndfObject, propertyPath};
+        }
+
+        // Handle array access patterns like ModulesDescriptors[0]
+        if (propertyPath.matches("^[^.]+\\[\\d+\\]$")) {
+            String arrayName = propertyPath.substring(0, propertyPath.indexOf('['));
+            int startIndex = propertyPath.indexOf('[') + 1;
+            int endIndex = propertyPath.indexOf(']');
+            int index = Integer.parseInt(propertyPath.substring(startIndex, endIndex));
+
+            NDFValue arrayValue = ndfObject.getProperty(arrayName);
+            if (arrayValue instanceof ArrayValue) {
+                ArrayValue array = (ArrayValue) arrayValue;
+                return new Object[]{array, index};
+            }
+            return null;
+        }
+
+        // Handle nested property access - support any depth, not just 2 parts
+        String[] pathParts = propertyPath.split("\\.");
+        Object currentContainer = ndfObject;
+
+        for (int i = 0; i < pathParts.length; i++) {
+            String part = pathParts[i];
+            boolean isLastPart = (i == pathParts.length - 1);
+
+            if (part.contains("[") && part.contains("]")) {
+                // Array access like ModulesDescriptors[33]
+                String arrayName = part.substring(0, part.indexOf('['));
+                int startIndex = part.indexOf('[') + 1;
+                int endIndex = part.indexOf(']');
+                int index = Integer.parseInt(part.substring(startIndex, endIndex));
+
+                if (currentContainer instanceof ObjectValue) {
+                    ObjectValue obj = (ObjectValue) currentContainer;
+                    NDFValue arrayValue = obj.getProperty(arrayName);
+                    if (arrayValue instanceof ArrayValue) {
+                        ArrayValue array = (ArrayValue) arrayValue;
+                        if (isLastPart) {
+                            return new Object[]{array, index};
+                        } else {
+                            if (index >= 0 && index < array.getElements().size()) {
+                                currentContainer = array.getElements().get(index);
+                            } else {
+                                return null;
+                            }
+                        }
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            } else {
+                // Simple property access
+                if (currentContainer instanceof ObjectValue) {
+                    ObjectValue obj = (ObjectValue) currentContainer;
+                    if (isLastPart) {
+                        return new Object[]{obj, part};
+                    } else {
+                        NDFValue propertyValue = obj.getProperty(part);
+                        if (propertyValue instanceof ObjectValue) {
+                            currentContainer = propertyValue;
+                        } else if (propertyValue instanceof MapValue) {
+                            currentContainer = propertyValue;
+                        } else {
+                            return null;
+                        }
+                    }
+                } else if (currentContainer instanceof MapValue) {
+                    // MAP key access - treat the part as a map key
+                    MapValue map = (MapValue) currentContainer;
+                    // Remove parentheses from MAP key if present (UI adds them)
+                    String mapKey = part;
+                    if (mapKey.startsWith("(") && mapKey.endsWith(")")) {
+                        mapKey = mapKey.substring(1, mapKey.length() - 1);
+                    }
+                    if (isLastPart) {
+                        return new Object[]{map, mapKey};
+                    } else {
+                        // Find the value for this key and continue navigation
+                        for (Map.Entry<NDFValue, NDFValue> entry : map.getEntries()) {
+                            if (entry.getKey().toString().equals(mapKey)) {
+                                currentContainer = entry.getValue();
+                                break;
+                            }
+                        }
+                        if (currentContainer == map) {
+                            // Key not found
+                            return null;
+                        }
+                    }
+                } else {
+                    return null;
+                }
+            }
+        }
+
+        return null;
     }
 
     public static boolean updateNumericProperty(ObjectValue ndfObject, String propertyPath,
@@ -413,6 +564,15 @@ public class PropertyUpdater {
             if (index >= 0 && index < tuple.getElements().size()) {
                 return tuple.getElements().get(index);
             }
+        } else if (container instanceof MapValue && key instanceof String) {
+            MapValue map = (MapValue) container;
+            String mapKey = (String) key;
+            // Find the entry with matching key and return its value
+            for (Map.Entry<NDFValue, NDFValue> entry : map.getEntries()) {
+                if (entry.getKey().toString().equals(mapKey)) {
+                    return entry.getValue();
+                }
+            }
         }
 
         return null;
@@ -420,7 +580,7 @@ public class PropertyUpdater {
 
     private static NDFValue getUniteDescriptorPropertyValue(ObjectValue ndfObject, String propertyPath) {
         // UniteDescriptor files have different internal structure due to pipe-separated parsing
-        // Handle the most common patterns for custom property lookup
+        // Handle all path depths using the same logic as the update navigation
 
         // Simple property access (no dots)
         if (!propertyPath.contains(".")) {
@@ -444,45 +604,97 @@ public class PropertyUpdater {
             return null;
         }
 
-        // Handle nested property access like ModulesDescriptors[0].TagSet
+        // Handle nested property access - support any depth using same logic as navigation
         String[] pathParts = propertyPath.split("\\.");
-        if (pathParts.length == 2) {
-            String firstPart = pathParts[0];
-            String secondPart = pathParts[1];
+        Object currentContainer = ndfObject;
 
-            // Check if first part is array access
-            if (firstPart.matches("^[^.]+\\[\\d+\\]$")) {
-                String arrayName = firstPart.substring(0, firstPart.indexOf('['));
-                int startIndex = firstPart.indexOf('[') + 1;
-                int endIndex = firstPart.indexOf(']');
-                int index = Integer.parseInt(firstPart.substring(startIndex, endIndex));
+        for (int i = 0; i < pathParts.length; i++) {
+            String part = pathParts[i];
+            boolean isLastPart = (i == pathParts.length - 1);
 
-                NDFValue arrayValue = ndfObject.getProperty(arrayName);
-                if (arrayValue instanceof ArrayValue) {
-                    ArrayValue array = (ArrayValue) arrayValue;
-                    if (index >= 0 && index < array.getElements().size()) {
-                        NDFValue element = array.getElements().get(index);
-                        if (element instanceof ObjectValue) {
-                            ObjectValue elementObj = (ObjectValue) element;
-                            return elementObj.getProperty(secondPart);
+            if (part.contains("[") && part.contains("]")) {
+                // Array access like ModulesDescriptors[33]
+                String arrayName = part.substring(0, part.indexOf('['));
+                int startIndex = part.indexOf('[') + 1;
+                int endIndex = part.indexOf(']');
+                int index = Integer.parseInt(part.substring(startIndex, endIndex));
+
+                if (currentContainer instanceof ObjectValue) {
+                    ObjectValue obj = (ObjectValue) currentContainer;
+                    NDFValue arrayValue = obj.getProperty(arrayName);
+                    if (arrayValue instanceof ArrayValue) {
+                        ArrayValue array = (ArrayValue) arrayValue;
+                        if (isLastPart) {
+                            if (index >= 0 && index < array.getElements().size()) {
+                                return array.getElements().get(index);
+                            } else {
+                                return null;
+                            }
+                        } else {
+                            if (index >= 0 && index < array.getElements().size()) {
+                                currentContainer = array.getElements().get(index);
+                            } else {
+                                return null;
+                            }
+                        }
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            } else {
+                // Simple property access
+                if (currentContainer instanceof ObjectValue) {
+                    ObjectValue obj = (ObjectValue) currentContainer;
+                    if (isLastPart) {
+                        return obj.getProperty(part);
+                    } else {
+                        NDFValue propertyValue = obj.getProperty(part);
+                        if (propertyValue instanceof ObjectValue) {
+                            currentContainer = propertyValue;
+                        } else if (propertyValue instanceof MapValue) {
+                            currentContainer = propertyValue;
+                        } else {
+                            return null;
                         }
                     }
+                } else if (currentContainer instanceof MapValue) {
+                    // MAP key access - treat the part as a map key
+                    MapValue map = (MapValue) currentContainer;
+                    // Remove parentheses from MAP key if present (UI adds them)
+                    String mapKey = part;
+                    if (mapKey.startsWith("(") && mapKey.endsWith(")")) {
+                        mapKey = mapKey.substring(1, mapKey.length() - 1);
+                    }
+                    if (isLastPart) {
+                        // Return the value for this key
+                        for (Map.Entry<NDFValue, NDFValue> entry : map.getEntries()) {
+                            if (entry.getKey().toString().equals(mapKey)) {
+                                return entry.getValue();
+                            }
+                        }
+                        return null; // Key not found
+                    } else {
+                        // Find the value for this key and continue navigation
+                        for (Map.Entry<NDFValue, NDFValue> entry : map.getEntries()) {
+                            if (entry.getKey().toString().equals(mapKey)) {
+                                currentContainer = entry.getValue();
+                                break;
+                            }
+                        }
+                        if (currentContainer == map) {
+                            // Key not found
+                            return null;
+                        }
+                    }
+                } else {
+                    return null;
                 }
-                return null;
-            } else {
-                // Simple nested access like SomeObject.Property
-                NDFValue firstValue = ndfObject.getProperty(firstPart);
-                if (firstValue instanceof ObjectValue) {
-                    ObjectValue firstObj = (ObjectValue) firstValue;
-                    return firstObj.getProperty(secondPart);
-                }
-                return null;
             }
         }
 
-        // For more complex paths, fall back to standard navigation
-        // This handles cases the specialized logic doesn't cover
-        return getStandardPropertyValue(ndfObject, propertyPath);
+        return null;
     }
 
 
