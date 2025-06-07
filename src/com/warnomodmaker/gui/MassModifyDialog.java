@@ -197,7 +197,21 @@ public class MassModifyDialog extends JDialog {
 
         gbc.gridx = 1;
         gbc.weightx = 1.0;
-        modificationTypeComboBox = new JComboBox<>(PropertyUpdater.ModificationType.values());
+        // Create filtered array without the "added" modification types
+        PropertyUpdater.ModificationType[] allTypes = PropertyUpdater.ModificationType.values();
+        java.util.List<PropertyUpdater.ModificationType> userTypes = new java.util.ArrayList<>();
+
+        for (PropertyUpdater.ModificationType type : allTypes) {
+            // Only include modification types that make sense for user operations
+            if (type != PropertyUpdater.ModificationType.OBJECT_ADDED &&
+                type != PropertyUpdater.ModificationType.MODULE_ADDED &&
+                type != PropertyUpdater.ModificationType.PROPERTY_ADDED &&
+                type != PropertyUpdater.ModificationType.ARRAY_ELEMENT_ADDED) {
+                userTypes.add(type);
+            }
+        }
+
+        modificationTypeComboBox = new JComboBox<>(userTypes.toArray(new PropertyUpdater.ModificationType[0]));
         formPanel.add(modificationTypeComboBox, gbc);
 
         // Value
@@ -1110,6 +1124,16 @@ public class MassModifyDialog extends JDialog {
                 case ARRAY:
                     return updateArrayProperty(unit, propertyPath, modificationType, value, valueText);
 
+                case MAP:
+                    return updateMapProperty(unit, propertyPath, modificationType, value, valueText);
+
+                case TUPLE:
+                    return updateTupleProperty(unit, propertyPath, modificationType, value, valueText);
+
+                case OBJECT:
+                    // For nested objects, try to update as numeric if the object has a single numeric property
+                    return updateNestedObjectProperty(unit, propertyPath, modificationType, value, valueText);
+
                 default:
                     // For other types, try numeric update as fallback
                     return PropertyUpdater.updateNumericProperty(unit, propertyPath, modificationType, value, modificationTracker);
@@ -1144,9 +1168,140 @@ public class MassModifyDialog extends JDialog {
             return updateNumberArray(unit, propertyPath, currentArray, modificationType, value);
         }
 
+        // ENHANCED: Support for arrays of objects (complex structures)
+        if (firstElement instanceof ObjectValue) {
+            return updateObjectArray(unit, propertyPath, currentArray, modificationType, value, valueText);
+        }
+
         return false; // Unsupported array type
     }
 
+    /**
+     * Update arrays containing objects (complex structures)
+     */
+    private boolean updateObjectArray(ObjectValue unit, String propertyPath, ArrayValue currentArray,
+                                    PropertyUpdater.ModificationType modificationType, double value, String valueText) {
+        // For object arrays, we can't do mathematical operations on the array itself
+        // But we could potentially update properties within all objects in the array
+        // This would require a more complex path like "ArrayProperty[*].SubProperty"
+        // For now, return false as this should be handled by wildcard paths
+        return false;
+    }
+
+    /**
+     * Update map properties
+     */
+    private boolean updateMapProperty(ObjectValue unit, String propertyPath,
+                                    PropertyUpdater.ModificationType modificationType, double value, String valueText) {
+        NDFValue currentValue = PropertyUpdater.getPropertyValue(unit, propertyPath);
+        if (!(currentValue instanceof MapValue)) {
+            return false;
+        }
+
+        // Maps are complex - for now, only support SET operations with key=value format
+        if (modificationType != PropertyUpdater.ModificationType.SET) {
+            return false;
+        }
+
+        // Parse valueText as key=value pairs
+        String[] pairs = valueText.split(",");
+        MapValue mapValue = (MapValue) currentValue;
+        boolean modified = false;
+
+        for (String pair : pairs) {
+            String[] keyValue = pair.split("=", 2);
+            if (keyValue.length == 2) {
+                String key = keyValue[0].trim();
+                String val = keyValue[1].trim();
+
+                // Create appropriate NDFValue for the value
+                NDFValue ndfVal;
+                try {
+                    double numVal = Double.parseDouble(val);
+                    ndfVal = NDFValue.createNumber(numVal);
+                } catch (NumberFormatException e) {
+                    if (val.equalsIgnoreCase("true") || val.equalsIgnoreCase("false")) {
+                        ndfVal = NDFValue.createBoolean(Boolean.parseBoolean(val));
+                    } else {
+                        ndfVal = NDFValue.createString(val);
+                    }
+                }
+
+                mapValue.put(NDFValue.createString(key), ndfVal);
+                modified = true;
+            }
+        }
+
+        if (modified) {
+            return PropertyUpdater.updateProperty(unit, propertyPath, mapValue, modificationTracker);
+        }
+        return false;
+    }
+
+    /**
+     * Update tuple properties
+     */
+    private boolean updateTupleProperty(ObjectValue unit, String propertyPath,
+                                      PropertyUpdater.ModificationType modificationType, double value, String valueText) {
+        NDFValue currentValue = PropertyUpdater.getPropertyValue(unit, propertyPath);
+        if (!(currentValue instanceof TupleValue)) {
+            return false;
+        }
+
+        TupleValue tupleValue = (TupleValue) currentValue;
+
+        // For tuples, support index-based updates: "0=value,1=value,2=value"
+        if (modificationType == PropertyUpdater.ModificationType.SET) {
+            String[] indexValues = valueText.split(",");
+            boolean modified = false;
+
+            for (String indexValue : indexValues) {
+                String[] parts = indexValue.split("=", 2);
+                if (parts.length == 2) {
+                    try {
+                        int index = Integer.parseInt(parts[0].trim());
+                        String val = parts[1].trim();
+
+                        if (index >= 0 && index < tupleValue.getElements().size()) {
+                            NDFValue ndfVal;
+                            try {
+                                double numVal = Double.parseDouble(val);
+                                ndfVal = NDFValue.createNumber(numVal);
+                            } catch (NumberFormatException e) {
+                                if (val.equalsIgnoreCase("true") || val.equalsIgnoreCase("false")) {
+                                    ndfVal = NDFValue.createBoolean(Boolean.parseBoolean(val));
+                                } else {
+                                    ndfVal = NDFValue.createString(val);
+                                }
+                            }
+
+                            tupleValue.getElements().set(index, ndfVal);
+                            modified = true;
+                        }
+                    } catch (NumberFormatException e) {
+                        // Skip invalid index
+                    }
+                }
+            }
+
+            if (modified) {
+                return PropertyUpdater.updateProperty(unit, propertyPath, tupleValue, modificationTracker);
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Update nested object properties
+     */
+    private boolean updateNestedObjectProperty(ObjectValue unit, String propertyPath,
+                                             PropertyUpdater.ModificationType modificationType, double value, String valueText) {
+        // For nested objects, we can't directly update the object itself
+        // This should be handled by more specific property paths
+        // For example: "SomeObject.NumericProperty" instead of just "SomeObject"
+        return false;
+    }
 
     private boolean updateTagSetArray(ObjectValue unit, String propertyPath, ArrayValue currentArray, String valueText) {
         String[] tags = valueText.split(",");
@@ -1296,6 +1451,11 @@ public class MassModifyDialog extends JDialog {
 
     private boolean updatePropertyWithWildcards(ObjectValue unit, String propertyPath,
                                               PropertyUpdater.ModificationType modificationType, double value, String valueText) {
+        // ENHANCED: Support multiple levels of wildcards like "Array1[*].Array2[*].Property"
+        if (propertyPath.indexOf("[*]") != propertyPath.lastIndexOf("[*]")) {
+            return updatePropertyWithMultipleWildcards(unit, propertyPath, modificationType, value, valueText);
+        }
+
         // Split on [*] to get the parts
         String[] mainParts = propertyPath.split("\\[\\*\\]");
         if (mainParts.length < 2) {
@@ -1323,60 +1483,120 @@ public class MassModifyDialog extends JDialog {
                 if (PropertyUpdater.hasProperty(elementObj, remainingPath)) {
                     // Construct the specific index path for this element
                     String elementPath = arrayPropertyName + "[" + i + "]." + remainingPath;
-                    NDFValue currentValue = PropertyUpdater.getPropertyValue(unit, elementPath);
-                    if (currentValue != null) {
-                        boolean updated = false;
-                        switch (currentValue.getType()) {
-                            case BOOLEAN:
-                                boolean boolValue;
-                                if (valueText.equalsIgnoreCase("true") || valueText.equalsIgnoreCase("yes") || valueText.equals("1")) {
-                                    boolValue = true;
-                                } else if (valueText.equalsIgnoreCase("false") || valueText.equalsIgnoreCase("no") || valueText.equals("0")) {
-                                    boolValue = false;
-                                } else {
-                                    // Fallback: use numeric conversion (0 = false, anything else = true)
-                                    boolValue = value != 0;
-                                }
-                                updated = PropertyUpdater.updateBooleanProperty(unit, elementPath, boolValue, modificationTracker);
-                                break;
-
-                            case NUMBER:
-                                updated = PropertyUpdater.updateNumericProperty(unit, elementPath, modificationType, value, modificationTracker);
-                                break;
-
-                            case STRING:
-                                updated = PropertyUpdater.updateStringProperty(unit, elementPath, valueText, modificationTracker);
-                                break;
-
-                            case ENUM:
-                            case RAW_EXPRESSION:
-                                updated = PropertyUpdater.updateEnumProperty(unit, elementPath, valueText, modificationTracker);
-                                break;
-
-                            case TEMPLATE_REF:
-                            case RESOURCE_REF:
-                                if (modificationType == PropertyUpdater.ModificationType.SET) {
-                                    updated = PropertyUpdater.updateTemplateRefProperty(unit, elementPath, valueText, modificationTracker);
-                                } else {
-                                    updated = false; // Template references can only be set, not modified mathematically
-                                }
-                                break;
-
-                            default:
-                                // For other types, try numeric update as fallback
-                                updated = PropertyUpdater.updateNumericProperty(unit, elementPath, modificationType, value, modificationTracker);
-                                break;
-                        }
-
-                        if (updated) {
-                            modified = true;
-                        }
+                    boolean updated = updatePropertyByType(unit, elementPath, modificationType, value, valueText);
+                    if (updated) {
+                        modified = true;
                     }
                 }
             }
         }
 
         return modified;
+    }
+
+    /**
+     * Handle multiple levels of wildcards like "Array1[*].Array2[*].Property"
+     */
+    private boolean updatePropertyWithMultipleWildcards(ObjectValue unit, String propertyPath,
+                                                       PropertyUpdater.ModificationType modificationType, double value, String valueText) {
+        // For now, convert to single wildcard by expanding all combinations
+        // This is complex but provides full support for nested wildcard paths
+        return expandAndUpdateMultipleWildcards(unit, propertyPath, modificationType, value, valueText, 0);
+    }
+
+    /**
+     * Recursively expand multiple wildcards
+     */
+    private boolean expandAndUpdateMultipleWildcards(ObjectValue unit, String propertyPath,
+                                                   PropertyUpdater.ModificationType modificationType, double value, String valueText, int depth) {
+        // Prevent infinite recursion
+        if (depth > 10) return false;
+
+        int wildcardIndex = propertyPath.indexOf("[*]");
+        if (wildcardIndex == -1) {
+            // No more wildcards - update the property directly
+            return updatePropertyByType(unit, propertyPath, modificationType, value, valueText);
+        }
+
+        // Find the array property name before the wildcard
+        String beforeWildcard = propertyPath.substring(0, wildcardIndex);
+        String afterWildcard = propertyPath.substring(wildcardIndex + 3); // Skip "[*]"
+
+        // Find the array
+        NDFValue arrayValue = PropertyUpdater.getPropertyValue(unit, beforeWildcard);
+        if (!(arrayValue instanceof ArrayValue)) {
+            return false;
+        }
+
+        ArrayValue array = (ArrayValue) arrayValue;
+        boolean modified = false;
+
+        // Expand this wildcard to all array indices
+        for (int i = 0; i < array.getElements().size(); i++) {
+            String expandedPath = beforeWildcard + "[" + i + "]" + afterWildcard;
+            boolean updated = expandAndUpdateMultipleWildcards(unit, expandedPath, modificationType, value, valueText, depth + 1);
+            if (updated) {
+                modified = true;
+            }
+        }
+
+        return modified;
+    }
+
+    /**
+     * Update property by detecting its type - extracted for reuse
+     */
+    private boolean updatePropertyByType(ObjectValue unit, String propertyPath,
+                                       PropertyUpdater.ModificationType modificationType, double value, String valueText) {
+        NDFValue currentValue = PropertyUpdater.getPropertyValue(unit, propertyPath);
+        if (currentValue == null) {
+            return false;
+        }
+
+        switch (currentValue.getType()) {
+            case BOOLEAN:
+                boolean boolValue;
+                if (valueText.equalsIgnoreCase("true") || valueText.equalsIgnoreCase("yes") || valueText.equals("1")) {
+                    boolValue = true;
+                } else if (valueText.equalsIgnoreCase("false") || valueText.equalsIgnoreCase("no") || valueText.equals("0")) {
+                    boolValue = false;
+                } else {
+                    // Fallback: use numeric conversion (0 = false, anything else = true)
+                    boolValue = value != 0;
+                }
+                return PropertyUpdater.updateBooleanProperty(unit, propertyPath, boolValue, modificationTracker);
+
+            case NUMBER:
+                return PropertyUpdater.updateNumericProperty(unit, propertyPath, modificationType, value, modificationTracker);
+
+            case STRING:
+                return PropertyUpdater.updateStringProperty(unit, propertyPath, valueText, modificationTracker);
+
+            case ENUM:
+            case RAW_EXPRESSION:
+                return PropertyUpdater.updateEnumProperty(unit, propertyPath, valueText, modificationTracker);
+
+            case TEMPLATE_REF:
+            case RESOURCE_REF:
+                if (modificationType == PropertyUpdater.ModificationType.SET) {
+                    return PropertyUpdater.updateTemplateRefProperty(unit, propertyPath, valueText, modificationTracker);
+                } else {
+                    return false; // Template references can only be set, not modified mathematically
+                }
+
+            case ARRAY:
+                return updateArrayProperty(unit, propertyPath, modificationType, value, valueText);
+
+            case MAP:
+                return updateMapProperty(unit, propertyPath, modificationType, value, valueText);
+
+            case TUPLE:
+                return updateTupleProperty(unit, propertyPath, modificationType, value, valueText);
+
+            default:
+                // For other types, try numeric update as fallback
+                return PropertyUpdater.updateNumericProperty(unit, propertyPath, modificationType, value, modificationTracker);
+        }
     }
 
 

@@ -39,6 +39,34 @@ public abstract class NDFValue {
         SKINS("Skins.ndf", "TSkinDescriptor", "Skin"),
         SMOKE_DESCRIPTOR("SmokeDescriptor.ndf", "TSmokeDescriptor", "Smoke"),
         UNITE_CADAVRE_DESCRIPTOR("UniteCadavreDescriptor.ndf", "TUniteCadavreDescriptor", "Unit Cadavre"),
+
+        // COMPREHENSIVE DEPENDENCY SUPPORT - Critical missing file types
+        GENERATED_INFANTRY_DEPICTION("GeneratedInfantryDepiction.ndf", "TInfantryDepictionDescriptor", "Infantry Depiction"),
+        VEHICLE_DEPICTION("VehicleDepiction.ndf", "TVehicleDepictionDescriptor", "Vehicle Depiction"),
+        AIRCRAFT_DEPICTION("AircraftDepiction.ndf", "TAircraftDepictionDescriptor", "Aircraft Depiction"),
+        DEPICTION_DESCRIPTOR("DepictionDescriptor.ndf", "TDepictionDescriptor", "Depiction"),
+
+        EFFECT_DESCRIPTOR("EffectDescriptor.ndf", "TEffectDescriptor", "Effect"),
+        EXPLOSION_DESCRIPTOR("ExplosionDescriptor.ndf", "TExplosionDescriptor", "Explosion"),
+        DAMAGE_DESCRIPTOR("DamageDescriptor.ndf", "TDamageDescriptor", "Damage"),
+
+        PROJECTILE_DESCRIPTOR("ProjectileDescriptor.ndf", "TProjectileDescriptor", "Projectile"),
+        BALLISTIC_DESCRIPTOR("BallisticDescriptor.ndf", "TBallisticDescriptor", "Ballistic"),
+        ARTILLERY_PROJECTILE_DESCRIPTOR("ArtilleryProjectileDescriptor.ndf", "TArtilleryProjectileDescriptor", "Artillery Projectile"),
+
+        SOUND_DESCRIPTOR("SoundDescriptor.ndf", "TSoundDescriptor", "Sound"),
+        WEAPON_SOUND_DESCRIPTOR("WeaponSoundDescriptor.ndf", "TWeaponSoundDescriptor", "Weapon Sound"),
+        VEHICLE_SOUND_DESCRIPTOR("VehicleSoundDescriptor.ndf", "TVehicleSoundDescriptor", "Vehicle Sound"),
+
+        INFANTRY_ANIMATION_DESCRIPTOR("InfantryAnimationDescriptor.ndf", "TInfantryAnimationDescriptor", "Infantry Animation"),
+        VEHICLE_ANIMATION_DESCRIPTOR("VehicleAnimationDescriptor.ndf", "TVehicleAnimationDescriptor", "Vehicle Animation"),
+        AIRCRAFT_ANIMATION_DESCRIPTOR("AircraftAnimationDescriptor.ndf", "TAircraftAnimationDescriptor", "Aircraft Animation"),
+
+        PRODUCTION_DESCRIPTOR("ProductionDescriptor.ndf", "TProductionDescriptor", "Production"),
+        SUPPLY_DESCRIPTOR("SupplyDescriptor.ndf", "TSupplyDescriptor", "Supply"),
+        RECON_DESCRIPTOR("ReconDescriptor.ndf", "TReconDescriptor", "Reconnaissance"),
+        COMMAND_DESCRIPTOR("CommandDescriptor.ndf", "TCommandDescriptor", "Command"),
+
         UNKNOWN("", "", "Unknown");
 
         private final String filename;
@@ -74,6 +102,16 @@ public abstract class NDFValue {
             if (name.endsWith("ammunitionmissiles.ndf")) return AMMUNITION_MISSILES;
             if (name.endsWith("ammunition.ndf")) return AMMUNITION;
 
+            // Additional fallbacks for comprehensive dependency support
+            if (name.endsWith("generatedinfantrydepiction.ndf")) return GENERATED_INFANTRY_DEPICTION;
+            if (name.endsWith("vehicledepiction.ndf")) return VEHICLE_DEPICTION;
+            if (name.endsWith("aircraftdepiction.ndf")) return AIRCRAFT_DEPICTION;
+            if (name.endsWith("effectdescriptor.ndf")) return EFFECT_DESCRIPTOR;
+            if (name.endsWith("explosiondescriptor.ndf")) return EXPLOSION_DESCRIPTOR;
+            if (name.endsWith("projectiledescriptor.ndf")) return PROJECTILE_DESCRIPTOR;
+            if (name.endsWith("ballisticdescriptor.ndf")) return BALLISTIC_DESCRIPTOR;
+            if (name.endsWith("sounddescriptor.ndf")) return SOUND_DESCRIPTOR;
+
             return UNKNOWN;
         }
     }
@@ -95,11 +133,9 @@ public abstract class NDFValue {
         NULL
     }
 
-    // ENHANCED MEMORY MODEL: Store formatting metadata alongside values
-    // This allows perfect formatting preservation even for modified objects
-    protected String originalPrefix = "";     // Whitespace/indentation before this value
-    protected String originalSuffix = "";     // Whitespace/newlines after this value
-    protected boolean hasOriginalFormatting = false; // Track if formatting was captured
+    protected String originalPrefix = "";
+    protected String originalSuffix = "";
+    protected boolean hasOriginalFormatting = false;
 
     /**
      * Set the original formatting that surrounded this value in the source file
@@ -200,9 +236,16 @@ public abstract class NDFValue {
         return new TemplateRefValue(path);
     }
 
-    
     public static NDFValue createResourceRef(String path) {
         return new ResourceRefValue(path);
+    }
+
+    public static NDFValue createGuid(String value) {
+        return new GUIDValue(value);
+    }
+
+    public static NDFValue createEnum(String value) {
+        return new EnumValue(value);
     }
 
     
@@ -381,12 +424,11 @@ public abstract class NDFValue {
         private final List<NDFValue> elements;
         private final List<Boolean> hasCommaAfter; // Tracks which elements have commas after them
 
-        // ORIGINAL FORMATTING PRESERVATION - ZERO INTELLIGENCE, 1-1 REPRODUCTION
-        private boolean originallyMultiLine = false; // Was this array originally multi-line?
-        private String originalOpeningBracket = "["; // Original opening bracket with any spacing
-        private String originalClosingBracket = "]"; // Original closing bracket with any spacing
-        private final List<String> originalElementPrefix = new ArrayList<>(); // Original indentation/spacing before each element
-        private final List<String> originalElementSuffix = new ArrayList<>(); // Original spacing/newlines after each element
+        private boolean originallyMultiLine = false;
+        private String originalOpeningBracket = "[";
+        private String originalClosingBracket = "]";
+        private final List<String> originalElementPrefix = new ArrayList<>();
+        private final List<String> originalElementSuffix = new ArrayList<>();
 
         public ArrayValue() {
             this.elements = new ArrayList<>();
@@ -405,6 +447,18 @@ public abstract class NDFValue {
             hasCommaAfter.add(hasComma);
             originalElementPrefix.add("");
             originalElementSuffix.add("");
+        }
+
+        public void addElement(NDFValue element) {
+            add(element);
+        }
+
+        public void addElement(NDFValue element, boolean hasComma) {
+            add(element, hasComma);
+        }
+
+        public void setElementComma(int index, boolean hasComma) {
+            setCommaAfter(index, hasComma);
         }
 
         public List<NDFValue> getElements() {
@@ -581,6 +635,10 @@ public abstract class NDFValue {
             hasCommaAfter.add(hasComma);
         }
 
+        public void put(NDFValue key, NDFValue value) {
+            add(key, value);
+        }
+
         public List<Map.Entry<NDFValue, NDFValue>> getEntries() {
             return entries;
         }
@@ -620,21 +678,19 @@ public abstract class NDFValue {
     public static class ObjectValue extends NDFValue {
         private final String typeName;
         private final Map<String, NDFValue> properties;
-        private final Map<String, Boolean> hasCommaAfter; // Tracks which properties have commas after them
+        private final Map<String, Boolean> hasCommaAfter;
         private String instanceName;
-        private String moduleIdentifier; // For identifying modules by type/name instead of index
-        private boolean isExported; // Track if this was originally exported
+        private String moduleIdentifier;
+        private boolean isExported;
 
-        // UNIVERSAL FORMATTING PRESERVATION - ZERO INTELLIGENCE, 1-1 REPRODUCTION
-        private String originalOpeningParen = "("; // Original opening parenthesis with exact formatting
-        private String originalClosingParen = ")"; // Original closing parenthesis with exact formatting
-        private final Map<String, String> originalPropertyPrefix = new LinkedHashMap<>(); // Original indentation/spacing before each property
-        private final Map<String, String> originalPropertyEquals = new LinkedHashMap<>(); // Original spacing around = for each property
-        private final Map<String, String> originalPropertySuffix = new LinkedHashMap<>(); // Original spacing/newlines after each property
+        private String originalOpeningParen = "(";
+        private String originalClosingParen = ")";
+        private final Map<String, String> originalPropertyPrefix = new LinkedHashMap<>();
+        private final Map<String, String> originalPropertyEquals = new LinkedHashMap<>();
+        private final Map<String, String> originalPropertySuffix = new LinkedHashMap<>();
 
-        // TOKEN RANGE PRESERVATION - SIMPLER AND MORE RELIABLE APPROACH
-        private int originalTokenStartIndex = -1; // Start token index in original token list
-        private int originalTokenEndIndex = -1;   // End token index in original token list
+        private int originalTokenStartIndex = -1;
+        private int originalTokenEndIndex = -1;
 
         public ObjectValue(String typeName) {
             this.typeName = typeName;
@@ -669,6 +725,14 @@ public abstract class NDFValue {
 
         public void setCommaAfter(String propertyName, boolean hasComma) {
             hasCommaAfter.put(propertyName, hasComma);
+        }
+
+        public void setPropertyComma(String propertyName, boolean hasComma) {
+            setCommaAfter(propertyName, hasComma);
+        }
+
+        public boolean hasProperty(String propertyName) {
+            return properties.containsKey(propertyName);
         }
 
         public String getTypeName() {
@@ -767,6 +831,14 @@ public abstract class NDFValue {
 
         @Override
         public String toString() {
+            String name = getInstanceName();
+            if (name != null && !name.isEmpty()) {
+                return name + " (" + typeName + ")";
+            }
+            return typeName;
+        }
+
+        public String toDetailedString() {
             StringBuilder sb = new StringBuilder();
             if (instanceName != null) {
                 sb.append(instanceName).append(" is ");
@@ -867,6 +939,8 @@ public abstract class NDFValue {
         }
     }
 
+
+
     
     public static class EnumValue extends NDFValue {
         private final String enumType;
@@ -875,6 +949,17 @@ public abstract class NDFValue {
         public EnumValue(String enumType, String enumValue) {
             this.enumType = enumType;
             this.enumValue = enumValue;
+        }
+
+        public EnumValue(String fullEnumValue) {
+            if (fullEnumValue.contains("/")) {
+                String[] parts = fullEnumValue.split("/", 2);
+                this.enumType = parts[0];
+                this.enumValue = parts[1];
+            } else {
+                this.enumType = "";
+                this.enumValue = fullEnumValue;
+            }
         }
 
         public String getEnumType() {
@@ -890,9 +975,16 @@ public abstract class NDFValue {
             return ValueType.ENUM;
         }
 
+        public String getValue() {
+            if (enumType.isEmpty()) {
+                return enumValue;
+            }
+            return enumType + "/" + enumValue;
+        }
+
         @Override
         public String toString() {
-            return enumType + "/" + enumValue;
+            return getValue();
         }
     }
 

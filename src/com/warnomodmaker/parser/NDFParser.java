@@ -36,8 +36,10 @@ public class NDFParser {
         currentTokenIndex = 0;
         currentToken = tokens.get(currentTokenIndex);
 
-        // STANDALONE UNITEDESCRIPTOR FUNCTIONALITY - Route to specialized parser
         if (fileType == NDFFileType.UNITE_DESCRIPTOR) {
+            return parseUniteDescriptor();
+        } else if (fileType == NDFFileType.FIRE_DESCRIPTOR || fileType == NDFFileType.SMOKE_DESCRIPTOR) {
+            // Fire and Smoke descriptors have the same structure as Unite descriptors (exported objects)
             return parseUniteDescriptor();
         }
 
@@ -68,13 +70,12 @@ public class NDFParser {
                     advance();
                 }
             } catch (NDFParseException e) {
-                // If we encounter a parsing error, try to recover by skipping to the next likely start point
-                System.err.println("Warning: Parsing error at line " + currentToken.getLine() + ": " + e.getMessage());
+                // CRITICAL: Log parsing errors to help debug missing objects
+                System.err.println("WARNING: General parsing error at line " + currentToken.getLine() +
+                                 ", token: " + currentToken.getValue() + " (" + currentToken.getType() + "): " + e.getMessage());
 
-                // Skip tokens until we find a likely recovery point
-                while (currentToken.getType() != NDFToken.TokenType.EOF &&
-                       currentToken.getType() != NDFToken.TokenType.EXPORT &&
-                       currentToken.getType() != NDFToken.TokenType.RESOURCE_REF) {
+                // Try to recover more gracefully - advance just one token instead of skipping to next major token
+                if (currentToken.getType() != NDFToken.TokenType.EOF) {
                     advance();
                 }
             }
@@ -85,7 +86,6 @@ public class NDFParser {
 
 
     private ObjectValue parseExportedDescriptor() throws NDFParseException {
-        // Capture export token index before advancing
         int exportTokenIndex = currentTokenIndex;
 
         // Expect 'export DescriptorName is TypeName'
@@ -372,7 +372,6 @@ public class NDFParser {
                 continue;
             }
 
-            // CAPTURE ORIGINAL EQUALS SIGN WITH EXACT FORMATTING
             NDFToken equalsToken = currentToken;
             expect(NDFToken.TokenType.EQUALS);
             String originalEquals = equalsToken.getExactText();
@@ -380,26 +379,20 @@ public class NDFParser {
             try {
                 propertyValue = parseValue();
             } catch (NDFParseException e) {
-                // Log the error and skip this property
-                System.err.println("Warning: Failed to parse property '" + propertyName + "': " + e.getMessage());
-                System.err.println("  Skipping property and continuing...");
-
-                // Skip tokens until we find a comma or closing parenthesis
+                // Skip failed property parsing and continue - only log if debugging
+                // System.err.println("Warning: Failed to parse property '" + propertyName + "': " + e.getMessage());
                 while (currentToken.getType() != NDFToken.TokenType.COMMA &&
                        currentToken.getType() != NDFToken.TokenType.CLOSE_PAREN &&
                        currentToken.getType() != NDFToken.TokenType.EOF) {
                     advance();
                 }
 
-                // If we found a comma, consume it and continue
                 if (currentToken.getType() == NDFToken.TokenType.COMMA) {
                     advance();
                 }
-
-                continue; // Skip this property and continue with the next one
+                continue;
             }
             if (currentToken.getType() == NDFToken.TokenType.PIPE) {
-                // Instead of creating artificial objects, store as a special string value
                 StringBuilder bitwiseExpr = new StringBuilder();
                 bitwiseExpr.append(propertyValue.toString());
 
@@ -896,7 +889,7 @@ public class NDFParser {
     }
 
 
-    private List<ObjectValue> parseUniteDescriptor() throws IOException, NDFParseException {
+    public List<ObjectValue> parseUniteDescriptor() throws IOException, NDFParseException {
         List<ObjectValue> ndfObjects = new ArrayList<>();
 
         while (currentToken.getType() != NDFToken.TokenType.EOF) {
@@ -912,11 +905,13 @@ public class NDFParser {
                     advance(); // Skip any other tokens
                 }
             } catch (NDFParseException e) {
-                System.err.println("Warning: UniteDescriptor parsing error at line " + currentToken.getLine() + ": " + e.getMessage());
+                // CRITICAL: Log parsing errors to help debug missing objects
+                System.err.println("WARNING: UniteDescriptor parsing error at line " + currentToken.getLine() +
+                                 ", token: " + currentToken.getValue() + " (" + currentToken.getType() + "): " + e.getMessage());
 
-                // Skip to next export
-                while (currentToken.getType() != NDFToken.TokenType.EOF &&
-                       currentToken.getType() != NDFToken.TokenType.EXPORT) {
+                // Try to recover more gracefully - advance just one token instead of skipping to next export
+                // This prevents losing entire objects due to minor parsing issues
+                if (currentToken.getType() != NDFToken.TokenType.EOF) {
                     advance();
                 }
             }
@@ -1049,18 +1044,13 @@ public class NDFParser {
                 object.setProperty(propertyName, propertyValue, hasComma);
 
             } catch (NDFParseException e) {
-                // Log the error and skip this property (same as standard parser)
-                System.err.println("Warning: Failed to parse property '" + propertyName + "': " + e.getMessage());
-                System.err.println("  Skipping property and continuing...");
-
-                // Skip tokens until we find a comma or closing parenthesis
+                // Skip failed property parsing and continue - only log if debugging
+                // System.err.println("Warning: Failed to parse property '" + propertyName + "': " + e.getMessage());
                 while (currentToken.getType() != NDFToken.TokenType.COMMA &&
                        currentToken.getType() != NDFToken.TokenType.CLOSE_PAREN &&
                        currentToken.getType() != NDFToken.TokenType.EOF) {
                     advance();
                 }
-
-                // If we found a comma, consume it and continue
                 if (currentToken.getType() == NDFToken.TokenType.COMMA) {
                     advance();
                 }
@@ -1114,16 +1104,9 @@ public class NDFParser {
         return array;
     }
 
-    /**
-     * Parse individual module elements - handles the unique UniteDescriptor patterns:
-     * 1. Simple template refs: ~/TargetManagerModuleSelector
-     * 2. Simple objects: TTagsModuleDescriptor(...)
-     * 3. Named assignments with objects: ApparenceModel is VehicleApparenceModuleDescriptor(...)
-     * 4. Named assignments with template refs: FacingInfos is ~/FacingInfosModuleDescriptor
-     */
+
     private NDFValue parseUniteDescriptorModuleElement() throws NDFParseException {
         if (currentToken.getType() == NDFToken.TokenType.TEMPLATE_REF) {
-            // Simple template reference
             String templatePath = currentToken.getValue();
             advance();
             return NDFValue.createTemplateRef(templatePath);
@@ -1167,14 +1150,11 @@ public class NDFParser {
         }
     }
 
-    /**
-     * Parse objects within UniteDescriptor.ndf using ENHANCED MEMORY MODEL
-     */
+
     private ObjectValue parseUniteDescriptorObject(String typeName, int startTokenIndex) throws NDFParseException {
         ObjectValue object = NDFValue.createObject(typeName);
         object.setOriginalTokenStartIndex(startTokenIndex);
 
-        // ENHANCED MEMORY MODEL: CAPTURE ORIGINAL OPENING PARENTHESIS WITH EXACT FORMATTING
         NDFToken openParenToken = currentToken;
         expect(NDFToken.TokenType.OPEN_PAREN);
         object.setOriginalOpeningParen(openParenToken.getExactText());

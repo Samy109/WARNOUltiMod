@@ -232,17 +232,30 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
     // Inner class to represent property nodes with modification tracking
     public static class PropertyNode {
         private final String name;
+        private final String originalPropertyName; // Store original property name for path construction
         private final NDFValue value;
         private boolean modified;
 
         public PropertyNode(String name, NDFValue value) {
             this.name = name;
+            this.originalPropertyName = name; // Default to same as display name
+            this.value = value;
+            this.modified = false;
+        }
+
+        public PropertyNode(String displayName, String originalPropertyName, NDFValue value) {
+            this.name = displayName;
+            this.originalPropertyName = originalPropertyName;
             this.value = value;
             this.modified = false;
         }
 
         public String getName() {
             return name;
+        }
+
+        public String getOriginalPropertyName() {
+            return originalPropertyName;
         }
 
         public NDFValue getValue() {

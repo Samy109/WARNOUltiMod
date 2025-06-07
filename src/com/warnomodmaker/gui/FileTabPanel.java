@@ -73,7 +73,7 @@ public class FileTabPanel extends JPanel {
         if (tabState.hasData()) {
             objectBrowser.setUnitDescriptors(tabState.getUnitDescriptors(), tabState.getFileType());
             objectBrowser.setModificationTracker(tabState.getModificationTracker());
-            objectEditor.setUnitDescriptor(null, tabState.getModificationTracker());
+            objectEditor.setUnitDescriptor(null, tabState.getModificationTracker(), tabState.getFileType());
 
             // Restore selection if available
             restoreSelection();
@@ -81,7 +81,7 @@ public class FileTabPanel extends JPanel {
             // Clear components
             objectBrowser.setUnitDescriptors(null, NDFValue.NDFFileType.UNKNOWN);
             objectBrowser.setModificationTracker(null);
-            objectEditor.setUnitDescriptor(null, null);
+            objectEditor.setUnitDescriptor(null, null, NDFValue.NDFFileType.UNKNOWN);
         }
     }
 
@@ -90,7 +90,7 @@ public class FileTabPanel extends JPanel {
         if (tabState.hasData()) {
             objectBrowser.setUnitDescriptorsWithPreprocessedData(tabState.getUnitDescriptors(), tabState.getFileType(), propertyScanner, listModel);
             objectBrowser.setModificationTracker(tabState.getModificationTracker());
-            objectEditor.setUnitDescriptor(null, tabState.getModificationTracker());
+            objectEditor.setUnitDescriptor(null, tabState.getModificationTracker(), tabState.getFileType());
 
             // Restore selection if available
             restoreSelection();
@@ -98,7 +98,7 @@ public class FileTabPanel extends JPanel {
             // Clear components
             objectBrowser.setUnitDescriptors(null, NDFValue.NDFFileType.UNKNOWN);
             objectBrowser.setModificationTracker(null);
-            objectEditor.setUnitDescriptor(null, null);
+            objectEditor.setUnitDescriptor(null, null, NDFValue.NDFFileType.UNKNOWN);
         }
     }
 
@@ -124,7 +124,7 @@ public class FileTabPanel extends JPanel {
 
 
     private void onUnitSelected(NDFValue.ObjectValue ndfObject) {
-        objectEditor.setUnitDescriptor(ndfObject, tabState.getModificationTracker());
+        objectEditor.setUnitDescriptor(ndfObject, tabState.getModificationTracker(), tabState.getFileType());
         if (ndfObject != null) {
             tabState.setSelectedUnitName(ndfObject.getInstanceName());
         } else {

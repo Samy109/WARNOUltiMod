@@ -8,7 +8,10 @@ import com.warnomodmaker.model.ModificationTracker;
 import com.warnomodmaker.model.ModificationRecord;
 import com.warnomodmaker.model.ModProfile;
 import com.warnomodmaker.model.PropertyScanner;
+import com.warnomodmaker.model.PropertyUpdater;
 import com.warnomodmaker.model.UserPreferences;
+import com.warnomodmaker.model.CrossSystemIntegrityManager;
+import com.warnomodmaker.model.PropertyPathMigrationManager;
 import com.warnomodmaker.parser.NDFParser;
 import com.warnomodmaker.parser.NDFWriter;
 
@@ -36,13 +39,30 @@ public class MainWindow extends JFrame {
     private JMenuBar menuBar;
     private StatusBar statusBar;
 
+    // Cross-system integrity management
+    private CrossSystemIntegrityManager integrityManager;
+
     public MainWindow() {
         setTitle("WARNO Mod Maker");
 
-        // Restore window position and size from preferences
+        // Restore window position and size from preferences with bounds checking
         UserPreferences prefs = UserPreferences.getInstance();
-        setSize(prefs.getWindowWidth(), prefs.getWindowHeight());
-        setLocation(prefs.getWindowX(), prefs.getWindowY());
+
+        // Get screen dimensions for bounds checking
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+
+        // Restore size with reasonable limits
+        int width = Math.min(prefs.getWindowWidth(), (int)(screenSize.width * 0.9));
+        int height = Math.min(prefs.getWindowHeight(), (int)(screenSize.height * 0.9));
+        width = Math.max(width, 800); // Minimum width
+        height = Math.max(height, 600); // Minimum height
+
+        // Restore position with bounds checking
+        int x = Math.max(0, Math.min(prefs.getWindowX(), screenSize.width - width));
+        int y = Math.max(0, Math.min(prefs.getWindowY(), screenSize.height - height));
+
+        setSize(width, height);
+        setLocation(x, y);
 
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
@@ -61,19 +81,29 @@ public class MainWindow extends JFrame {
         addComponentListener(new ComponentAdapter() {
             @Override
             public void componentMoved(ComponentEvent e) {
-                UserPreferences.getInstance().saveWindowBounds(
-                    getX(), getY(), getWidth(), getHeight()
-                );
+                // Only save bounds if window is not maximized
+                if (getExtendedState() != JFrame.MAXIMIZED_BOTH) {
+                    UserPreferences.getInstance().saveWindowBounds(
+                        getX(), getY(), getWidth(), getHeight()
+                    );
+                }
             }
 
             @Override
             public void componentResized(ComponentEvent e) {
-                UserPreferences.getInstance().saveWindowBounds(
-                    getX(), getY(), getWidth(), getHeight()
-                );
+                // Only save bounds if window is not maximized
+                if (getExtendedState() != JFrame.MAXIMIZED_BOTH) {
+                    UserPreferences.getInstance().saveWindowBounds(
+                        getX(), getY(), getWidth(), getHeight()
+                    );
+                }
             }
         });
         tabStates = new ArrayList<>();
+
+        // Initialize cross-system integrity manager
+        integrityManager = new CrossSystemIntegrityManager();
+
         createMenuBar();
         createStatusBar();
         createMainPanel();
@@ -156,6 +186,24 @@ public class MainWindow extends JFrame {
         JMenuItem tagOrderEditorItem = new JMenuItem("Edit Tags & Orders...");
         tagOrderEditorItem.addActionListener(this::showTagAndOrderEditor);
         toolsMenu.add(tagOrderEditorItem);
+
+        toolsMenu.addSeparator();
+
+        JMenuItem additiveOpsItem = new JMenuItem("Additive Operations...");
+        additiveOpsItem.addActionListener(this::showAdditiveOperationsDialog);
+        toolsMenu.add(additiveOpsItem);
+
+        toolsMenu.addSeparator();
+
+        JMenuItem entityCreationItem = new JMenuItem("Create Complete Entity...");
+        entityCreationItem.addActionListener(this::showEntityCreationDialog);
+        toolsMenu.add(entityCreationItem);
+
+        toolsMenu.addSeparator();
+
+        JMenuItem validateIntegrityItem = new JMenuItem("Validate Cross-File Integrity...");
+        validateIntegrityItem.addActionListener(this::showIntegrityValidationDialog);
+        toolsMenu.add(validateIntegrityItem);
 
         menuBar.add(toolsMenu);
 
@@ -384,6 +432,166 @@ public class MainWindow extends JFrame {
         }
     }
 
+    private void showAdditiveOperationsDialog(ActionEvent e) {
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab == null || !currentTab.hasData()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "No file loaded. Please open a file first.",
+                "No File",
+                JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        // Use the generic method to get NDF objects for all file types
+        List<NDFValue.ObjectValue> objects = currentTab.getNDFObjects();
+        if (objects == null) {
+            JOptionPane.showMessageDialog(
+                this,
+                "File data is not available. Please try reloading the file.",
+                "No Data",
+                JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        try {
+            AdditiveOperationsDialog dialog = new AdditiveOperationsDialog(
+                this, objects, currentTab.getFileType(), currentTab.getModificationTracker());
+            dialog.setVisible(true);
+
+            if (dialog.wasOperationPerformed()) {
+                currentTab.setModified(true);
+
+                // Refresh all UI components to show newly added objects
+                refreshCurrentTab();
+                updateTitle();
+
+                // Force refresh of any open modification dialogs
+                refreshModificationDialogs();
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Error opening additive operations dialog: " + ex.getMessage(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+            ex.printStackTrace();
+        }
+    }
+
+    private void showEntityCreationDialog(ActionEvent e) {
+        // Check if we have any open files
+        if (tabStates.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "No files are open. Please open the required NDF files first.",
+                "No Files Open",
+                JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        // Collect all open files and their modification trackers
+        Map<String, List<NDFValue.ObjectValue>> openFiles = new HashMap<>();
+        Map<String, ModificationTracker> trackers = new HashMap<>();
+
+        for (FileTabState tabState : tabStates) {
+            if (tabState.hasData()) {
+                String fileTypeName = getFileTypeName(tabState.getFileType());
+                openFiles.put(fileTypeName, tabState.getUnitDescriptors());
+                trackers.put(fileTypeName, tabState.getModificationTracker());
+            }
+        }
+
+        if (openFiles.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "No valid NDF files are loaded.",
+                "No Data",
+                JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        try {
+            EntityCreationDialog dialog = new EntityCreationDialog(this, openFiles, trackers, integrityManager);
+            dialog.setVisible(true);
+
+            if (dialog.wasEntityCreated()) {
+                // CRITICAL: Re-register all files with integrity manager to update cross-file tracking
+                for (FileTabState tabState : tabStates) {
+                    if (tabState.hasData() && tabState.getFile() != null) {
+                        integrityManager.registerFile(tabState.getFile().getName(),
+                                                    tabState.getFileType(),
+                                                    tabState.getUnitDescriptors());
+                    }
+                    tabState.setModified(true);
+                }
+                refreshCurrentTab();
+                updateTitle();
+
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Complete entity created successfully!\nAll affected files have been marked as modified.",
+                    "Entity Created",
+                    JOptionPane.INFORMATION_MESSAGE
+                );
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(
+                this,
+                "Error opening entity creation dialog: " + ex.getMessage(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE
+            );
+            ex.printStackTrace();
+        }
+    }
+
+    private String getFileTypeName(NDFValue.NDFFileType fileType) {
+        switch (fileType) {
+            case UNITE_DESCRIPTOR: return "UniteDescriptor";
+            case AMMUNITION: return "Ammunition";
+            case AMMUNITION_MISSILES: return "AmmunitionMissiles";
+            case WEAPON_DESCRIPTOR: return "WeaponDescriptor";
+            case BUILDING_DESCRIPTORS: return "BuildingDescriptors";
+            case MISSILE_DESCRIPTORS: return "MissileDescriptors";
+
+            // Comprehensive dependency support
+            case GENERATED_INFANTRY_DEPICTION: return "GeneratedInfantryDepiction";
+            case VEHICLE_DEPICTION: return "VehicleDepiction";
+            case AIRCRAFT_DEPICTION: return "AircraftDepiction";
+            case DEPICTION_DESCRIPTOR: return "DepictionDescriptor";
+            case NDF_DEPICTION_LIST: return "NdfDepictionList";
+
+            case EFFECT_DESCRIPTOR: return "EffectDescriptor";
+            case EXPLOSION_DESCRIPTOR: return "ExplosionDescriptor";
+            case DAMAGE_DESCRIPTOR: return "DamageDescriptor";
+
+            case PROJECTILE_DESCRIPTOR: return "ProjectileDescriptor";
+            case BALLISTIC_DESCRIPTOR: return "BallisticDescriptor";
+            case ARTILLERY_PROJECTILE_DESCRIPTOR: return "ArtilleryProjectileDescriptor";
+
+            case SOUND_DESCRIPTOR: return "SoundDescriptor";
+            case WEAPON_SOUND_DESCRIPTOR: return "WeaponSoundDescriptor";
+            case VEHICLE_SOUND_DESCRIPTOR: return "VehicleSoundDescriptor";
+
+            case INFANTRY_ANIMATION_DESCRIPTOR: return "InfantryAnimationDescriptor";
+            case VEHICLE_ANIMATION_DESCRIPTOR: return "VehicleAnimationDescriptor";
+            case AIRCRAFT_ANIMATION_DESCRIPTOR: return "AircraftAnimationDescriptor";
+
+            case PRODUCTION_DESCRIPTOR: return "ProductionDescriptor";
+            case SUPPLY_DESCRIPTOR: return "SupplyDescriptor";
+            case RECON_DESCRIPTOR: return "ReconDescriptor";
+            case COMMAND_DESCRIPTOR: return "CommandDescriptor";
+
+            default: return "Unknown";
+        }
+    }
+
 
     private void showAboutDialog(ActionEvent e) {
         JOptionPane.showMessageDialog(
@@ -544,6 +752,10 @@ public class MainWindow extends JFrame {
 
             try {
                 ModProfile profile = ModProfile.loadFromFile(file);
+
+                // Silently attempt to migrate profile paths in background
+                integrityManager.migrateModProfile(profile);
+
                 ProfileLoadDialog loadDialog = new ProfileLoadDialog(this, profile, currentTab.getUnitDescriptors(), currentTab.getModificationTracker());
                 loadDialog.setVisible(true);
                 if (loadDialog.wasApplied()) {
@@ -804,6 +1016,10 @@ public class MainWindow extends JFrame {
                                 // Now update UI on EDT with pre-processed data
                                 SwingUtilities.invokeLater(() -> {
                                     createNewTabWithPreprocessedData(file, ndfObjects, fileType, parser, propertyScanner, listModel);
+
+                                    // CRITICAL: Register file with cross-system integrity manager
+                                    integrityManager.registerFile(file.getName(), fileType, ndfObjects);
+
                                     progressDialog.dispose();
 
                                     String objectTypeName = getObjectTypeNameForFile(file.getName(), fileType);
@@ -885,26 +1101,48 @@ public class MainWindow extends JFrame {
     private void markModifiedObjects(NDFWriter ndfWriter, FileTabState tabState) {
         // Get all modified unit names from the modification tracker
         ModificationTracker tracker = tabState.getModificationTracker();
-        if (!tracker.hasModifications()) {
-            return; // No modifications to mark
-        }
+        int markedCount = 0;
 
-        // Get unique unit names that have been modified
-        Set<String> modifiedUnitNames = new HashSet<>();
-        for (ModificationRecord record : tracker.getAllModifications()) {
-            modifiedUnitNames.add(record.getUnitName());
-        }
+        if (tracker.hasModifications()) {
+            // Get unique unit names that have been modified
+            Set<String> modifiedUnitNames = new HashSet<>();
+            for (ModificationRecord record : tracker.getAllModifications()) {
+                modifiedUnitNames.add(record.getUnitName());
+            }
 
-        // Find and mark the corresponding ObjectValue instances
-        List<NDFValue.ObjectValue> allObjects = tabState.getUnitDescriptors();
-        for (NDFValue.ObjectValue obj : allObjects) {
-            String instanceName = obj.getInstanceName();
-            if (instanceName != null && modifiedUnitNames.contains(instanceName)) {
-                ndfWriter.markObjectAsModified(obj);
+            // Find and mark the corresponding ObjectValue instances
+            List<NDFValue.ObjectValue> allObjects = tabState.getUnitDescriptors();
+            for (NDFValue.ObjectValue obj : allObjects) {
+                String instanceName = obj.getInstanceName();
+                if (instanceName != null && modifiedUnitNames.contains(instanceName)) {
+                    ndfWriter.markObjectAsModified(obj);
+                    markedCount++;
+                }
             }
         }
 
-        System.out.println("Marked " + modifiedUnitNames.size() + " modified objects for writing");
+        // CRITICAL FIX: Mark objects that have ANY additive changes
+        // These include: OBJECT_ADDED, MODULE_ADDED, PROPERTY_ADDED, ARRAY_ELEMENT_ADDED
+        for (ModificationRecord record : tracker.getAllModifications()) {
+            PropertyUpdater.ModificationType modType = record.getModificationType();
+            if (modType == PropertyUpdater.ModificationType.OBJECT_ADDED ||
+                modType == PropertyUpdater.ModificationType.MODULE_ADDED ||
+                modType == PropertyUpdater.ModificationType.PROPERTY_ADDED ||
+                modType == PropertyUpdater.ModificationType.ARRAY_ELEMENT_ADDED) {
+
+                // Find the object by name and mark it as modified
+                String objectName = record.getUnitName();
+                for (NDFValue.ObjectValue obj : tabState.getUnitDescriptors()) {
+                    if (objectName.equals(obj.getInstanceName())) {
+                        ndfWriter.markObjectAsModified(obj);
+                        markedCount++;
+                        break;
+                    }
+                }
+            }
+        }
+
+        System.out.println("Marked " + markedCount + " total modified objects for writing");
     }
 
 
@@ -922,6 +1160,16 @@ public class MainWindow extends JFrame {
         if (currentPanel != null) {
             currentPanel.refresh();
         }
+    }
+
+    /**
+     * Refresh any open modification dialogs to show newly added objects
+     */
+    private void refreshModificationDialogs() {
+        // Note: In a more complex implementation, we would track open dialogs
+        // and refresh their object lists. For now, users will need to close
+        // and reopen modification dialogs to see new objects.
+        // This could be enhanced by implementing a dialog registry system.
     }
 
 
@@ -959,6 +1207,12 @@ public class MainWindow extends JFrame {
                 return;
             }
         }
+
+        // CRITICAL: Unregister file from cross-system integrity manager
+        if (tabState.getFile() != null) {
+            integrityManager.unregisterFile(tabState.getFile().getName());
+        }
+
         tabStates.remove(tabIndex);
         tabbedPane.removeTabAt(tabIndex);
         if (tabStates.isEmpty()) {
@@ -1099,6 +1353,13 @@ public class MainWindow extends JFrame {
                 }
             } else if (result == JOptionPane.CANCEL_OPTION) {
                 return;
+            }
+        }
+
+        // CRITICAL: Unregister all files from cross-system integrity manager
+        for (FileTabState tabState : tabStates) {
+            if (tabState.getFile() != null) {
+                integrityManager.unregisterFile(tabState.getFile().getName());
             }
         }
 
@@ -1250,6 +1511,12 @@ public class MainWindow extends JFrame {
         // Close tabs in reverse order to maintain indices
         for (int i = tabStates.size() - 1; i >= 0; i--) {
             if (i != keepTabIndex) {
+                // CRITICAL: Unregister file from cross-system integrity manager
+                FileTabState tabState = tabStates.get(i);
+                if (tabState.getFile() != null) {
+                    integrityManager.unregisterFile(tabState.getFile().getName());
+                }
+
                 tabStates.remove(i);
                 tabbedPane.removeTabAt(i);
                 // Adjust keepTabIndex if necessary
@@ -1267,6 +1534,60 @@ public class MainWindow extends JFrame {
         updateTitle();
     }
 
+
+    private void showIntegrityValidationDialog(ActionEvent e) {
+        if (tabStates.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "No files are currently open. Please open some NDF files first.",
+                "No Files Open",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+            return;
+        }
+
+        // Perform validation
+        CrossSystemIntegrityManager.CrossSystemValidationResult result = integrityManager.validateAllSystems();
+
+        // Show results
+        StringBuilder message = new StringBuilder();
+        message.append("Cross-File Integrity Validation Results\n\n");
+        message.append(integrityManager.getSystemStatistics()).append("\n\n");
+
+        if (!result.hasIssues()) {
+            message.append("SUCCESS: No integrity issues found!\n");
+            message.append("All cross-file references and GUIDs are valid.");
+
+            JOptionPane.showMessageDialog(
+                this,
+                message.toString(),
+                "Integrity Validation - All Clear",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+        } else {
+            message.append("WARNING: Issues Found:\n\n");
+
+            List<String> allIssues = result.getAllIssues();
+            for (String issue : allIssues) {
+                message.append(issue).append("\n");
+            }
+
+            // Show in a scrollable dialog for long lists
+            JTextArea textArea = new JTextArea(message.toString());
+            textArea.setEditable(false);
+            textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+
+            JScrollPane scrollPane = new JScrollPane(textArea);
+            scrollPane.setPreferredSize(new Dimension(600, 400));
+
+            JOptionPane.showMessageDialog(
+                this,
+                scrollPane,
+                "Integrity Validation - Issues Found",
+                JOptionPane.WARNING_MESSAGE
+            );
+        }
+    }
 
     private String getObjectTypeNameForFile(String fileName, NDFValue.NDFFileType fileType) {
         if (fileType != NDFValue.NDFFileType.UNKNOWN) {
