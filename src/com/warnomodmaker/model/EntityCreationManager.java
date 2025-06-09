@@ -44,6 +44,10 @@ public class EntityCreationManager {
         fileTypeObjectTypes.put("EffetsSurUnite", "TEffectsPackDescriptor");
         fileTypeObjectTypes.put("SoundDescriptors", "TSoundDescriptor");
         fileTypeObjectTypes.put("WeaponSoundHappenings", "TSoundHappening");
+        fileTypeObjectTypes.put("DamageResistance", "TDamageResistanceDescriptor");
+        fileTypeObjectTypes.put("DamageResistanceFamilyList", "TDamageResistanceFamilyDescriptor");
+        fileTypeObjectTypes.put("ExperienceLevels", "TExperienceLevelDescriptor");
+        fileTypeObjectTypes.put("ProjectileType", "EProjectileType");
         fileTypeObjectTypes.put("NdfDepictionList", "ConstantDefinition");
         fileTypeObjectTypes.put("GeneratedInfantryDepiction", "TInfantryDepictionDescriptor");
         fileTypeObjectTypes.put("VehicleDepiction", "TVehicleDepictionDescriptor");
@@ -691,11 +695,8 @@ public class EntityCreationManager {
             analysis.addFileRequirement("ExperienceLevels", "TExperienceDescriptor");
         }
 
-        // Production and factory systems - Note: ProductionDescriptor.ndf doesn't exist, production info is in Production.ndf constants
-        if (hasModuleOfType(unit, "TProductionModuleDescriptor")) {
-            // Production constants are in Production.ndf, not ProductionDescriptor.ndf
-            analysis.addFileRequirement("Production", "ConstantDefinition");
-        }
+        // Production and factory systems - Note: Production.ndf only contains simple constants, not descriptors
+        // TProductionModuleDescriptor doesn't require additional files beyond the unit itself
 
         // Supply systems
         if (hasModuleOfType(unit, "TSupplyModuleDescriptor")) {

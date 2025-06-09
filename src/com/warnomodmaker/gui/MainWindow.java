@@ -568,10 +568,10 @@ public class MainWindow extends JFrame {
             case NDF_DEPICTION_LIST: return "NdfDepictionList";
 
             case EFFETS_SUR_UNITE: return "EffetsSurUnite";
-
-
-
-
+            case DAMAGE_RESISTANCE: return "DamageResistance";
+            case DAMAGE_RESISTANCE_FAMILY_LIST: return "DamageResistanceFamilyList";
+            case EXPERIENCE_LEVELS: return "ExperienceLevels";
+            case PROJECTILE_TYPE: return "ProjectileType";
             case ARTILLERY_PROJECTILE_DESCRIPTOR: return "ArtilleryProjectileDescriptor";
 
             case SOUND_DESCRIPTORS: return "SoundDescriptors";

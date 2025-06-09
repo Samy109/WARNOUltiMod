@@ -26,6 +26,7 @@ public abstract class NDFValue {
         DAMAGE_STAIR_TYPE_EVOLUTION("DamageStairTypeEvolutionOverRangeDescriptor.ndf", "TDamageStairTypeEvolutionOverRangeDescriptor", "Damage Stair Type Evolution"),
         EFFETS_SUR_UNITE("EffetsSurUnite.ndf", "TEffectsPackDescriptor", "Effects on Unit"),
         EXPERIENCE_LEVELS("ExperienceLevels.ndf", "TExperienceLevelDescriptor", "Experience Level"),
+        PROJECTILE_TYPE("ProjectileType.ndf", "EProjectileType", "Projectile Type"),
         FIRE_DESCRIPTOR("FireDescriptor.ndf", "TFireDescriptor", "Fire"),
         GENERATED_DEPICTION_FX_MISSILES("GeneratedDepictionFXMissiles.ndf", "TDepictionDescriptor", "Depiction FX Missile"),
         GENERATED_DEPICTION_FX_WEAPONS("GeneratedDepictionFXWeapons.ndf", "TDepictionDescriptor", "Depiction FX Weapon"),
@@ -94,22 +95,6 @@ public abstract class NDFValue {
                     return type;
                 }
             }
-
-            // Fallback to endsWith checks for backwards compatibility
-            if (name.endsWith("unitedescriptor.ndf")) return UNITE_DESCRIPTOR;
-            if (name.endsWith("missiledescriptors.ndf")) return MISSILE_DESCRIPTORS;
-            if (name.endsWith("missilecarriage.ndf")) return MISSILE_CARRIAGE;
-            if (name.endsWith("weapondescriptor.ndf")) return WEAPON_DESCRIPTOR;
-            if (name.endsWith("ammunitionmissiles.ndf")) return AMMUNITION_MISSILES;
-            if (name.endsWith("ammunition.ndf")) return AMMUNITION;
-
-            // Additional fallbacks for comprehensive dependency support
-            if (name.endsWith("generatedinfantrydepiction.ndf")) return GENERATED_INFANTRY_DEPICTION;
-            if (name.endsWith("vehicledepiction.ndf")) return VEHICLE_DEPICTION;
-            if (name.endsWith("aircraftdepiction.ndf")) return AIRCRAFT_DEPICTION;
-            if (name.endsWith("effetssurUnite.ndf")) return EFFETS_SUR_UNITE;
-            if (name.endsWith("sounddescriptors.ndf")) return SOUND_DESCRIPTORS;
-            if (name.endsWith("weaponsoundhappenings.ndf")) return WEAPON_SOUND_HAPPENINGS;
 
             return UNKNOWN;
         }
