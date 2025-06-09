@@ -41,19 +41,15 @@ public class EntityCreationManager {
         fileTypeObjectTypes.put("WeaponDescriptor", "TWeaponManagerModuleDescriptor");
         fileTypeObjectTypes.put("Ammunition", "TAmmunitionDescriptor");
         fileTypeObjectTypes.put("AmmunitionMissiles", "TAmmunitionDescriptor");
-        fileTypeObjectTypes.put("EffectDescriptor", "TEffectDescriptor");
-        fileTypeObjectTypes.put("ProjectileDescriptor", "TProjectileDescriptor");
-        fileTypeObjectTypes.put("ExplosionDescriptor", "TExplosionDescriptor");
-        fileTypeObjectTypes.put("SoundDescriptor", "TSoundDescriptor");
+        fileTypeObjectTypes.put("EffetsSurUnite", "TEffectsPackDescriptor");
+        fileTypeObjectTypes.put("SoundDescriptors", "TSoundDescriptor");
+        fileTypeObjectTypes.put("WeaponSoundHappenings", "TSoundHappening");
         fileTypeObjectTypes.put("NdfDepictionList", "ConstantDefinition");
         fileTypeObjectTypes.put("GeneratedInfantryDepiction", "TInfantryDepictionDescriptor");
         fileTypeObjectTypes.put("VehicleDepiction", "TVehicleDepictionDescriptor");
-        fileTypeObjectTypes.put("BallisticDescriptor", "TBallisticDescriptor");
-        fileTypeObjectTypes.put("WeaponSoundDescriptor", "TWeaponSoundDescriptor");
         fileTypeObjectTypes.put("InfantryAnimationDescriptor", "TInfantryAnimationDescriptor");
         fileTypeObjectTypes.put("VehicleAnimationDescriptor", "TVehicleAnimationDescriptor");
         fileTypeObjectTypes.put("AircraftAnimationDescriptor", "TAircraftAnimationDescriptor");
-        fileTypeObjectTypes.put("ProductionDescriptor", "TProductionDescriptor");
         fileTypeObjectTypes.put("SupplyDescriptor", "TSupplyDescriptor");
         fileTypeObjectTypes.put("ReconDescriptor", "TReconDescriptor");
         fileTypeObjectTypes.put("CommandDescriptor", "TCommandDescriptor");
@@ -302,17 +298,13 @@ public class EntityCreationManager {
      */
     private boolean isInherentlyOptional(String fileType) {
         // These file types are optional by design - not all units need them
-        return "ProjectileDescriptor".equals(fileType) ||
-               "ExplosionDescriptor".equals(fileType) ||
-               "EffectDescriptor".equals(fileType) ||
-               "BallisticDescriptor".equals(fileType) ||
+        return "EffetsSurUnite".equals(fileType) ||
                "ArtilleryProjectileDescriptor".equals(fileType) ||
-               "WeaponSoundDescriptor".equals(fileType) ||
+               "WeaponSoundHappenings".equals(fileType) ||
                "VehicleSoundDescriptor".equals(fileType) ||
                "InfantryAnimationDescriptor".equals(fileType) ||
                "VehicleAnimationDescriptor".equals(fileType) ||
                "AircraftAnimationDescriptor".equals(fileType) ||
-               "ProductionDescriptor".equals(fileType) ||
                "SupplyDescriptor".equals(fileType) ||
                "ReconDescriptor".equals(fileType) ||
                "CommandDescriptor".equals(fileType) ||
@@ -487,21 +479,22 @@ public class EntityCreationManager {
      */
     private void analyzeEffectDependencies(NDFValue.ObjectValue unit, EntityTypeAnalysis analysis,
                                          Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        // Units with weapons need effect descriptors
+        // Units with weapons need effect descriptors - Note: EffectDescriptor.ndf doesn't exist, effects are in EffetsSurUnite.ndf
         if (hasWeaponManager(unit)) {
-            analysis.addFileRequirement("EffectDescriptor", "TEffectDescriptor");
-            analysis.addFileRequirement("ExplosionDescriptor", "TExplosionDescriptor");
+            analysis.addFileRequirement("EffetsSurUnite", "TEffectsPackDescriptor");
         }
 
         // Check for specific effect modules
         if (hasModuleOfType(unit, "TEffectModuleDescriptor") ||
             hasModuleOfType(unit, "TSpecialEffectModuleDescriptor")) {
-            analysis.addFileRequirement("EffectDescriptor", "TEffectDescriptor");
+            analysis.addFileRequirement("EffetsSurUnite", "TEffectsPackDescriptor");
         }
 
-        // Damage effects
+        // Damage effects - Note: DamageDescriptor.ndf doesn't exist
+        // Damage info is in DamageResistance.ndf and DamageResistanceFamilyList.ndf
         if (hasModuleOfType(unit, "TDamageModuleDescriptor")) {
-            analysis.addFileRequirement("DamageDescriptor", "TDamageDescriptor");
+            analysis.addFileRequirement("DamageResistance", "TDamageResistanceDescriptor");
+            analysis.addFileRequirement("DamageResistanceFamilyList", "TDamageResistanceFamilyDescriptor");
         }
     }
 
@@ -510,11 +503,8 @@ public class EntityCreationManager {
      */
     private void analyzeProjectileDependencies(NDFValue.ObjectValue unit, EntityTypeAnalysis analysis,
                                              Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        // Units with weapons need projectile descriptors
-        if (hasWeaponManager(unit)) {
-            analysis.addFileRequirement("ProjectileDescriptor", "TProjectileDescriptor");
-            analysis.addFileRequirement("BallisticDescriptor", "TBallisticDescriptor");
-        }
+        // Note: ProjectileDescriptor.ndf and BallisticDescriptor.ndf don't exist
+        // Projectile and ballistic information is embedded in Ammunition.ndf files
 
         // Artillery specifically needs ballistic descriptors
         String entityType = classifyUnit(unit);
@@ -528,15 +518,16 @@ public class EntityCreationManager {
      */
     private void analyzeSoundDependencies(NDFValue.ObjectValue unit, EntityTypeAnalysis analysis,
                                         Map<String, List<NDFValue.ObjectValue>> openFiles) {
+        // Correct file name is SoundDescriptors.ndf (plural), not SoundDescriptor.ndf
         // All units need sound descriptors
-        analysis.addFileRequirement("SoundDescriptor", "TSoundDescriptor");
+        analysis.addFileRequirement("SoundDescriptors", "TSoundDescriptor");
 
-        // Units with weapons need weapon sound descriptors
+        // Units with weapons need weapon sound happenings (maps SFXWeapon_* to sound descriptors)
         if (hasWeaponManager(unit)) {
-            analysis.addFileRequirement("WeaponSoundDescriptor", "TWeaponSoundDescriptor");
+            analysis.addFileRequirement("WeaponSoundHappenings", "TSoundHappening");
         }
 
-        // Vehicles need engine sounds
+        // Vehicles need engine sounds (if they exist)
         String entityType = classifyUnit(unit);
         if ("TANK".equals(entityType) || "VEHICLE".equals(entityType) || "TRANSPORT".equals(entityType)) {
             analysis.addFileRequirement("VehicleSoundDescriptor", "TVehicleSoundDescriptor");
@@ -643,17 +634,18 @@ public class EntityCreationManager {
 
         // Effect templates
         if (lower.contains("effect_") || lower.contains("explosion_")) {
-            return "EffectDescriptor";
+            return "EffetsSurUnite";
         }
 
-        // Projectile templates
+        // Projectile templates - Note: ProjectileDescriptor.ndf doesn't exist, projectile info is in Ammunition.ndf
         if (lower.contains("projectile_") || lower.contains("ballistic_")) {
-            return "ProjectileDescriptor";
+            return "Ammunition";
         }
 
         // Sound templates
         if (lower.contains("sound_") || lower.contains("audio_")) {
-            return "SoundDescriptor";
+            // Correct file name is SoundDescriptors.ndf (plural), not SoundDescriptor.ndf
+            return "SoundDescriptors";
         }
 
         // Missile templates
@@ -680,8 +672,8 @@ public class EntityCreationManager {
         if (lower.contains("weapondescriptor_")) return "TWeaponManagerModuleDescriptor";
         if (lower.contains("ammunition_")) return "TAmmunitionDescriptor";
         if (lower.contains("depiction_")) return "ConstantDefinition";
-        if (lower.contains("effect_")) return "TEffectDescriptor";
-        if (lower.contains("projectile_")) return "TProjectileDescriptor";
+        if (lower.contains("effect_")) return "TEffectsPackDescriptor";
+        if (lower.contains("projectile_")) return "TAmmunitionDescriptor"; // Projectile info is in ammunition files
         if (lower.contains("sound_")) return "TSoundDescriptor";
         if (lower.contains("missile_")) return "TEntityDescriptor";
         if (lower.contains("building_")) return "TBuildingDescriptor";
@@ -699,9 +691,10 @@ public class EntityCreationManager {
             analysis.addFileRequirement("ExperienceLevels", "TExperienceDescriptor");
         }
 
-        // Production and factory systems
+        // Production and factory systems - Note: ProductionDescriptor.ndf doesn't exist, production info is in Production.ndf constants
         if (hasModuleOfType(unit, "TProductionModuleDescriptor")) {
-            analysis.addFileRequirement("ProductionDescriptor", "TProductionDescriptor");
+            // Production constants are in Production.ndf, not ProductionDescriptor.ndf
+            analysis.addFileRequirement("Production", "ConstantDefinition");
         }
 
         // Supply systems
@@ -1140,12 +1133,10 @@ public class EntityCreationManager {
                 return "InfantryDepiction_" + entityName;
             case "VehicleDepiction":
                 return "VehicleDepiction_" + entityName;
-            case "EffectDescriptor":
-                return "Effect_" + entityName;
-            case "ProjectileDescriptor":
-                return "Projectile_" + entityName;
-            case "SoundDescriptor":
-                return "Sound_" + entityName;
+            case "EffetsSurUnite":
+                return "UnitEffect_" + entityName;
+            case "WeaponSoundHappenings":
+                return "WeaponSound_" + entityName;
             default:
                 // Fallback to generic naming
                 String cleanType = objectType.replace("T", "").replace("Descriptor", "");
@@ -1242,9 +1233,9 @@ public class EntityCreationManager {
                     properties.put("Ammunition", "~/Ammunition_" + ammoTemplate);
                 }
 
-                String effectTemplate = crossFileReferences.get("EffectDescriptor");
+                String effectTemplate = crossFileReferences.get("EffetsSurUnite");
                 if (effectTemplate != null) {
-                    properties.put("HitEffect", "~/EffectDescriptor_" + effectTemplate);
+                    properties.put("HitEffect", "~/EffetsSurUnite_" + effectTemplate);
                 }
                 break;
 
@@ -1257,28 +1248,25 @@ public class EntityCreationManager {
                     properties.put("Caliber", getDefaultCaliber(entityType));
                 }
 
-                String projectileTemplate = crossFileReferences.get("ProjectileDescriptor");
-                if (projectileTemplate != null) {
-                    properties.put("ProjectileDescriptor", "~/ProjectileDescriptor_" + projectileTemplate);
+                // Add essential projectile properties that are embedded in ammunition files
+                if (!properties.containsKey("ProjectileType")) {
+                    properties.put("ProjectileType", getDefaultProjectileType(entityType));
+                }
+                if (!properties.containsKey("MaximalSpeedGRU")) {
+                    properties.put("MaximalSpeedGRU", "0.0");
+                }
+                if (!properties.containsKey("FluidFriction")) {
+                    properties.put("FluidFriction", getDefaultFluidFriction(entityType));
                 }
                 break;
 
-            case "EffectDescriptor":
-                // Effect properties
-                if (!properties.containsKey("EffectName")) {
-                    properties.put("EffectName", entityName + "_Effect");
+            case "EffetsSurUnite":
+                // Effects pack properties
+                if (!properties.containsKey("NameForDebug")) {
+                    properties.put("NameForDebug", entityName);
                 }
-
-                String explosionTemplate = crossFileReferences.get("ExplosionDescriptor");
-                if (explosionTemplate != null) {
-                    properties.put("ExplosionEffect", "~/ExplosionDescriptor_" + explosionTemplate);
-                }
-                break;
-
-            case "SoundDescriptor":
-                // Sound properties
-                if (!properties.containsKey("SoundName")) {
-                    properties.put("SoundName", entityName + "_Sound");
+                if (!properties.containsKey("EffectsDescriptors")) {
+                    properties.put("EffectsDescriptors", "[]");
                 }
                 break;
         }
@@ -1294,6 +1282,32 @@ public class EntityCreationManager {
             case "ARTILLERY": return "155mm";
             case "AIR_DEFENSE": return "35mm";
             default: return "25mm";
+        }
+    }
+
+    /**
+     * Get default projectile type based on entity type
+     */
+    private String getDefaultProjectileType(String entityType) {
+        switch (entityType.toUpperCase()) {
+            case "AIRCRAFT":
+                return "EProjectileType/Bombe";
+            case "ARTILLERY":
+                return "EProjectileType/Artillerie";
+            default:
+                return "EProjectileType/Obus";
+        }
+    }
+
+    /**
+     * Get default fluid friction based on entity type
+     */
+    private String getDefaultFluidFriction(String entityType) {
+        switch (entityType.toUpperCase()) {
+            case "AIRCRAFT":
+                return "0.4"; // Aircraft bombs have higher friction
+            default:
+                return "0.0"; // Most projectiles have no friction
         }
     }
 

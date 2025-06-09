@@ -567,23 +567,22 @@ public class MainWindow extends JFrame {
             case DEPICTION_DESCRIPTOR: return "DepictionDescriptor";
             case NDF_DEPICTION_LIST: return "NdfDepictionList";
 
-            case EFFECT_DESCRIPTOR: return "EffectDescriptor";
-            case EXPLOSION_DESCRIPTOR: return "ExplosionDescriptor";
-            case DAMAGE_DESCRIPTOR: return "DamageDescriptor";
+            case EFFETS_SUR_UNITE: return "EffetsSurUnite";
 
-            case PROJECTILE_DESCRIPTOR: return "ProjectileDescriptor";
-            case BALLISTIC_DESCRIPTOR: return "BallisticDescriptor";
+
+
+
             case ARTILLERY_PROJECTILE_DESCRIPTOR: return "ArtilleryProjectileDescriptor";
 
-            case SOUND_DESCRIPTOR: return "SoundDescriptor";
-            case WEAPON_SOUND_DESCRIPTOR: return "WeaponSoundDescriptor";
+            case SOUND_DESCRIPTORS: return "SoundDescriptors";
+            case WEAPON_SOUND_HAPPENINGS: return "WeaponSoundHappenings";
             case VEHICLE_SOUND_DESCRIPTOR: return "VehicleSoundDescriptor";
 
             case INFANTRY_ANIMATION_DESCRIPTOR: return "InfantryAnimationDescriptor";
             case VEHICLE_ANIMATION_DESCRIPTOR: return "VehicleAnimationDescriptor";
             case AIRCRAFT_ANIMATION_DESCRIPTOR: return "AircraftAnimationDescriptor";
 
-            case PRODUCTION_DESCRIPTOR: return "ProductionDescriptor";
+
             case SUPPLY_DESCRIPTOR: return "SupplyDescriptor";
             case RECON_DESCRIPTOR: return "ReconDescriptor";
             case COMMAND_DESCRIPTOR: return "CommandDescriptor";

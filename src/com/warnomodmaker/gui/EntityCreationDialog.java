@@ -433,14 +433,11 @@ public class EntityCreationDialog extends JDialog {
             case "WeaponDescriptor": return "Weapon systems and firing mechanics";
             case "Ammunition": return "Ammunition types and damage values";
             case "NdfDepictionList": return "Visual appearance and 3D models";
-            case "SoundDescriptor": return "Audio effects and sound clips";
-            case "EffectDescriptor": return "Visual effects and particle systems";
-            case "ProjectileDescriptor": return "Projectile physics and trajectories";
-            case "ExplosionDescriptor": return "Explosion effects and area damage";
+            case "EffetsSurUnite": return "Unit effects and status modifiers";
+            case "SoundDescriptors": return "Audio effects and sound clips";
+            case "WeaponSoundHappenings": return "Weapon sound mappings and audio events";
             case "GeneratedInfantryDepiction": return "Infantry-specific visual models";
             case "VehicleDepiction": return "Vehicle-specific visual models";
-            case "BallisticDescriptor": return "Ballistic calculations and accuracy";
-            case "WeaponSoundDescriptor": return "Weapon-specific audio effects";
             case "InfantryAnimationDescriptor": return "Infantry movement animations";
             case "VehicleAnimationDescriptor": return "Vehicle movement animations";
             default: return "Specialized functionality for this unit type";

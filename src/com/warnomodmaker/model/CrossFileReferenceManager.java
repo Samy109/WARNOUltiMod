@@ -248,15 +248,22 @@ public class CrossFileReferenceManager {
         }
 
         if (lower.contains("effect_") || lower.contains("explosion_")) {
-            return "EffectDescriptor";
+            // Effects are in EffetsSurUnite.ndf, not EffectDescriptor.ndf
+            return "EffetsSurUnite";
         }
 
         if (lower.contains("projectile_") || lower.contains("ballistic_")) {
-            return "ProjectileDescriptor";
+            // Projectile and ballistic info is in Ammunition files, not separate descriptor files
+            return "Ammunition";
         }
 
         if (lower.contains("sound_") || lower.contains("audio_")) {
-            return "SoundDescriptor";
+            if (lower.contains("weapon")) {
+                // Weapon sounds are mapped in WeaponSoundHappenings.ndf
+                return "WeaponSoundHappenings";
+            }
+            // General sounds are in SoundDescriptors.ndf (plural), not SoundDescriptor.ndf
+            return "SoundDescriptors";
         }
 
         if (lower.contains("missile_")) {

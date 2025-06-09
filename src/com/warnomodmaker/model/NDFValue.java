@@ -24,7 +24,7 @@ public abstract class NDFValue {
         DAMAGE_RESISTANCE_FAMILY_LIST("DamageResistanceFamilyList.ndf", "TDamageResistanceFamilyDescriptor", "Damage Resistance Family"),
         DAMAGE_RESISTANCE_FAMILY_LIST_IMPL("DamageResistanceFamilyListImpl.ndf", "TDamageResistanceFamilyDescriptor", "Damage Resistance Family Impl"),
         DAMAGE_STAIR_TYPE_EVOLUTION("DamageStairTypeEvolutionOverRangeDescriptor.ndf", "TDamageStairTypeEvolutionOverRangeDescriptor", "Damage Stair Type Evolution"),
-        EFFETS_SUR_UNITE("EffetsSurUnite.ndf", "TEffetSurUniteDescriptor", "Effect on Unit"),
+        EFFETS_SUR_UNITE("EffetsSurUnite.ndf", "TEffectsPackDescriptor", "Effects on Unit"),
         EXPERIENCE_LEVELS("ExperienceLevels.ndf", "TExperienceLevelDescriptor", "Experience Level"),
         FIRE_DESCRIPTOR("FireDescriptor.ndf", "TFireDescriptor", "Fire"),
         GENERATED_DEPICTION_FX_MISSILES("GeneratedDepictionFXMissiles.ndf", "TDepictionDescriptor", "Depiction FX Missile"),
@@ -46,23 +46,24 @@ public abstract class NDFValue {
         AIRCRAFT_DEPICTION("AircraftDepiction.ndf", "TAircraftDepictionDescriptor", "Aircraft Depiction"),
         DEPICTION_DESCRIPTOR("DepictionDescriptor.ndf", "TDepictionDescriptor", "Depiction"),
 
-        EFFECT_DESCRIPTOR("EffectDescriptor.ndf", "TEffectDescriptor", "Effect"),
-        EXPLOSION_DESCRIPTOR("ExplosionDescriptor.ndf", "TExplosionDescriptor", "Explosion"),
-        DAMAGE_DESCRIPTOR("DamageDescriptor.ndf", "TDamageDescriptor", "Damage"),
+        // Note: EffectDescriptor.ndf doesn't exist - effects are in EffetsSurUnite.ndf
+        // Note: DamageDescriptor.ndf doesn't exist - damage info is in DamageResistance.ndf and DamageResistanceFamilyList.ndf
+        // Note: ProjectileDescriptor.ndf doesn't exist - projectile info is in Ammunition.ndf files
+        // Note: ExplosionDescriptor.ndf doesn't exist - explosion effects are in EffetsSurUnite.ndf
+        // Note: BallisticDescriptor.ndf doesn't exist - ballistic info is in TemplatesProjectiles.ndf
 
-        PROJECTILE_DESCRIPTOR("ProjectileDescriptor.ndf", "TProjectileDescriptor", "Projectile"),
-        BALLISTIC_DESCRIPTOR("BallisticDescriptor.ndf", "TBallisticDescriptor", "Ballistic"),
         ARTILLERY_PROJECTILE_DESCRIPTOR("ArtilleryProjectileDescriptor.ndf", "TArtilleryProjectileDescriptor", "Artillery Projectile"),
 
-        SOUND_DESCRIPTOR("SoundDescriptor.ndf", "TSoundDescriptor", "Sound"),
-        WEAPON_SOUND_DESCRIPTOR("WeaponSoundDescriptor.ndf", "TWeaponSoundDescriptor", "Weapon Sound"),
+        // Correct sound file name is SoundDescriptors.ndf (plural), not SoundDescriptor.ndf
+        SOUND_DESCRIPTORS("SoundDescriptors.ndf", "TSoundDescriptor", "Sound Descriptors"),
+        WEAPON_SOUND_HAPPENINGS("WeaponSoundHappenings.ndf", "TSoundHappening", "Weapon Sound Happenings"),
         VEHICLE_SOUND_DESCRIPTOR("VehicleSoundDescriptor.ndf", "TVehicleSoundDescriptor", "Vehicle Sound"),
 
         INFANTRY_ANIMATION_DESCRIPTOR("InfantryAnimationDescriptor.ndf", "TInfantryAnimationDescriptor", "Infantry Animation"),
         VEHICLE_ANIMATION_DESCRIPTOR("VehicleAnimationDescriptor.ndf", "TVehicleAnimationDescriptor", "Vehicle Animation"),
         AIRCRAFT_ANIMATION_DESCRIPTOR("AircraftAnimationDescriptor.ndf", "TAircraftAnimationDescriptor", "Aircraft Animation"),
 
-        PRODUCTION_DESCRIPTOR("ProductionDescriptor.ndf", "TProductionDescriptor", "Production"),
+        // Note: ProductionDescriptor.ndf doesn't exist - production info is in Production.ndf constants file
         SUPPLY_DESCRIPTOR("SupplyDescriptor.ndf", "TSupplyDescriptor", "Supply"),
         RECON_DESCRIPTOR("ReconDescriptor.ndf", "TReconDescriptor", "Reconnaissance"),
         COMMAND_DESCRIPTOR("CommandDescriptor.ndf", "TCommandDescriptor", "Command"),
@@ -106,11 +107,9 @@ public abstract class NDFValue {
             if (name.endsWith("generatedinfantrydepiction.ndf")) return GENERATED_INFANTRY_DEPICTION;
             if (name.endsWith("vehicledepiction.ndf")) return VEHICLE_DEPICTION;
             if (name.endsWith("aircraftdepiction.ndf")) return AIRCRAFT_DEPICTION;
-            if (name.endsWith("effectdescriptor.ndf")) return EFFECT_DESCRIPTOR;
-            if (name.endsWith("explosiondescriptor.ndf")) return EXPLOSION_DESCRIPTOR;
-            if (name.endsWith("projectiledescriptor.ndf")) return PROJECTILE_DESCRIPTOR;
-            if (name.endsWith("ballisticdescriptor.ndf")) return BALLISTIC_DESCRIPTOR;
-            if (name.endsWith("sounddescriptor.ndf")) return SOUND_DESCRIPTOR;
+            if (name.endsWith("effetssurUnite.ndf")) return EFFETS_SUR_UNITE;
+            if (name.endsWith("sounddescriptors.ndf")) return SOUND_DESCRIPTORS;
+            if (name.endsWith("weaponsoundhappenings.ndf")) return WEAPON_SOUND_HAPPENINGS;
 
             return UNKNOWN;
         }
