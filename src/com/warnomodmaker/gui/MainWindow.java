@@ -516,7 +516,9 @@ public class MainWindow extends JFrame implements FileLoader {
 
                 // Refresh the current tab and highlight the new entity
                 refreshCurrentTab();
-                highlightNewEntity(wizard.getCreatedEntityName());
+
+                String entityName = wizard.getCreatedEntityName();
+                highlightNewEntity(entityName);
                 updateTitle();
 
                 JOptionPane.showMessageDialog(
@@ -639,6 +641,34 @@ public class MainWindow extends JFrame implements FileLoader {
             results.toString(),
             "Auto-Load Results",
             JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    @Override
+    public Map<String, List<NDFValue.ObjectValue>> getOpenFiles() {
+        Map<String, List<NDFValue.ObjectValue>> openFiles = new HashMap<>();
+
+        for (FileTabState tabState : tabStates) {
+            if (tabState.hasData() && tabState.getFile() != null) {
+                String fileName = tabState.getFile().getName();
+                List<NDFValue.ObjectValue> objects = tabState.getNDFObjects();
+                openFiles.put(fileName, objects);
+            }
+        }
+        return openFiles;
+    }
+
+    @Override
+    public Map<String, ModificationTracker> getModificationTrackers() {
+        Map<String, ModificationTracker> trackers = new HashMap<>();
+
+        for (FileTabState tabState : tabStates) {
+            if (tabState.hasData() && tabState.getFile() != null) {
+                String fileName = tabState.getFile().getName();
+                trackers.put(fileName, tabState.getModificationTracker());
+            }
+        }
+
+        return trackers;
     }
 
     /**
@@ -1438,6 +1468,7 @@ public class MainWindow extends JFrame implements FileLoader {
      */
     private void highlightNewEntity(String entityName) {
         FileTabPanel currentPanel = getCurrentTabPanel();
+
         if (currentPanel != null && entityName != null) {
             // Use SwingUtilities.invokeLater to ensure the refresh is complete before highlighting
             SwingUtilities.invokeLater(() -> {

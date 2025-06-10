@@ -223,20 +223,24 @@ public class EntityCreationWizard extends JDialog {
                 // Store step 1 data
                 selectedEntityType = (String) entityTypeCombo.getSelectedItem();
                 selectedEntityName = entityNameField.getText().trim();
-                
+
                 // Auto-load required files for step 2
                 autoLoadRequiredFiles();
             } else if (currentStep == 2) {
                 // Store step 2 data
                 entityConfiguration = configurationPanel.getConfiguration();
-                
-                // Create entity for step 3
-                createEntity();
             }
-            
+
             currentStep++;
             updateWizardContent();
             updateNavigationButtons();
+
+            // Create entity after step 3 UI is created
+            if (currentStep == 3) {
+                // Initialize entity manager with open files before creating entity
+                initializeEntityManager();
+                createEntity();
+            }
         }
     }
     
@@ -261,15 +265,11 @@ public class EntityCreationWizard extends JDialog {
     }
     
     private void updateWizardContent() {
-        // Remove current content (keep header and navigation)
-        Component[] components = getContentPane().getComponents();
-        Component headerComponent = components.length > 0 ? components[0] : null;
-        Component navigationComponent = components.length > 2 ? components[2] : null;
-
-        for (Component comp : components) {
-            if (comp != headerComponent && comp != navigationComponent) {
-                getContentPane().remove(comp);
-            }
+        // Remove only the CENTER component (content panel)
+        BorderLayout layout = (BorderLayout) getContentPane().getLayout();
+        Component centerComponent = layout.getLayoutComponent(BorderLayout.CENTER);
+        if (centerComponent != null) {
+            getContentPane().remove(centerComponent);
         }
         
         // Add new content based on step
@@ -355,6 +355,7 @@ public class EntityCreationWizard extends JDialog {
         resultsArea.setEditable(false);
         resultsArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         resultsArea.setBackground(new Color(248, 248, 248));
+        resultsArea.setForeground(new Color(50, 50, 50)); // Dark text for better readability
 
         JScrollPane scrollPane = new JScrollPane(resultsArea);
         scrollPane.setBorder(BorderFactory.createTitledBorder("Creation Summary"));
@@ -494,10 +495,19 @@ public class EntityCreationWizard extends JDialog {
             customProperties.put("Faction", entityConfiguration.get("Faction"));
             customProperties.put("Nation", entityConfiguration.get("Nation"));
 
+
+
+            // Use the cached open files and trackers (same references as initialization)
+            Map<String, List<NDFValue.ObjectValue>> openFiles = cachedOpenFiles;
+            Map<String, ModificationTracker> trackers = cachedTrackers;
+
+
+
             // Attempt to create the entity using the EntityCreationManager
             EntityCreationManager.EntityCreationResult creationResult =
                 entityManager.createCompleteEntity(selectedEntityType, selectedEntityName,
-                                                 customProperties, new HashMap<>(), new HashMap<>());
+                                                 customProperties, openFiles, trackers);
+
 
             results.append("\nEntity Creation Results:\n");
             if (creationResult.isSuccess()) {
@@ -505,7 +515,7 @@ public class EntityCreationWizard extends JDialog {
 
                 results.append("Files that were modified:\n");
                 for (Map.Entry<String, String> entry : creationResult.getCreatedObjects().entrySet()) {
-                    results.append("  ✓ ").append(entry.getKey()).append(".ndf → ").append(entry.getValue()).append("\n");
+                    results.append("  ✓ ").append(entry.getKey()).append(" → ").append(entry.getValue()).append("\n");
                 }
 
                 if (creationResult.hasPendingCreations()) {
@@ -522,6 +532,9 @@ public class EntityCreationWizard extends JDialog {
                 for (String error : creationResult.getErrors()) {
                     results.append("  - ").append(error).append("\n");
                 }
+                if (creationResult.getErrors().isEmpty()) {
+                    results.append("  - No specific error message provided\n");
+                }
                 entityCreated = false;
             }
 
@@ -532,5 +545,32 @@ public class EntityCreationWizard extends JDialog {
         }
 
         resultsArea.setText(results.toString());
+    }
+
+    // Store the open files reference to reuse for entity creation
+    private Map<String, List<NDFValue.ObjectValue>> cachedOpenFiles;
+    private Map<String, ModificationTracker> cachedTrackers;
+
+    /**
+     * Initialize the entity manager with currently open files
+     */
+    private void initializeEntityManager() {
+        // Get open files from the file loader and cache them
+        cachedOpenFiles = fileLoader.getOpenFiles();
+        cachedTrackers = fileLoader.getModificationTrackers();
+
+        if (cachedOpenFiles.isEmpty()) {
+            return;
+        }
+
+        // Analyze open files to create blueprints
+        entityManager.analyzeOpenFiles(cachedOpenFiles);
+    }
+
+    /**
+     * Get modification trackers for open files
+     */
+    private Map<String, ModificationTracker> getModificationTrackers() {
+        return fileLoader.getModificationTrackers();
     }
 }

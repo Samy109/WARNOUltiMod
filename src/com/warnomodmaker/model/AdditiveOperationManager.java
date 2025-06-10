@@ -100,8 +100,8 @@ public class AdditiveOperationManager {
                 return false;
             }
 
-            // Add to objects list
-            ndfObjects.add(newObject);
+            // Add to objects list at the beginning (index 0) so new entities appear at the top
+            ndfObjects.add(0, newObject);
 
             // Record the addition in modification tracker
             if (tracker != null) {

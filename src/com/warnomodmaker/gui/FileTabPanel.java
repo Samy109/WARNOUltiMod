@@ -158,7 +158,11 @@ public class FileTabPanel extends JPanel {
 
 
     public void refresh() {
-        objectBrowser.refresh();
+        // Re-set the unit descriptors to ensure the browser has the latest data
+        if (tabState.hasData()) {
+            objectBrowser.setUnitDescriptors(tabState.getNDFObjects(), tabState.getFileType());
+        }
+
         objectEditor.refresh();
     }
 
@@ -236,13 +240,16 @@ public class FileTabPanel extends JPanel {
 
         // Find the entity in the unit descriptors
         List<NDFValue.ObjectValue> units = tabState.getUnitDescriptors();
+
         if (units != null) {
             for (int i = 0; i < units.size(); i++) {
                 NDFValue.ObjectValue unit = units.get(i);
-                if (entityName.equals(unit.getInstanceName())) {
+                String unitName = unit.getInstanceName();
+
+                if (entityName.equals(unitName)) {
                     // Select the entity in the browser
                     objectBrowser.selectEntityByIndex(i);
-                    break;
+                    return;
                 }
             }
         }

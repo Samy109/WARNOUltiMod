@@ -41,7 +41,7 @@ public class EntityCreationManager {
         fileTypeObjectTypes.put("WeaponDescriptor", "TWeaponManagerModuleDescriptor");
         fileTypeObjectTypes.put("Ammunition", "TAmmunitionDescriptor");
         fileTypeObjectTypes.put("AmmunitionMissiles", "TAmmunitionDescriptor");
-        fileTypeObjectTypes.put("CapaciteList", "TCapaciteDescriptor");
+        fileTypeObjectTypes.put("CapaciteList.ndf", "TCapaciteDescriptor");
         fileTypeObjectTypes.put("EffetsSurUnite", "TEffectsPackDescriptor");
         fileTypeObjectTypes.put("SoundDescriptors", "TSoundDescriptor");
         fileTypeObjectTypes.put("WeaponSoundHappenings", "TSoundHappening");
@@ -74,7 +74,7 @@ public class EntityCreationManager {
         learnTemplatesFromOpenFiles(openFiles);
 
         // Only analyze entity creation if we have UniteDescriptor.ndf (primary file)
-        if (!openFiles.containsKey("UniteDescriptor")) {
+        if (!openFiles.containsKey("UniteDescriptor.ndf")) {
             return;
         }
 
@@ -102,7 +102,7 @@ public class EntityCreationManager {
                 templateManager.learnFromObjects(objects);
                 fileTypeTemplates.put(fileType, templateManager);
 
-                System.out.println("Learned templates for " + fileType + " from " + objects.size() + " objects");
+
             }
         }
     }
@@ -121,7 +121,7 @@ public class EntityCreationManager {
      * Learn from existing entities to create perfect templates with realistic placeholder values
      */
     private void learnFromExistingEntities(Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptor");
+        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptor.ndf");
         Map<String, List<NDFValue.ObjectValue>> entitiesByType = new HashMap<>();
 
         // Group units by entity type
@@ -303,7 +303,7 @@ public class EntityCreationManager {
      */
     private boolean isInherentlyOptional(String fileType) {
         // These file types are optional by design - not all units need them
-        return "CapaciteList".equals(fileType) ||
+        return "CapaciteList.ndf".equals(fileType) ||
                "EffetsSurUnite".equals(fileType) ||
                "ArtilleryProjectileDescriptor".equals(fileType) ||
                "WeaponSoundHappenings".equals(fileType) ||
@@ -321,7 +321,7 @@ public class EntityCreationManager {
      * Discover entity blueprints based on actual cross-file dependencies
      */
     private void discoverEntityBlueprints(Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptor");
+        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptor.ndf");
         Map<String, EntityTypeAnalysis> analysis = new HashMap<>();
         
         // Analyze each unit to understand entity patterns
@@ -419,7 +419,7 @@ public class EntityCreationManager {
     private void analyzeFileDependencies(NDFValue.ObjectValue unit, EntityTypeAnalysis analysis,
                                        Map<String, List<NDFValue.ObjectValue>> openFiles) {
         // ALWAYS requires UniteDescriptor.ndf - this is the primary file
-        analysis.addFileRequirement("UniteDescriptor", "TEntityDescriptor");
+        analysis.addFileRequirement("UniteDescriptor.ndf", "TEntityDescriptor");
 
         // Comprehensive dependency analysis
         analyzeWeaponDependencies(unit, analysis, openFiles);
@@ -442,10 +442,10 @@ public class EntityCreationManager {
         // Check for WeaponManager property (most combat units have this)
         if (hasWeaponManager(unit)) {
             // Units with weapons need WeaponDescriptor.ndf
-            analysis.addFileRequirement("WeaponDescriptor", "TWeaponManagerModuleDescriptor");
+            analysis.addFileRequirement("WeaponDescriptor.ndf", "TWeaponManagerModuleDescriptor");
 
             // Weapons need ammunition - this is almost universal
-            analysis.addFileRequirement("Ammunition", "TAmmunitionDescriptor");
+            analysis.addFileRequirement("Ammunition.ndf", "TAmmunitionDescriptor");
         }
     }
 
@@ -486,7 +486,7 @@ public class EntityCreationManager {
         // Infantry units specifically need GeneratedDepictionInfantry
         String entityType = classifyUnit(unit);
         if ("Infantry".equals(entityType)) {
-            analysis.addFileRequirement("GeneratedDepictionInfantry", "TInfantryDepictionDescriptor");
+            analysis.addFileRequirement("GeneratedDepictionInfantry.ndf", "TemplateInfantryDepictionSquad");
         }
 
         // All units need depiction resources which are managed through NdfDepictionList
@@ -507,21 +507,21 @@ public class EntityCreationManager {
                                          Map<String, List<NDFValue.ObjectValue>> openFiles) {
         // Units with special abilities need capacities defined in CapaciteList.ndf
         if (hasModuleOfType(unit, "TCapaciteModuleDescriptor")) {
-            analysis.addFileRequirement("CapaciteList", "TCapaciteDescriptor");
+            analysis.addFileRequirement("CapaciteList.ndf", "TCapaciteDescriptor");
         }
 
         // Units with effects need effects defined in EffetsSurUnite.ndf
         if (hasModuleOfType(unit, "TEffectApplierModuleDescriptor") ||
             hasModuleOfType(unit, "TEffectModuleDescriptor") ||
             hasModuleOfType(unit, "TSpecialEffectModuleDescriptor")) {
-            analysis.addFileRequirement("EffetsSurUnite", "TEffectsPackDescriptor");
+            analysis.addFileRequirement("EffetsSurUnite.ndf", "TEffectsPackDescriptor");
         }
 
         // Damage effects - Note: DamageDescriptor.ndf doesn't exist
         // Damage info is in DamageResistance.ndf and DamageResistanceFamilyList.ndf
         if (hasModuleOfType(unit, "TDamageModuleDescriptor")) {
-            analysis.addFileRequirement("DamageResistance", "TDamageResistanceDescriptor");
-            analysis.addFileRequirement("DamageResistanceFamilyList", "TDamageResistanceFamilyDescriptor");
+            analysis.addFileRequirement("DamageResistance.ndf", "TDamageResistanceDescriptor");
+            analysis.addFileRequirement("DamageResistanceFamilyList.ndf", "TDamageResistanceFamilyDescriptor");
         }
     }
 
@@ -547,11 +547,11 @@ public class EntityCreationManager {
                                         Map<String, List<NDFValue.ObjectValue>> openFiles) {
         // Correct file name is SoundDescriptors.ndf (plural), not SoundDescriptor.ndf
         // All units need sound descriptors
-        analysis.addFileRequirement("SoundDescriptors", "TSoundDescriptor");
+        analysis.addFileRequirement("SoundDescriptors.ndf", "TSoundDescriptor");
 
         // Units with weapons need weapon sound happenings (maps SFXWeapon_* to sound descriptors)
         if (hasWeaponManager(unit)) {
-            analysis.addFileRequirement("WeaponSoundHappenings", "TSoundHappening");
+            analysis.addFileRequirement("WeaponSoundHappenings.ndf", "TSoundHappening");
         }
 
         // Vehicles need engine sounds (if they exist)
@@ -652,7 +652,7 @@ public class EntityCreationManager {
 
         // Capacity/ability templates
         if (lower.contains("capacite_") || lower.contains("ability_") || lower.contains("skill_")) {
-            return "CapaciteList";
+            return "CapaciteList.ndf";
         }
 
         // Projectile templates - Note: ProjectileDescriptor.ndf doesn't exist, projectile info is in Ammunition.ndf
@@ -706,7 +706,7 @@ public class EntityCreationManager {
                                               Map<String, List<NDFValue.ObjectValue>> openFiles) {
         // Experience and progression systems
         if (hasModuleOfType(unit, "TExperienceModuleDescriptor")) {
-            analysis.addFileRequirement("ExperienceLevels", "TExperienceDescriptor");
+            analysis.addFileRequirement("ExperienceLevels.ndf", "TExperienceDescriptor");
         }
 
         // Production and factory systems - Note: Production.ndf only contains simple constants, not descriptors
@@ -941,6 +941,8 @@ public class EntityCreationManager {
             return new EntityCreationResult(false, entityName);
         }
 
+
+
         // Generate base GUID for this entity - used for cross-file consistency
         String baseGuid = guidGenerator.generateGUID();
         Map<String, String> crossFileReferences = new HashMap<>(); // fileType -> templateName
@@ -1163,21 +1165,21 @@ public class EntityCreationManager {
     private String generateTemplateName(String entityName, String objectType, String fileType) {
         // Follow WARNO naming patterns based on file type
         switch (fileType) {
-            case "UniteDescriptor":
-                return "Descriptor_Unit_" + entityName;
-            case "WeaponDescriptor":
+            case "UniteDescriptor.ndf":
+                return entityName; // Use the entity name directly for the main unit
+            case "WeaponDescriptor.ndf":
                 return "WeaponDescriptor_" + entityName;
-            case "Ammunition":
+            case "Ammunition.ndf":
                 return "Ammunition_" + entityName;
             case "AmmunitionMissiles":
                 return "AmmunitionMissiles_" + entityName;
-            case "GeneratedInfantryDepiction":
+            case "GeneratedDepictionInfantry.ndf":
                 return "InfantryDepiction_" + entityName;
             case "VehicleDepiction":
                 return "VehicleDepiction_" + entityName;
-            case "CapaciteList":
+            case "CapaciteList.ndf":
                 return "UnitCapacity_" + entityName;
-            case "WeaponSoundHappenings":
+            case "WeaponSoundHappenings.ndf":
                 return "WeaponSound_" + entityName;
             default:
                 // Fallback to generic naming
@@ -1275,7 +1277,7 @@ public class EntityCreationManager {
                     properties.put("Ammunition", "~/Ammunition_" + ammoTemplate);
                 }
 
-                String capacityTemplate = crossFileReferences.get("CapaciteList");
+                String capacityTemplate = crossFileReferences.get("CapaciteList.ndf");
                 if (capacityTemplate != null) {
                     properties.put("SpecialAbilities", "~/CapaciteList_" + capacityTemplate);
                 }
@@ -1302,7 +1304,7 @@ public class EntityCreationManager {
                 }
                 break;
 
-            case "CapaciteList":
+            case "CapaciteList.ndf":
                 // Capacity properties
                 if (!properties.containsKey("NameForDebug")) {
                     properties.put("NameForDebug", entityName);
@@ -1523,7 +1525,8 @@ public class EntityCreationManager {
         public boolean hasObject() { return object != null; }
 
         public String getDisplayName() {
-            return fileType + ".ndf → " + templateName;
+            String displayName = templateName != null ? templateName : "Pending creation";
+            return fileType + " → " + displayName;
         }
     }
     
@@ -1620,7 +1623,7 @@ public class EntityCreationManager {
         public boolean isRequired() { return !isOptional; }
 
         public String getDisplayName() {
-            return fileType + ".ndf" + (isOptional ? " (Optional)" : " (Required)");
+            return fileType + (isOptional ? " (Optional)" : " (Required)");
         }
     }
 }
