@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class MainWindow extends JFrame {
+public class MainWindow extends JFrame implements FileLoader {
 
     private List<FileTabState> tabStates;
     private EnhancedTabbedPane tabbedPane;
@@ -483,44 +483,22 @@ public class MainWindow extends JFrame {
     }
 
     private void showEntityCreationDialog(ActionEvent e) {
-        // Check if we have any open files
+        // Require at least one file to be open first
         if (tabStates.isEmpty()) {
             JOptionPane.showMessageDialog(
                 this,
-                "No files are open. Please open the required NDF files first.",
+                "No files are currently open. Please open at least one NDF file first to establish the working directory.",
                 "No Files Open",
                 JOptionPane.WARNING_MESSAGE
             );
             return;
         }
 
-        // Collect all open files and their modification trackers
-        Map<String, List<NDFValue.ObjectValue>> openFiles = new HashMap<>();
-        Map<String, ModificationTracker> trackers = new HashMap<>();
-
-        for (FileTabState tabState : tabStates) {
-            if (tabState.hasData()) {
-                String fileTypeName = getFileTypeName(tabState.getFileType());
-                openFiles.put(fileTypeName, tabState.getUnitDescriptors());
-                trackers.put(fileTypeName, tabState.getModificationTracker());
-            }
-        }
-
-        if (openFiles.isEmpty()) {
-            JOptionPane.showMessageDialog(
-                this,
-                "No valid NDF files are loaded.",
-                "No Data",
-                JOptionPane.WARNING_MESSAGE
-            );
-            return;
-        }
-
         try {
-            EntityCreationDialog dialog = new EntityCreationDialog(this, openFiles, trackers, integrityManager);
-            dialog.setVisible(true);
+            EntityCreationWizard wizard = new EntityCreationWizard(this, integrityManager, this);
+            wizard.setVisible(true);
 
-            if (dialog.wasEntityCreated()) {
+            if (wizard.wasEntityCreated()) {
                 // CRITICAL: Re-register all files with integrity manager to update cross-file tracking
                 for (FileTabState tabState : tabStates) {
                     if (tabState.hasData() && tabState.getFile() != null) {
@@ -530,12 +508,21 @@ public class MainWindow extends JFrame {
                     }
                     tabState.setModified(true);
                 }
+
+                // Switch to the first tab (usually UniteDescriptor.ndf where the new entity was created)
+                if (!tabStates.isEmpty()) {
+                    tabbedPane.setSelectedIndex(0);
+                }
+
+                // Refresh the current tab and highlight the new entity
                 refreshCurrentTab();
+                highlightNewEntity(wizard.getCreatedEntityName());
                 updateTitle();
 
                 JOptionPane.showMessageDialog(
                     this,
-                    "Complete entity created successfully!\nAll affected files have been marked as modified.",
+                    "Entity '" + wizard.getCreatedEntityName() + "' (" + wizard.getCreatedEntityType() +
+                    ") created successfully!\nAll affected files have been marked as modified.",
                     "Entity Created",
                     JOptionPane.INFORMATION_MESSAGE
                 );
@@ -543,12 +530,251 @@ public class MainWindow extends JFrame {
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(
                 this,
-                "Error opening entity creation dialog: " + ex.getMessage(),
+                "Error opening entity creation wizard: " + ex.getMessage(),
                 "Error",
                 JOptionPane.ERROR_MESSAGE
             );
             ex.printStackTrace();
         }
+    }
+
+    /**
+     * Auto-load required files for entity creation
+     */
+    public void autoLoadRequiredFiles(String[] fileNames) {
+        // Require at least one file to be open first
+        if (tabStates.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                "No files are currently open. Please open at least one NDF file first to establish the working directory.",
+                "No Files Open",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Find the root directory that contains both main NDF files and GameData folder
+        File directory = null;
+        for (FileTabState tabState : tabStates) {
+            if (tabState.getFile() != null) {
+                File fileDir = tabState.getFile().getParentFile();
+                // Walk up the directory tree to find the root that contains GameData
+                directory = findRootDirectory(fileDir);
+                if (directory != null) {
+                    break;
+                }
+            }
+        }
+
+        // If we can't find a good directory, try the tester files directory as fallback
+        if (directory == null || !directory.exists() || !directory.isDirectory()) {
+            // Try tester files directory as fallback
+            File testerDir = new File("tester files");
+            if (testerDir.exists() && testerDir.isDirectory()) {
+                directory = testerDir;
+                System.out.println("Using tester files directory as fallback");
+            } else {
+                JOptionPane.showMessageDialog(this,
+                    "Cannot determine working directory from open files. Please open a file manually first.",
+                    "Directory Not Found",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+        }
+
+        // Debug: Show what directory we're using
+        System.out.println("Auto-load using directory: " + directory.getAbsolutePath());
+
+        StringBuilder results = new StringBuilder();
+        results.append("Auto-loading results:\n\n");
+
+        int loaded = 0;
+        int alreadyOpen = 0;
+        int notFound = 0;
+
+        for (String fileName : fileNames) {
+            // Extract just the filename for comparison (in case of paths like GameData/Generated/Sound/SoundDescriptors.ndf)
+            String baseFileName = new File(fileName).getName();
+
+            // Check if file is already open
+            boolean isAlreadyOpen = false;
+            for (FileTabState tabState : tabStates) {
+                if (tabState.getFile() != null && tabState.getFile().getName().equals(baseFileName)) {
+                    isAlreadyOpen = true;
+                    break;
+                }
+            }
+
+            if (isAlreadyOpen) {
+                results.append("[OK] ").append(fileName).append(" (already open)\n");
+                alreadyOpen++;
+                continue;
+            }
+
+            // Try to find and load the file using smart location logic
+            File file = findFileInWarnoStructure(directory, fileName);
+            System.out.println("Looking for: " + fileName + " at: " + (file != null ? file.getAbsolutePath() : "null") + " (exists: " + (file != null && file.exists()) + ")");
+
+            // Extract just the filename for display (remove any path components)
+            String displayName = new File(fileName).getName();
+
+            if (file != null && file.exists() && file.isFile()) {
+                try {
+                    loadFileInBackgroundSilent(file);
+                    results.append("[OK] ").append(displayName).append(" (loaded)\n");
+                    loaded++;
+                } catch (Exception e) {
+                    results.append("[ERROR] ").append(displayName).append(" (error: ").append(e.getMessage()).append(")\n");
+                    notFound++;
+                }
+            } else {
+                results.append("[FAIL] ").append(displayName).append(" (not found)\n");
+                notFound++;
+            }
+        }
+
+        results.append("\nSummary: ").append(loaded).append(" loaded, ")
+                .append(alreadyOpen).append(" already open, ")
+                .append(notFound).append(" not found/failed");
+
+        JOptionPane.showMessageDialog(this,
+            results.toString(),
+            "Auto-Load Results",
+            JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
+     * Find a file in the directory tree, looking both in the specified directory
+     * and in parent/sibling directories for files with subdirectory paths
+     */
+    private File findFileInDirectoryTree(File baseDirectory, String fileName) {
+        // Try direct path first
+        File directFile = new File(baseDirectory, fileName);
+        if (directFile.exists()) {
+            return directFile;
+        }
+
+        // If fileName contains path separators, try more search strategies
+        if (fileName.contains("/") || fileName.contains("\\")) {
+            // Try looking in parent directory
+            File parentDir = baseDirectory.getParentFile();
+            if (parentDir != null) {
+                File parentFile = new File(parentDir, fileName);
+                if (parentFile.exists()) {
+                    return parentFile;
+                }
+            }
+
+            // Try recursive search in subdirectories
+            String targetFileName = new File(fileName).getName();
+            File foundFile = searchFileRecursively(baseDirectory, targetFileName);
+            if (foundFile != null) {
+                return foundFile;
+            }
+
+            // Try searching from parent directory
+            if (parentDir != null) {
+                foundFile = searchFileRecursively(parentDir, targetFileName);
+                if (foundFile != null) {
+                    return foundFile;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Recursively search for a file by name in directory tree
+     */
+    private File searchFileRecursively(File directory, String fileName) {
+        if (!directory.exists() || !directory.isDirectory()) {
+            return null;
+        }
+
+        File[] files = directory.listFiles();
+        if (files == null) {
+            return null;
+        }
+
+        // First check direct children
+        for (File file : files) {
+            if (file.isFile() && file.getName().equals(fileName)) {
+                return file;
+            }
+        }
+
+        // Then search subdirectories (limit depth to avoid infinite recursion)
+        for (File file : files) {
+            if (file.isDirectory() && !file.getName().startsWith(".")) {
+                File found = searchFileRecursively(file, fileName);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Find the root directory that contains both main NDF files and GameData folder
+     */
+    private File findRootDirectory(File startDir) {
+        File current = startDir;
+
+        // Walk up the directory tree looking for a directory that contains GameData
+        while (current != null) {
+            File gameDataDir = new File(current, "GameData");
+            if (gameDataDir.exists() && gameDataDir.isDirectory()) {
+                // This looks like the root directory
+                return current;
+            }
+            current = current.getParentFile();
+        }
+
+        // If we can't find GameData, just use the original directory
+        return startDir;
+    }
+
+    /**
+     * Find a file in the WARNO directory structure, knowing where different file types are located
+     */
+    private File findFileInWarnoStructure(File rootDir, String fileName) {
+        // Handle files with subdirectory paths (like GameData/Generated/Sound/SoundDescriptors.ndf)
+        if (fileName.contains("/") || fileName.contains("\\")) {
+            File directPath = new File(rootDir, fileName);
+            System.out.println("  Trying subdirectory path: " + directPath.getAbsolutePath() + " (exists: " + directPath.exists() + ")");
+            if (directPath.exists()) {
+                return directPath;
+            }
+        } else {
+            // For simple filenames, try the common WARNO locations
+            String[] commonLocations = {
+                // FIRST: Direct in root directory (most important for files like GeneratedDepictionInfantry.ndf)
+                fileName,
+                // Then try subdirectories where most files are found
+                "GameData/Generated/Gameplay/Gfx/" + fileName,
+                "GameData/Generated/Gameplay/Gfx/Infanterie/" + fileName,  // Infantry files are in Infanterie subdirectory
+                "GameData/Generated/Gameplay/" + fileName,
+                "GameData/Gameplay/Gfx/" + fileName,
+                "GameData/Generated/" + fileName,
+                "GameData/" + fileName,
+                // Additional locations for generated depiction files
+                "GameData/Generated/Gfx/" + fileName,
+                "GameData/Gfx/" + fileName,
+                "Generated/" + fileName,
+                "Gfx/" + fileName
+            };
+
+            for (String location : commonLocations) {
+                File file = new File(rootDir, location);
+                System.out.println("  Trying: " + file.getAbsolutePath() + " (exists: " + file.exists() + ")");
+                if (file.exists() && file.isFile()) {
+                    return file;
+                }
+            }
+        }
+
+        return null;
     }
 
     private String getFileTypeName(NDFValue.NDFFileType fileType) {
@@ -1059,6 +1285,52 @@ public class MainWindow extends JFrame {
         progressDialog.setVisible(true);
     }
 
+    /**
+     * Silent version of loadFileInBackground for auto-load functionality
+     */
+    private void loadFileInBackgroundSilent(File file) {
+        try {
+            // Determine file type
+            NDFValue.NDFFileType fileType = NDFValue.NDFFileType.fromFilename(file.getName());
+            List<NDFValue.ObjectValue> ndfObjects;
+            NDFParser parser;
+
+            try (Reader reader = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
+                parser = new NDFParser(reader);
+                parser.setFileType(fileType);
+                ndfObjects = parser.parse();
+            }
+
+            // Do heavy work in background thread
+            PropertyScanner propertyScanner = new PropertyScanner(ndfObjects, fileType);
+            propertyScanner.scanProperties();
+
+            DefaultListModel<NDFValue.ObjectValue> listModel = new DefaultListModel<>();
+            for (NDFValue.ObjectValue obj : ndfObjects) {
+                listModel.addElement(obj);
+            }
+
+            // Update UI on EDT with pre-processed data (no dialog)
+            SwingUtilities.invokeLater(() -> {
+                createNewTabWithPreprocessedData(file, ndfObjects, fileType, parser, propertyScanner, listModel);
+                // CRITICAL: Register file with cross-system integrity manager
+                integrityManager.registerFile(file.getName(), fileType, ndfObjects);
+                // NO SUCCESS DIALOG for silent loading
+            });
+
+        } catch (Exception e) {
+            // Still show error dialogs for silent loading
+            SwingUtilities.invokeLater(() -> {
+                JOptionPane.showMessageDialog(
+                    MainWindow.this,
+                    "Error loading file: " + e.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+            });
+            throw new RuntimeException(e);
+        }
+    }
 
     private void saveTabToFile(FileTabState tabState, File file) {
         try {
@@ -1158,6 +1430,19 @@ public class MainWindow extends JFrame {
         FileTabPanel currentPanel = getCurrentTabPanel();
         if (currentPanel != null) {
             currentPanel.refresh();
+        }
+    }
+
+    /**
+     * Highlight a newly created entity in the current tab
+     */
+    private void highlightNewEntity(String entityName) {
+        FileTabPanel currentPanel = getCurrentTabPanel();
+        if (currentPanel != null && entityName != null) {
+            // Use SwingUtilities.invokeLater to ensure the refresh is complete before highlighting
+            SwingUtilities.invokeLater(() -> {
+                currentPanel.selectAndHighlightEntity(entityName);
+            });
         }
     }
 

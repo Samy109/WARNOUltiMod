@@ -225,4 +225,26 @@ public class FileTabPanel extends JPanel {
     public void performGlobalSearch(String searchText) {
         objectBrowser.performGlobalSearch(searchText);
     }
+
+    /**
+     * Select and highlight a specific entity by name
+     */
+    public void selectAndHighlightEntity(String entityName) {
+        if (entityName == null || !tabState.hasData()) {
+            return;
+        }
+
+        // Find the entity in the unit descriptors
+        List<NDFValue.ObjectValue> units = tabState.getUnitDescriptors();
+        if (units != null) {
+            for (int i = 0; i < units.size(); i++) {
+                NDFValue.ObjectValue unit = units.get(i);
+                if (entityName.equals(unit.getInstanceName())) {
+                    // Select the entity in the browser
+                    objectBrowser.selectEntityByIndex(i);
+                    break;
+                }
+            }
+        }
+    }
 }

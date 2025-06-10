@@ -279,6 +279,19 @@ public class UnitBrowser extends JPanel {
         filterUnits();
     }
 
+    /**
+     * Select an entity by its index in the original list
+     */
+    public void selectEntityByIndex(int index) {
+        if (index >= 0 && index < listModel.getSize()) {
+            objectList.setSelectedIndex(index);
+            objectList.ensureIndexIsVisible(index);
+            // Trigger selection event
+            ObjectValue selectedObject = listModel.getElementAt(index);
+            notifySelectionListeners(selectedObject);
+        }
+    }
+
 
     private void filterUnits() {
         // Cancel any existing search

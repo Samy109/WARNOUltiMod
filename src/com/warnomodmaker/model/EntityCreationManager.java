@@ -41,6 +41,7 @@ public class EntityCreationManager {
         fileTypeObjectTypes.put("WeaponDescriptor", "TWeaponManagerModuleDescriptor");
         fileTypeObjectTypes.put("Ammunition", "TAmmunitionDescriptor");
         fileTypeObjectTypes.put("AmmunitionMissiles", "TAmmunitionDescriptor");
+        fileTypeObjectTypes.put("CapaciteList", "TCapaciteDescriptor");
         fileTypeObjectTypes.put("EffetsSurUnite", "TEffectsPackDescriptor");
         fileTypeObjectTypes.put("SoundDescriptors", "TSoundDescriptor");
         fileTypeObjectTypes.put("WeaponSoundHappenings", "TSoundHappening");
@@ -302,7 +303,8 @@ public class EntityCreationManager {
      */
     private boolean isInherentlyOptional(String fileType) {
         // These file types are optional by design - not all units need them
-        return "EffetsSurUnite".equals(fileType) ||
+        return "CapaciteList".equals(fileType) ||
+               "EffetsSurUnite".equals(fileType) ||
                "ArtilleryProjectileDescriptor".equals(fileType) ||
                "WeaponSoundHappenings".equals(fileType) ||
                "VehicleSoundDescriptor".equals(fileType) ||
@@ -358,27 +360,52 @@ public class EntityCreationManager {
             }
 
             switch (role) {
+                // Tank/Armor roles
                 case "armor": return "Tank";
                 case "hq_tank": return "Tank";
+
+                // Artillery roles
                 case "howitzer": return "Artillery";
                 case "mortar": return "Artillery";
                 case "mlrs": return "Artillery";
+
+                // Infantry roles
                 case "infantry": return "Infantry";
                 case "hq_inf": return "Infantry";
                 case "engineer": return "Infantry";
+
+                // Air Defense roles
                 case "aa": return "Air Defense";
+
+                // Transport/Vehicle roles
                 case "transport": return "Transport";
-                case "ifv": return "Transport";
-                case "hq_veh": return "Transport";
+                case "ifv": return "IFV";
+                case "hq_veh": return "Command Vehicle";
+
+                // Reconnaissance roles
                 case "reco": return "Reconnaissance";
+
+                // Support roles
                 case "supply": return "Supply";
-                case "appui": return "Aircraft";
-                case "sead": return "Aircraft";
-                case "hq_helo": return "Helicopter";
-                case "uav": return "Aircraft";
-                case "at": return "Anti-Tank";
                 case "log": return "Logistics";
                 case "cmd": return "Command";
+
+                // Aircraft roles (fixed-wing)
+                case "appui": return "Aircraft";
+                case "sead": return "SEAD Aircraft";
+                case "uav": return "UAV";
+                case "avion": return "Aircraft";
+                case "plane": return "Aircraft";
+                case "fighter": return "Fighter Aircraft";
+                case "bomber": return "Bomber Aircraft";
+
+                // Helicopter roles
+                case "hq_helo": return "Command Helicopter";
+                case "helo": return "Helicopter";
+                case "helicopter": return "Helicopter";
+
+                // Anti-Tank roles
+                case "at": return "Anti-Tank";
             }
         }
 
@@ -456,20 +483,15 @@ public class EntityCreationManager {
         // NOTE: NdfDepictionList is a system-generated file that should not have entities added to it
         // It contains a list of depiction file paths and is managed by the game engine
 
-        // Infantry units specifically need GeneratedInfantryDepiction
+        // Infantry units specifically need GeneratedDepictionInfantry
         String entityType = classifyUnit(unit);
-        if ("INFANTRY".equals(entityType)) {
-            analysis.addFileRequirement("GeneratedInfantryDepiction", "TInfantryDepictionDescriptor");
+        if ("Infantry".equals(entityType)) {
+            analysis.addFileRequirement("GeneratedDepictionInfantry", "TInfantryDepictionDescriptor");
         }
 
-        // Vehicle units need vehicle-specific depictions
-        if ("TANK".equals(entityType) || "VEHICLE".equals(entityType) || "TRANSPORT".equals(entityType)) {
-            analysis.addFileRequirement("VehicleDepiction", "TVehicleDepictionDescriptor");
-        }
-
-        // Aircraft need aircraft depictions
-        if ("HELICOPTER".equals(entityType) || "AIRCRAFT".equals(entityType)) {
-            analysis.addFileRequirement("AircraftDepiction", "TAircraftDepictionDescriptor");
+        // All units need depiction resources which are managed through NdfDepictionList
+        if (!"Infantry".equals(entityType)) {
+            analysis.addFileRequirement("NdfDepictionList", "DepictionResourceList");
         }
 
         // Check for specific depiction modules
@@ -483,13 +505,14 @@ public class EntityCreationManager {
      */
     private void analyzeEffectDependencies(NDFValue.ObjectValue unit, EntityTypeAnalysis analysis,
                                          Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        // Units with weapons need effect descriptors - Note: EffectDescriptor.ndf doesn't exist, effects are in EffetsSurUnite.ndf
-        if (hasWeaponManager(unit)) {
-            analysis.addFileRequirement("EffetsSurUnite", "TEffectsPackDescriptor");
+        // Units with special abilities need capacities defined in CapaciteList.ndf
+        if (hasModuleOfType(unit, "TCapaciteModuleDescriptor")) {
+            analysis.addFileRequirement("CapaciteList", "TCapaciteDescriptor");
         }
 
-        // Check for specific effect modules
-        if (hasModuleOfType(unit, "TEffectModuleDescriptor") ||
+        // Units with effects need effects defined in EffetsSurUnite.ndf
+        if (hasModuleOfType(unit, "TEffectApplierModuleDescriptor") ||
+            hasModuleOfType(unit, "TEffectModuleDescriptor") ||
             hasModuleOfType(unit, "TSpecialEffectModuleDescriptor")) {
             analysis.addFileRequirement("EffetsSurUnite", "TEffectsPackDescriptor");
         }
@@ -512,7 +535,7 @@ public class EntityCreationManager {
 
         // Artillery specifically needs ballistic descriptors
         String entityType = classifyUnit(unit);
-        if ("ARTILLERY".equals(entityType)) {
+        if ("Artillery".equals(entityType)) {
             analysis.addFileRequirement("ArtilleryProjectileDescriptor", "TArtilleryProjectileDescriptor");
         }
     }
@@ -533,7 +556,11 @@ public class EntityCreationManager {
 
         // Vehicles need engine sounds (if they exist)
         String entityType = classifyUnit(unit);
-        if ("TANK".equals(entityType) || "VEHICLE".equals(entityType) || "TRANSPORT".equals(entityType)) {
+        if ("Tank".equals(entityType) || "IFV".equals(entityType) || "Transport".equals(entityType) ||
+            "Command Vehicle".equals(entityType) || "Reconnaissance".equals(entityType) ||
+            "Air Defense".equals(entityType) || "Artillery".equals(entityType) ||
+            "Anti-Tank".equals(entityType) || "Supply".equals(entityType) ||
+            "Logistics".equals(entityType) || "Command".equals(entityType)) {
             analysis.addFileRequirement("VehicleSoundDescriptor", "TVehicleSoundDescriptor");
         }
     }
@@ -543,21 +570,8 @@ public class EntityCreationManager {
      */
     private void analyzeAnimationDependencies(NDFValue.ObjectValue unit, EntityTypeAnalysis analysis,
                                             Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        // Infantry units need animation descriptors
-        String entityType = classifyUnit(unit);
-        if ("INFANTRY".equals(entityType)) {
-            analysis.addFileRequirement("InfantryAnimationDescriptor", "TInfantryAnimationDescriptor");
-        }
-
-        // Vehicles need vehicle animations
-        if ("TANK".equals(entityType) || "VEHICLE".equals(entityType)) {
-            analysis.addFileRequirement("VehicleAnimationDescriptor", "TVehicleAnimationDescriptor");
-        }
-
-        // Aircraft need aircraft animations
-        if ("HELICOPTER".equals(entityType) || "AIRCRAFT".equals(entityType)) {
-            analysis.addFileRequirement("AircraftAnimationDescriptor", "TAircraftAnimationDescriptor");
-        }
+        // Animation descriptors are typically embedded in the depiction files
+        // No separate animation descriptor files needed
     }
 
     /**
@@ -636,9 +650,9 @@ public class EntityCreationManager {
             return "DepictionDescriptor";
         }
 
-        // Effect templates
-        if (lower.contains("effect_") || lower.contains("explosion_")) {
-            return "EffetsSurUnite";
+        // Capacity/ability templates
+        if (lower.contains("capacite_") || lower.contains("ability_") || lower.contains("skill_")) {
+            return "CapaciteList";
         }
 
         // Projectile templates - Note: ProjectileDescriptor.ndf doesn't exist, projectile info is in Ammunition.ndf
@@ -967,16 +981,21 @@ public class EntityCreationManager {
 
             // Check if file is open
             if (openFiles.containsKey(fileType)) {
-                // File is open - use existing system
+                // File is open - use existing system with entity-type-specific template
                 List<NDFValue.ObjectValue> objects = openFiles.get(fileType);
                 ModificationTracker tracker = trackers.get(fileType);
 
-                success = additiveManager.addNewObject(
+                // Get entity-type-specific template for better object creation
+                NDFValue.ObjectValue entityTemplate = getEntityTypeSpecificTemplate(
+                    blueprint.getEntityType(), fileType, requirement.getObjectType());
+
+                success = additiveManager.addNewObjectWithTemplate(
                     objects,
                     requirement.getObjectType(),
                     templateName,
                     templateProperties,
-                    tracker
+                    tracker,
+                    entityTemplate
                 );
             } else if (requirement.isRequired()) {
                 // Required file not open - this is an error
@@ -1011,13 +1030,16 @@ public class EntityCreationManager {
             return true;
         }
 
-        // Get template from learned patterns
-        String primaryObjectType = fileTypeObjectTypes.get(fileType);
-        if (primaryObjectType == null) {
-            primaryObjectType = objectType;
+        // Get template from learned patterns - use the specific object type requested
+        NDFValue.ObjectValue template = templateManager.getTemplate(objectType);
+        if (template == null) {
+            // Try fallback to primary object type for this file
+            String primaryObjectType = fileTypeObjectTypes.get(fileType);
+            if (primaryObjectType != null && !primaryObjectType.equals(objectType)) {
+                template = templateManager.getTemplate(primaryObjectType);
+            }
         }
 
-        NDFValue.ObjectValue template = templateManager.getTemplate(primaryObjectType);
         if (template == null) {
             // No specific template - create basic object
             result.addPendingFileCreation(fileType, templateName, objectType, templateProperties);
@@ -1029,6 +1051,25 @@ public class EntityCreationManager {
         result.addPendingFileCreation(fileType, templateName, newObject);
 
         return true;
+    }
+
+    /**
+     * Get entity-type-specific template for better template selection
+     */
+    private NDFValue.ObjectValue getEntityTypeSpecificTemplate(String entityType, String fileType, String objectType) {
+        // First try to get a template example for this specific entity type
+        NDFValue.ObjectValue templateExample = templateExamples.get(entityType);
+        if (templateExample != null && fileType.equals("UniteDescriptor")) {
+            return templateExample;
+        }
+
+        // Fall back to learned templates from file type
+        NDFTemplateManager templateManager = fileTypeTemplates.get(fileType);
+        if (templateManager != null) {
+            return templateManager.getTemplate(objectType);
+        }
+
+        return null;
     }
 
     /**
@@ -1134,8 +1175,8 @@ public class EntityCreationManager {
                 return "InfantryDepiction_" + entityName;
             case "VehicleDepiction":
                 return "VehicleDepiction_" + entityName;
-            case "EffetsSurUnite":
-                return "UnitEffect_" + entityName;
+            case "CapaciteList":
+                return "UnitCapacity_" + entityName;
             case "WeaponSoundHappenings":
                 return "WeaponSound_" + entityName;
             default:
@@ -1234,9 +1275,9 @@ public class EntityCreationManager {
                     properties.put("Ammunition", "~/Ammunition_" + ammoTemplate);
                 }
 
-                String effectTemplate = crossFileReferences.get("EffetsSurUnite");
-                if (effectTemplate != null) {
-                    properties.put("HitEffect", "~/EffetsSurUnite_" + effectTemplate);
+                String capacityTemplate = crossFileReferences.get("CapaciteList");
+                if (capacityTemplate != null) {
+                    properties.put("SpecialAbilities", "~/CapaciteList_" + capacityTemplate);
                 }
                 break;
 
@@ -1261,12 +1302,12 @@ public class EntityCreationManager {
                 }
                 break;
 
-            case "EffetsSurUnite":
-                // Effects pack properties
+            case "CapaciteList":
+                // Capacity properties
                 if (!properties.containsKey("NameForDebug")) {
                     properties.put("NameForDebug", entityName);
                 }
-                if (!properties.containsKey("EffectsDescriptors")) {
+                if (!properties.containsKey("CapacityDescriptors")) {
                     properties.put("EffectsDescriptors", "[]");
                 }
                 break;
@@ -1278,10 +1319,25 @@ public class EntityCreationManager {
      */
     private String getDefaultCaliber(String entityType) {
         switch (entityType) {
-            case "TANK": return "120mm";
-            case "INFANTRY": return "7.62mm";
-            case "ARTILLERY": return "155mm";
-            case "AIR_DEFENSE": return "35mm";
+            case "Tank": return "120mm";
+            case "Infantry": return "7.62mm";
+            case "Artillery": return "155mm";
+            case "Air Defense": return "35mm";
+            case "IFV": return "25mm";
+            case "Transport": return "12.7mm";
+            case "Command Vehicle": return "12.7mm";
+            case "Reconnaissance": return "20mm";
+            case "Anti-Tank": return "105mm";
+            case "Aircraft":
+            case "Fighter Aircraft":
+            case "Bomber Aircraft": return "20mm";
+            case "SEAD Aircraft": return "20mm";
+            case "UAV": return "Hellfire";
+            case "Helicopter":
+            case "Command Helicopter": return "20mm";
+            case "Supply":
+            case "Logistics":
+            case "Command": return "7.62mm";
             default: return "25mm";
         }
     }
@@ -1290,11 +1346,26 @@ public class EntityCreationManager {
      * Get default projectile type based on entity type
      */
     private String getDefaultProjectileType(String entityType) {
-        switch (entityType.toUpperCase()) {
-            case "AIRCRAFT":
+        switch (entityType) {
+            case "Aircraft":
+            case "Fighter Aircraft":
+            case "Bomber Aircraft":
                 return "EProjectileType/Bombe";
-            case "ARTILLERY":
+            case "SEAD Aircraft":
+                return "EProjectileType/GuidedMissile";
+            case "UAV":
+                return "EProjectileType/GuidedMissile";
+            case "Helicopter":
+            case "Command Helicopter":
+                return "EProjectileType/Roquette";
+            case "Artillery":
                 return "EProjectileType/Artillerie";
+            case "Air Defense":
+                return "EProjectileType/GuidedMissile";
+            case "Anti-Tank":
+                return "EProjectileType/GuidedMissile";
+            case "Infantry":
+                return "EProjectileType/Balle";
             default:
                 return "EProjectileType/Obus";
         }
@@ -1304,9 +1375,22 @@ public class EntityCreationManager {
      * Get default fluid friction based on entity type
      */
     private String getDefaultFluidFriction(String entityType) {
-        switch (entityType.toUpperCase()) {
-            case "AIRCRAFT":
+        switch (entityType) {
+            case "Aircraft":
+            case "Fighter Aircraft":
+            case "Bomber Aircraft":
                 return "0.4"; // Aircraft bombs have higher friction
+            case "SEAD Aircraft":
+            case "UAV":
+                return "0.1"; // Guided missiles have low friction
+            case "Helicopter":
+            case "Command Helicopter":
+                return "0.2"; // Helicopter rockets have some friction
+            case "Air Defense":
+            case "Anti-Tank":
+                return "0.1"; // Guided missiles have low friction
+            case "Artillery":
+                return "0.3"; // Artillery shells have some friction
             default:
                 return "0.0"; // Most projectiles have no friction
         }

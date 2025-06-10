@@ -54,14 +54,26 @@ public class AdditiveOperationManager {
     public boolean addNewObject(List<NDFValue.ObjectValue> ndfObjects, String objectType,
                                String instanceName, Map<String, Object> properties,
                                ModificationTracker tracker) {
+        return addNewObjectWithTemplate(ndfObjects, objectType, instanceName, properties, tracker, null);
+    }
+
+    /**
+     * Add a new top-level object to the NDF file with a specific template
+     */
+    public boolean addNewObjectWithTemplate(List<NDFValue.ObjectValue> ndfObjects, String objectType,
+                                           String instanceName, Map<String, Object> properties,
+                                           ModificationTracker tracker, NDFValue.ObjectValue specificTemplate) {
         try {
             // Check for name collisions first
             if (hasNameCollision(ndfObjects, instanceName)) {
                 throw new IllegalArgumentException("Object with name '" + instanceName + "' already exists in the file");
             }
 
-            // Get template for object type
-            NDFValue.ObjectValue template = templateManager.getTemplate(objectType);
+            // Get template for object type - use specific template if provided
+            NDFValue.ObjectValue template = specificTemplate;
+            if (template == null) {
+                template = templateManager.getTemplate(objectType);
+            }
             if (template == null) {
                 throw new IllegalArgumentException("No template found for object type: " + objectType);
             }
@@ -90,9 +102,6 @@ public class AdditiveOperationManager {
 
             // Add to objects list
             ndfObjects.add(newObject);
-
-            // Note: New objects are automatically marked as modified through the modification tracker
-            // The MainWindow.markModifiedObjects() method will find objects with OBJECT_ADDED modifications
 
             // Record the addition in modification tracker
             if (tracker != null) {
