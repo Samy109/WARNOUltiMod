@@ -35,22 +35,61 @@ public class EntityCreationManager {
 
     /**
      * Initialize mapping of file types to their primary object types
+     * SAFETY: Only includes file types that exist in tester files and are not system-generated
      */
     private void initializeFileTypeObjectTypes() {
+        // Core entity files - always required
         fileTypeObjectTypes.put("UniteDescriptor", "TEntityDescriptor");
         fileTypeObjectTypes.put("WeaponDescriptor", "TWeaponManagerModuleDescriptor");
         fileTypeObjectTypes.put("Ammunition", "TAmmunitionDescriptor");
         fileTypeObjectTypes.put("AmmunitionMissiles", "TAmmunitionDescriptor");
+
+        // Building and missile files - confirmed in tester files
+        fileTypeObjectTypes.put("BuildingDescriptors", "TBuildingDescriptor");
+        fileTypeObjectTypes.put("BuildingCadavreDescriptors", "TBuildingCadavreDescriptor");
+        fileTypeObjectTypes.put("MissileDescriptors", "TEntityDescriptor");
+        fileTypeObjectTypes.put("MissileCarriage", "TMissileCarriageConnoisseur");
+        fileTypeObjectTypes.put("MissileCarriageDepiction", "TMissileCarriageDepictionDescriptor");
+
+        // Capacity and effects files - confirmed in tester files
         fileTypeObjectTypes.put("CapaciteList.ndf", "TCapaciteDescriptor");
         fileTypeObjectTypes.put("EffetsSurUnite", "TEffectsPackDescriptor");
+
+        // Sound files - confirmed in tester files with correct names
         fileTypeObjectTypes.put("SoundDescriptors", "TSoundDescriptor");
         fileTypeObjectTypes.put("WeaponSoundHappenings", "TSoundHappening");
+
+        // Damage and resistance files - confirmed in tester files
         fileTypeObjectTypes.put("DamageResistance", "TDamageResistanceDescriptor");
         fileTypeObjectTypes.put("DamageResistanceFamilyList", "TDamageResistanceFamilyDescriptor");
+        fileTypeObjectTypes.put("DamageResistanceFamilyListImpl", "TDamageResistanceFamilyDescriptor");
+        fileTypeObjectTypes.put("DamageLevels", "TDamageLevelsPackDescriptor");
+        fileTypeObjectTypes.put("DamageStairTypeEvolutionOverRangeDescriptor", "TDamageStairTypeEvolutionOverRangeDescriptor");
+
+        // Experience and progression files - confirmed in tester files
         fileTypeObjectTypes.put("ExperienceLevels", "TExperienceLevelDescriptor");
+
+        // Projectile and fire files - confirmed in tester files
         fileTypeObjectTypes.put("ProjectileType", "EProjectileType");
-        fileTypeObjectTypes.put("NdfDepictionList", "ConstantDefinition");
+        fileTypeObjectTypes.put("FireDescriptor", "TFireDescriptor");
+        fileTypeObjectTypes.put("SmokeDescriptor", "TSmokeDescriptor");
+
+        // Depiction files - confirmed in tester files (NdfDepictionList is system-generated, excluded)
         fileTypeObjectTypes.put("GeneratedInfantryDepiction", "TInfantryDepictionDescriptor");
+        fileTypeObjectTypes.put("GeneratedDepictionFXMissiles", "TDepictionDescriptor");
+        fileTypeObjectTypes.put("GeneratedDepictionFXWeapons", "TDepictionDescriptor");
+        fileTypeObjectTypes.put("GeneratedDepictionWeaponBlock", "TDepictionDescriptor");
+
+        // Additional files confirmed in tester files
+        fileTypeObjectTypes.put("ConditionsDescriptor", "TConditionDescriptor");
+        fileTypeObjectTypes.put("MimeticImpactMapping", "TMimeticImpactMappingDescriptor");
+        fileTypeObjectTypes.put("OrderAvailability_Tactic", "TOrderAvailabilityDescriptor");
+        fileTypeObjectTypes.put("PlayerMissionTags", "TPlayerMissionTagDescriptor");
+        fileTypeObjectTypes.put("ShowRoomUnits", "TShowRoomUnitDescriptor");
+        fileTypeObjectTypes.put("Skins", "TSkinDescriptor");
+        fileTypeObjectTypes.put("UniteCadavreDescriptor", "TUniteCadavreDescriptor");
+
+        // Optional specialized files - only if they exist and are not inherently optional
         fileTypeObjectTypes.put("VehicleDepiction", "TVehicleDepictionDescriptor");
         fileTypeObjectTypes.put("InfantryAnimationDescriptor", "TInfantryAnimationDescriptor");
         fileTypeObjectTypes.put("VehicleAnimationDescriptor", "TVehicleAnimationDescriptor");
@@ -58,7 +97,6 @@ public class EntityCreationManager {
         fileTypeObjectTypes.put("SupplyDescriptor", "TSupplyDescriptor");
         fileTypeObjectTypes.put("ReconDescriptor", "TReconDescriptor");
         fileTypeObjectTypes.put("CommandDescriptor", "TCommandDescriptor");
-        fileTypeObjectTypes.put("ExperienceLevels", "TExperienceLevelDescriptor");
     }
     
     /**
@@ -300,21 +338,68 @@ public class EntityCreationManager {
 
     /**
      * Check if a file type is inherently optional by design
+     * SAFETY: Expanded to include all confirmed optional file types from tester files
      */
     private boolean isInherentlyOptional(String fileType) {
-        // These file types are optional by design - not all units need them
-        return "CapaciteList.ndf".equals(fileType) ||
-               "EffetsSurUnite".equals(fileType) ||
-               "ArtilleryProjectileDescriptor".equals(fileType) ||
-               "WeaponSoundHappenings".equals(fileType) ||
-               "VehicleSoundDescriptor".equals(fileType) ||
-               "InfantryAnimationDescriptor".equals(fileType) ||
-               "VehicleAnimationDescriptor".equals(fileType) ||
-               "AircraftAnimationDescriptor".equals(fileType) ||
-               "SupplyDescriptor".equals(fileType) ||
-               "ReconDescriptor".equals(fileType) ||
-               "CommandDescriptor".equals(fileType) ||
-               "ExperienceLevels".equals(fileType);
+        // Core optional files - not all units need them
+        if ("CapaciteList.ndf".equals(fileType) ||
+            "EffetsSurUnite".equals(fileType) ||
+            "WeaponSoundHappenings".equals(fileType) ||
+            "ExperienceLevels".equals(fileType)) {
+            return true;
+        }
+
+        // Animation files - unit-type specific
+        if ("InfantryAnimationDescriptor".equals(fileType) ||
+            "VehicleAnimationDescriptor".equals(fileType) ||
+            "AircraftAnimationDescriptor".equals(fileType)) {
+            return true;
+        }
+
+        // Specialized descriptor files - role-specific
+        if ("SupplyDescriptor".equals(fileType) ||
+            "ReconDescriptor".equals(fileType) ||
+            "CommandDescriptor".equals(fileType)) {
+            return true;
+        }
+
+        // Depiction files - visual-only, not gameplay critical
+        if ("VehicleDepiction".equals(fileType) ||
+            "GeneratedDepictionFXMissiles".equals(fileType) ||
+            "GeneratedDepictionFXWeapons".equals(fileType) ||
+            "GeneratedDepictionWeaponBlock".equals(fileType)) {
+            return true;
+        }
+
+        // Damage and condition files - situational
+        if ("DamageResistanceFamilyListImpl".equals(fileType) ||
+            "DamageStairTypeEvolutionOverRangeDescriptor".equals(fileType) ||
+            "ConditionsDescriptor".equals(fileType) ||
+            "MimeticImpactMapping".equals(fileType)) {
+            return true;
+        }
+
+        // UI and presentation files - not gameplay critical
+        if ("OrderAvailability_Tactic".equals(fileType) ||
+            "PlayerMissionTags".equals(fileType) ||
+            "ShowRoomUnits".equals(fileType) ||
+            "Skins".equals(fileType)) {
+            return true;
+        }
+
+        // Cadavre (destroyed unit) files - optional visual
+        if ("BuildingCadavreDescriptors".equals(fileType) ||
+            "UniteCadavreDescriptor".equals(fileType)) {
+            return true;
+        }
+
+        // Non-existent files that might be referenced
+        if ("ArtilleryProjectileDescriptor".equals(fileType) ||
+            "VehicleSoundDescriptor".equals(fileType)) {
+            return true;
+        }
+
+        return false;
     }
     
     /**
@@ -660,6 +745,43 @@ public class EntityCreationManager {
             return "Ammunition";
         }
 
+        // Building templates
+        if (lower.contains("building_") || lower.contains("structure_")) {
+            if (lower.contains("cadavre") || lower.contains("destroyed")) {
+                return "BuildingCadavreDescriptors";
+            }
+            return "BuildingDescriptors";
+        }
+
+        // Missile templates
+        if (lower.contains("missile_") || lower.contains("rocket_")) {
+            if (lower.contains("carriage") || lower.contains("launcher")) {
+                return "MissileCarriage";
+            }
+            return "MissileDescriptors";
+        }
+
+        // Damage and resistance templates
+        if (lower.contains("damage_") || lower.contains("resistance_")) {
+            if (lower.contains("family") || lower.contains("list")) {
+                return "DamageResistanceFamilyList";
+            }
+            return "DamageResistance";
+        }
+
+        // Fire and smoke templates
+        if (lower.contains("fire_") || lower.contains("flame_")) {
+            return "FireDescriptor";
+        }
+        if (lower.contains("smoke_") || lower.contains("gas_")) {
+            return "SmokeDescriptor";
+        }
+
+        // Experience and progression templates
+        if (lower.contains("experience_") || lower.contains("level_") || lower.contains("rank_")) {
+            return "ExperienceLevels";
+        }
+
         // Sound templates
         if (lower.contains("sound_") || lower.contains("audio_")) {
             // Correct file name is SoundDescriptors.ndf (plural), not SoundDescriptor.ndf
@@ -687,6 +809,7 @@ public class EntityCreationManager {
 
         String lower = templatePath.toLowerCase();
 
+        // Enhanced template-to-object-type mapping based on tester files
         if (lower.contains("weapondescriptor_")) return "TWeaponManagerModuleDescriptor";
         if (lower.contains("ammunition_")) return "TAmmunitionDescriptor";
         if (lower.contains("depiction_")) return "ConstantDefinition";
@@ -695,6 +818,16 @@ public class EntityCreationManager {
         if (lower.contains("sound_")) return "TSoundDescriptor";
         if (lower.contains("missile_")) return "TEntityDescriptor";
         if (lower.contains("building_")) return "TBuildingDescriptor";
+
+        // Additional mappings for confirmed file types
+        if (lower.contains("capacite_")) return "TCapaciteDescriptor";
+        if (lower.contains("damage_")) return "TDamageResistanceDescriptor";
+        if (lower.contains("fire_")) return "TFireDescriptor";
+        if (lower.contains("smoke_")) return "TSmokeDescriptor";
+        if (lower.contains("experience_")) return "TExperienceLevelDescriptor";
+        if (lower.contains("condition_")) return "TConditionDescriptor";
+        if (lower.contains("skin_")) return "TSkinDescriptor";
+        if (lower.contains("cadavre_")) return "TBuildingCadavreDescriptor";
 
         return "TEntityDescriptor"; // Default
     }
