@@ -6,8 +6,8 @@ import java.util.*;
  * Comprehensive entity creation system based on actual NDF cross-file dependency analysis.
  * 
  * DISCOVERED DEPENDENCY CHAIN:
- * UniteDescriptor.ndf → WeaponDescriptor.ndf → Ammunition.ndf
- * UniteDescriptor.ndf → WeaponDescriptor.ndf → AmmunitionMissiles.ndf (for missiles)
+ * UniteDescriptorOLD.ndf → WeaponDescriptor.ndf → Ammunition.ndf
+ * UniteDescriptorOLD.ndf → WeaponDescriptor.ndf → AmmunitionMissiles.ndf (for missiles)
  * BuildingDescriptors.ndf (standalone for buildings)
  * MissileDescriptors.ndf (for missile-specific data)
  */
@@ -111,8 +111,8 @@ public class EntityCreationManager {
         // Learn templates from ALL open files for on-demand creation
         learnTemplatesFromOpenFiles(openFiles);
 
-        // Only analyze entity creation if we have UniteDescriptor.ndf (primary file)
-        if (!openFiles.containsKey("UniteDescriptor.ndf")) {
+        // Only analyze entity creation if we have UniteDescriptorOLD.ndf (primary file)
+        if (!openFiles.containsKey("UniteDescriptorOLD.ndf")) {
             return;
         }
 
@@ -159,7 +159,7 @@ public class EntityCreationManager {
      * Learn from existing entities to create perfect templates with realistic placeholder values
      */
     private void learnFromExistingEntities(Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptor.ndf");
+        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptorOLD.ndf");
         Map<String, List<NDFValue.ObjectValue>> entitiesByType = new HashMap<>();
 
         // Group units by entity type
@@ -406,7 +406,7 @@ public class EntityCreationManager {
      * Discover entity blueprints based on actual cross-file dependencies
      */
     private void discoverEntityBlueprints(Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptor.ndf");
+        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptorOLD.ndf");
         Map<String, EntityTypeAnalysis> analysis = new HashMap<>();
         
         // Analyze each unit to understand entity patterns
@@ -503,8 +503,8 @@ public class EntityCreationManager {
      */
     private void analyzeFileDependencies(NDFValue.ObjectValue unit, EntityTypeAnalysis analysis,
                                        Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        // ALWAYS requires UniteDescriptor.ndf - this is the primary file
-        analysis.addFileRequirement("UniteDescriptor.ndf", "TEntityDescriptor");
+        // ALWAYS requires UniteDescriptorOLD.ndf - this is the primary file
+        analysis.addFileRequirement("UniteDescriptorOLD.ndf", "TEntityDescriptor");
 
         // Comprehensive dependency analysis
         analyzeWeaponDependencies(unit, analysis, openFiles);
@@ -1298,7 +1298,7 @@ public class EntityCreationManager {
     private String generateTemplateName(String entityName, String objectType, String fileType) {
         // Follow WARNO naming patterns based on file type
         switch (fileType) {
-            case "UniteDescriptor.ndf":
+            case "UniteDescriptorOLD.ndf":
                 return entityName; // Use the entity name directly for the main unit
             case "WeaponDescriptor.ndf":
                 return "WeaponDescriptor_" + entityName;

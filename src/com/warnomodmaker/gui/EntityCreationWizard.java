@@ -395,7 +395,7 @@ public class EntityCreationWizard extends JDialog {
         switch (entityType) {
             case "Infantry":
                 return new String[]{
-                    "UniteDescriptor.ndf",
+                    "UniteDescriptorOLD.ndf",
                     "WeaponDescriptor.ndf",
                     "Ammunition.ndf",
                     "GeneratedDepictionInfantry.ndf",
@@ -406,7 +406,7 @@ public class EntityCreationWizard extends JDialog {
 
             case "Tank":
                 return new String[]{
-                    "UniteDescriptor.ndf",
+                    "UniteDescriptorOLD.ndf",
                     "WeaponDescriptor.ndf",
                     "Ammunition.ndf",
                     "NdfDepictionList.ndf",
@@ -423,7 +423,7 @@ public class EntityCreationWizard extends JDialog {
             case "Reconnaissance":
             case "Anti-Tank":
                 return new String[]{
-                    "UniteDescriptor.ndf",
+                    "UniteDescriptorOLD.ndf",
                     "WeaponDescriptor.ndf",
                     "Ammunition.ndf",
                     "AmmunitionMissiles.ndf",
@@ -437,7 +437,7 @@ public class EntityCreationWizard extends JDialog {
             case "Logistics":
             case "Command":
                 return new String[]{
-                    "UniteDescriptor.ndf",
+                    "UniteDescriptorOLD.ndf",
                     "NdfDepictionList.ndf",
                     "CapaciteList.ndf",
                     "EffetsSurUnite.ndf",
@@ -452,7 +452,7 @@ public class EntityCreationWizard extends JDialog {
             case "Helicopter":
             case "Command Helicopter":
                 return new String[]{
-                    "UniteDescriptor.ndf",
+                    "UniteDescriptorOLD.ndf",
                     "WeaponDescriptor.ndf",
                     "Ammunition.ndf",
                     "AmmunitionMissiles.ndf",
@@ -464,7 +464,7 @@ public class EntityCreationWizard extends JDialog {
 
             default:
                 return new String[]{
-                    "UniteDescriptor.ndf",
+                    "UniteDescriptorOLD.ndf",
                     "WeaponDescriptor.ndf",
                     "Ammunition.ndf",
                     "GameData/Generated/Sound/SoundDescriptors.ndf"

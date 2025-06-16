@@ -9,7 +9,7 @@ public abstract class NDFValue {
 
     
     public enum NDFFileType {
-        UNITE_DESCRIPTOR("UniteDescriptor.ndf", "TEntityDescriptor", "Unit"),
+        UNITE_DESCRIPTOR("UniteDescriptorOLD.ndf", "TEntityDescriptor", "Unit"),
         MISSILE_DESCRIPTORS("MissileDescriptors.ndf", "TEntityDescriptor", "Missile"),
         MISSILE_CARRIAGE("MissileCarriage.ndf", "TMissileCarriageConnoisseur", "Missile Carriage"),
         WEAPON_DESCRIPTOR("WeaponDescriptor.ndf", "TWeaponManagerModuleDescriptor", "Weapon"),
@@ -31,6 +31,10 @@ public abstract class NDFValue {
         GENERATED_DEPICTION_FX_MISSILES("GeneratedDepictionFXMissiles.ndf", "TDepictionDescriptor", "Depiction FX Missile"),
         GENERATED_DEPICTION_FX_WEAPONS("GeneratedDepictionFXWeapons.ndf", "TDepictionDescriptor", "Depiction FX Weapon"),
         GENERATED_DEPICTION_WEAPON_BLOCK("GeneratedDepictionWeaponBlock.ndf", "TDepictionDescriptor", "Depiction Weapon Block"),
+        // NEW RENAMED FILES (patch notes: removed "Generated" prefix)
+        DEPICTION_FX_MISSILES("DepictionFXMissiles.ndf", "TDepictionDescriptor", "Depiction FX Missile"),
+        DEPICTION_FX_WEAPONS("DepictionFXWeapons.ndf", "TDepictionDescriptor", "Depiction FX Weapon"),
+        DEPICTION_WEAPON_BLOCK("DepictionWeaponBlock.ndf", "TDepictionDescriptor", "Depiction Weapon Block"),
         MIMETIC_IMPACT_MAPPING("MimeticImpactMapping.ndf", "TMimeticImpactMappingDescriptor", "Mimetic Impact Mapping"),
         MISSILE_CARRIAGE_DEPICTION("MissileCarriageDepiction.ndf", "TMissileCarriageDepictionDescriptor", "Missile Carriage Depiction"),
         NDF_DEPICTION_LIST("NdfDepictionList.ndf", "TDepictionDescriptor", "Depiction"),
@@ -90,6 +94,14 @@ public abstract class NDFValue {
             if (filename == null) return UNKNOWN;
 
             String name = filename.toLowerCase();
+
+            // Special handling for UniteDescriptor files (both OLD and NEW formats)
+            if (name.equalsIgnoreCase("UniteDescriptorOLD.ndf") ||
+                name.equalsIgnoreCase("UniteDescriptorNEW.ndf") ||
+                name.equalsIgnoreCase("UniteDescriptor.ndf")) {
+                return UNITE_DESCRIPTOR;
+            }
+
             for (NDFFileType type : values()) {
                 if (type != UNKNOWN && name.equalsIgnoreCase(type.filename)) {
                     return type;
@@ -880,13 +892,23 @@ public abstract class NDFValue {
     
     public static class ResourceRefValue extends NDFValue {
         private final String path;
+        private String instanceName;
 
         public ResourceRefValue(String path) {
             this.path = path;
+            this.instanceName = null;
         }
 
         public String getPath() {
             return path;
+        }
+
+        public String getInstanceName() {
+            return instanceName;
+        }
+
+        public void setInstanceName(String instanceName) {
+            this.instanceName = instanceName;
         }
 
         @Override
@@ -896,6 +918,9 @@ public abstract class NDFValue {
 
         @Override
         public String toString() {
+            if (instanceName != null) {
+                return instanceName + " is " + path;
+            }
             return path;
         }
     }

@@ -577,7 +577,7 @@ public class NDFWriter {
     }
 
     // ===== STANDALONE UNITEDESCRIPTOR FUNCTIONALITY =====
-    // Specialized writing for UniteDescriptor.ndf without affecting other files
+    // Specialized writing for UniteDescriptorOLD.ndf without affecting other files
 
     /**
      * Check if we're writing a UniteDescriptor file

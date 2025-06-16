@@ -238,7 +238,7 @@ public class EntityCreationDialog extends JDialog {
         if (selectedType == null || selectedType.contains("No entity patterns")) {
             descriptionArea.setText("No entity patterns discovered from the open files.\n\n" +
                 "To discover entity patterns:\n" +
-                "1. Open UniteDescriptor.ndf with actual unit data\n" +
+                "1. Open UniteDescriptorOLD.ndf with actual unit data\n" +
                 "2. Optionally open related files (Ammunition.ndf, WeaponDescriptor.ndf)\n" +
                 "3. Reopen this dialog to see discovered patterns");
 

@@ -921,7 +921,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse exported objects in UniteDescriptor.ndf (TEntityDescriptor objects) with ENHANCED MEMORY MODEL
+     * Parse exported objects in UniteDescriptorOLD.ndf (TEntityDescriptor objects) with ENHANCED MEMORY MODEL
      */
     private ObjectValue parseUniteDescriptorExportedObject() throws NDFParseException {
         int exportTokenIndex = currentTokenIndex;
@@ -955,7 +955,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse object properties in UniteDescriptor.ndf with ENHANCED MEMORY MODEL formatting capture
+     * Parse object properties in UniteDescriptorOLD.ndf with ENHANCED MEMORY MODEL formatting capture
      */
     private void parseUniteDescriptorObjectProperties(ObjectValue object) throws NDFParseException {
         while (currentToken.getType() != NDFToken.TokenType.CLOSE_PAREN) {
@@ -1073,14 +1073,40 @@ public class NDFParser {
 
         int elementIndex = 0;
         while (currentToken.getType() != NDFToken.TokenType.CLOSE_BRACKET) {
+            // Skip whitespace and comments
+            if (currentToken.getType() == NDFToken.TokenType.UNKNOWN && isWhitespaceToken(currentToken)) {
+                advance();
+                continue;
+            }
+            if (currentToken.getType() == NDFToken.TokenType.COMMENT) {
+                advance();
+                continue;
+            }
+
+            // Handle leading comma (NEW format: ",element")
+            boolean hasLeadingComma = false;
+            String leadingCommaText = "";
+            if (currentToken.getType() == NDFToken.TokenType.COMMA) {
+                hasLeadingComma = true;
+                NDFToken commaToken = currentToken;
+                leadingCommaText = commaToken.getExactText();
+                advance();
+            }
+
             String elementPrefix = currentToken.getLeadingWhitespace();
+            // If we had a leading comma, include it in the prefix
+            if (hasLeadingComma) {
+                elementPrefix = leadingCommaText + elementPrefix;
+            }
             array.setOriginalElementPrefix(elementIndex, elementPrefix);
 
             NDFValue element = parseUniteDescriptorModuleElement();
-            boolean hasComma = currentToken.getType() == NDFToken.TokenType.COMMA;
+
+            // Handle trailing comma (OLD format: "element,")
+            boolean hasTrailingComma = currentToken.getType() == NDFToken.TokenType.COMMA;
             String elementSuffix = "";
 
-            if (hasComma) {
+            if (hasTrailingComma) {
                 NDFToken commaToken = currentToken;
                 advance();
 
@@ -1093,7 +1119,8 @@ public class NDFParser {
             }
 
             array.setOriginalElementSuffix(elementIndex, elementSuffix);
-            array.add(element, hasComma);
+            // Element has comma if either leading or trailing comma was found
+            array.add(element, hasLeadingComma || hasTrailingComma);
             elementIndex++;
         }
 
@@ -1134,8 +1161,15 @@ public class NDFParser {
                     ObjectValue namedObject = parseUniteDescriptorObject(typeName, identifierTokenIndex);
                     namedObject.setInstanceName(firstIdentifier);
                     return namedObject;
+                } else if (currentToken.getType() == NDFToken.TokenType.RESOURCE_REF) {
+                    // NEW FORMAT: Named assignment with resource ref: "WeaponManager is $/GFX/Weapon/WeaponDescriptor_2K11_KRUG_DDR"
+                    String resourcePath = currentToken.getValue();
+                    advance();
+                    NDFValue.ResourceRefValue resourceRef = (NDFValue.ResourceRefValue) NDFValue.createResourceRef(resourcePath);
+                    resourceRef.setInstanceName(firstIdentifier);
+                    return resourceRef;
                 } else {
-                    throw new NDFParseException("Expected IDENTIFIER or TEMPLATE_REF after 'is' but got " + currentToken.getType() + " at line " + currentToken.getLine() + ", column " + currentToken.getColumn(), currentToken);
+                    throw new NDFParseException("Expected IDENTIFIER, TEMPLATE_REF, or RESOURCE_REF after 'is' but got " + currentToken.getType() + " at line " + currentToken.getLine() + ", column " + currentToken.getColumn(), currentToken);
                 }
             } else if (currentToken.getType() == NDFToken.TokenType.OPEN_PAREN) {
                 // Simple object: "Type(...)"
@@ -1145,8 +1179,8 @@ public class NDFParser {
                 return NDFValue.createTemplateRef(firstIdentifier);
             }
         } else {
-            // Fallback to standard value parsing
-            return parseValue();
+            // Fallback to UniteDescriptor-specific value parsing
+            return parseUniteDescriptorValueStandalone();
         }
     }
 
@@ -1174,7 +1208,7 @@ public class NDFParser {
 
     /**
      * COMPLETELY STANDALONE UniteDescriptor value parsing
-     * Handles all the unique patterns in UniteDescriptor.ndf without using standard parsing
+     * Handles all the unique patterns in UniteDescriptorOLD.ndf without using standard parsing
      */
     private NDFValue parseUniteDescriptorValueStandalone() throws NDFParseException {
         // Handle different value types with UniteDescriptor-specific logic
@@ -1335,7 +1369,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse objects in UniteDescriptor.ndf with ENHANCED MEMORY MODEL
+     * Parse objects in UniteDescriptorOLD.ndf with ENHANCED MEMORY MODEL
      */
     private NDFValue.ObjectValue parseUniteDescriptorObjectStandalone(String typeName, int startTokenIndex) throws NDFParseException {
         NDFValue.ObjectValue object = NDFValue.createObject(typeName);
@@ -1360,7 +1394,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse arrays in UniteDescriptor.ndf with standalone logic
+     * Parse arrays in UniteDescriptorOLD.ndf with standalone logic
      */
     private NDFValue parseUniteDescriptorArrayStandalone() throws NDFParseException {
         expect(NDFToken.TokenType.OPEN_BRACKET);
@@ -1405,7 +1439,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse tuples in UniteDescriptor.ndf like (EVisionUnitType/Standard, 3500.0)
+     * Parse tuples in UniteDescriptorOLD.ndf like (EVisionUnitType/Standard, 3500.0)
      */
     private NDFValue parseUniteDescriptorTupleStandalone() throws NDFParseException {
         expect(NDFToken.TokenType.OPEN_PAREN);
@@ -1444,7 +1478,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse MAP constructs in UniteDescriptor.ndf like MAP [(key1, value1), (key2, value2)]
+     * Parse MAP constructs in UniteDescriptorOLD.ndf like MAP [(key1, value1), (key2, value2)]
      * This creates proper MapValue objects instead of arrays to fix type mismatch errors
      */
     private NDFValue.MapValue parseUniteDescriptorMapStandalone() throws NDFParseException {
@@ -1485,7 +1519,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse basic values (numbers, strings, booleans, etc.) in UniteDescriptor.ndf
+     * Parse basic values (numbers, strings, booleans, etc.) in UniteDescriptorOLD.ndf
      */
     private NDFValue parseUniteDescriptorBasicValue() throws NDFParseException {
         switch (currentToken.getType()) {

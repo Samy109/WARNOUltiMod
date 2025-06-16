@@ -509,7 +509,7 @@ public class MainWindow extends JFrame implements FileLoader {
                     tabState.setModified(true);
                 }
 
-                // Switch to the first tab (usually UniteDescriptor.ndf where the new entity was created)
+                // Switch to the first tab (usually UniteDescriptorOLD.ndf where the new entity was created)
                 if (!tabStates.isEmpty()) {
                     tabbedPane.setSelectedIndex(0);
                 }
