@@ -22,6 +22,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -163,6 +164,13 @@ public class MainWindow extends JFrame implements FileLoader {
         JMenuItem loadProfileItem = new JMenuItem("Load Profile...");
         loadProfileItem.addActionListener(this::loadProfile);
         profileMenu.add(loadProfileItem);
+
+        profileMenu.addSeparator();
+
+        // SPYBORG ENHANCEMENT: JSON Profile Editor
+        JMenuItem jsonEditorItem = new JMenuItem("JSON Profile Editor...");
+        jsonEditorItem.addActionListener(this::showJsonProfileEditor);
+        profileMenu.add(jsonEditorItem);
 
         profileMenu.addSeparator();
 
@@ -1106,6 +1114,14 @@ public class MainWindow extends JFrame implements FileLoader {
         }
     }
 
+    /**
+     * SPYBORG ENHANCEMENT: Show JSON Profile Editor for direct profile editing
+     */
+    private void showJsonProfileEditor(ActionEvent e) {
+        JsonProfileEditorDialog editor = new JsonProfileEditorDialog(this);
+        editor.setVisible(true);
+    }
+
 
     private FileTabState getCurrentTabState() {
         int selectedIndex = tabbedPane.getSelectedIndex();
@@ -1113,6 +1129,11 @@ public class MainWindow extends JFrame implements FileLoader {
             return tabStates.get(selectedIndex);
         }
         return null;
+    }
+
+    public NDFValue.NDFFileType getCurrentFileType() {
+        FileTabState currentTab = getCurrentTabState();
+        return currentTab != null ? currentTab.getFileType() : NDFValue.NDFFileType.UNKNOWN;
     }
 
 
@@ -1219,11 +1240,14 @@ public class MainWindow extends JFrame implements FileLoader {
             @Override
             protected Void doInBackground() throws Exception {
                 try {
-                    // Determine file type
                     fileType = NDFValue.NDFFileType.fromFilename(file.getName());
-                    try (Reader reader = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
+
+                    String sourceContent = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+
+                    try (Reader reader = new StringReader(sourceContent)) {
                         parser = new NDFParser(reader);
                         parser.setFileType(fileType);
+                        parser.setOriginalSourceContent(sourceContent);
                         ndfObjects = parser.parse();
                     }
                 } catch (Exception e) {
@@ -1365,14 +1389,19 @@ public class MainWindow extends JFrame implements FileLoader {
     private void saveTabToFile(FileTabState tabState, File file) {
         try {
             try (Writer writer = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
-                NDFWriter ndfWriter = new NDFWriter(writer);
+                NDFWriter ndfWriter = new NDFWriter(writer, true); // Enable formatting preservation
 
-                // Use exact formatting preservation if available
                 if (tabState.getParser() != null) {
                     ndfWriter.setOriginalTokens(tabState.getParser().getOriginalTokens());
+
+                    String[] sourceLines = tabState.getParser().getSourceLines();
+                    if (sourceLines != null) {
+                        String originalContent = String.join("\n", sourceLines);
+                        ndfWriter.setOriginalSourceContent(originalContent);
+                    }
                 }
 
-                // CRITICAL FIX: Mark modified objects so NDFWriter uses memory model instead of original tokens
+                ndfWriter.setModificationTracker(tabState.getModificationTracker());
                 markModifiedObjects(ndfWriter, tabState);
 
                 ndfWriter.write(tabState.getUnitDescriptors());
@@ -1422,8 +1451,7 @@ public class MainWindow extends JFrame implements FileLoader {
             }
         }
 
-        // CRITICAL FIX: Mark objects that have ANY additive changes
-        // These include: OBJECT_ADDED, MODULE_ADDED, PROPERTY_ADDED, ARRAY_ELEMENT_ADDED
+
         for (ModificationRecord record : tracker.getAllModifications()) {
             PropertyUpdater.ModificationType modType = record.getModificationType();
             if (modType == PropertyUpdater.ModificationType.OBJECT_ADDED ||
@@ -1523,7 +1551,7 @@ public class MainWindow extends JFrame implements FileLoader {
             }
         }
 
-        // CRITICAL: Unregister file from cross-system integrity manager
+
         if (tabState.getFile() != null) {
             integrityManager.unregisterFile(tabState.getFile().getName());
         }
@@ -1671,7 +1699,7 @@ public class MainWindow extends JFrame implements FileLoader {
             }
         }
 
-        // CRITICAL: Unregister all files from cross-system integrity manager
+
         for (FileTabState tabState : tabStates) {
             if (tabState.getFile() != null) {
                 integrityManager.unregisterFile(tabState.getFile().getName());
@@ -1826,7 +1854,7 @@ public class MainWindow extends JFrame implements FileLoader {
         // Close tabs in reverse order to maintain indices
         for (int i = tabStates.size() - 1; i >= 0; i--) {
             if (i != keepTabIndex) {
-                // CRITICAL: Unregister file from cross-system integrity manager
+
                 FileTabState tabState = tabStates.get(i);
                 if (tabState.getFile() != null) {
                     integrityManager.unregisterFile(tabState.getFile().getName());

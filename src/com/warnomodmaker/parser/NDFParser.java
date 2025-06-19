@@ -13,6 +13,9 @@ public class NDFParser {
     private List<NDFToken> tokens;
     private int currentTokenIndex;
     private NDFToken currentToken;
+
+    private String[] sourceLines;
+    private String originalSourceContent;
     private List<NDFToken> originalTokens;
     private NDFFileType fileType;
     public NDFParser(Reader reader) {
@@ -35,6 +38,8 @@ public class NDFParser {
         originalTokens = new ArrayList<>(tokens);
         currentTokenIndex = 0;
         currentToken = tokens.get(currentTokenIndex);
+
+        initializeSourceLines();
 
         if (fileType == NDFFileType.UNITE_DESCRIPTOR) {
             return parseUniteDescriptor();
@@ -436,8 +441,8 @@ public class NDFParser {
 
 
     private NDFValue parseValue() throws NDFParseException {
-        // ENHANCED MEMORY MODEL: Capture formatting information for all values
         String valuePrefix = currentToken.getLeadingWhitespace();
+        int lineNumber = currentToken.getLine();
 
         switch (currentToken.getType()) {
             case STRING_LITERAL:
@@ -447,6 +452,7 @@ public class NDFParser {
                 advance();
                 NDFValue stringVal = NDFValue.createString(stringValue, useDoubleQuotes);
                 stringVal.setOriginalFormatting(valuePrefix, stringTrailingWhitespace);
+                setLineInfo(stringVal, lineNumber);
                 return stringVal;
 
             case NUMBER_LITERAL:
@@ -456,6 +462,7 @@ public class NDFParser {
                 advance();
                 NDFValue numberVal = NDFValue.createNumber(numberValue, originalFormat);
                 numberVal.setOriginalFormatting(valuePrefix, numberTrailingWhitespace);
+                setLineInfo(numberVal, lineNumber);
                 return numberVal;
 
             case BOOLEAN_LITERAL:
@@ -464,6 +471,7 @@ public class NDFParser {
                 advance();
                 NDFValue booleanVal = NDFValue.createBoolean(booleanValue);
                 booleanVal.setOriginalFormatting(valuePrefix, booleanTrailingWhitespace);
+                setLineInfo(booleanVal, lineNumber);
                 return booleanVal;
 
             case OPEN_BRACKET:
@@ -1598,5 +1606,28 @@ public class NDFParser {
         public NDFToken getToken() {
             return token;
         }
+    }
+
+    private void initializeSourceLines() {
+        if (originalSourceContent != null) {
+            sourceLines = originalSourceContent.split("\n", -1);
+        } else {
+            sourceLines = new String[0];
+        }
+    }
+
+    public void setOriginalSourceContent(String content) {
+        this.originalSourceContent = content;
+    }
+
+    private void setLineInfo(NDFValue value, int lineNumber) {
+        if (value != null && lineNumber >= 0 && sourceLines != null && lineNumber < sourceLines.length) {
+            String lineContent = sourceLines[lineNumber];
+            value.setSourceLineInfo(lineNumber, lineContent);
+        }
+    }
+
+    public String[] getSourceLines() {
+        return sourceLines;
     }
 }

@@ -373,6 +373,9 @@ public class PropertyUpdater {
             // For decimal properties, preserve decimal format
             newValue = NDFValue.createNumber(newNumericValue, false);
         }
+
+        // COMPREHENSIVE FORMATTING PRESERVATION: Copy all formatting from original value
+        newValue.copyFormattingFrom(currentValue);
         boolean success = updateProperty(ndfObject, propertyPath, newValue, null);
 
         // Record the modification with special numeric details if tracker is provided
@@ -394,6 +397,8 @@ public class PropertyUpdater {
             return false; // Property doesn't exist or isn't boolean
         }
         NDFValue newValue = NDFValue.createBoolean(value);
+        // COMPREHENSIVE FORMATTING PRESERVATION: Copy formatting from original value
+        newValue.copyFormattingFrom(currentValue);
         boolean success = updateProperty(ndfObject, propertyPath, newValue, null);
 
         // Record the modification if tracker is provided and update was successful
@@ -427,6 +432,8 @@ public class PropertyUpdater {
         }
 
         NDFValue newValue = NDFValue.createString(cleanValue, useDoubleQuotes);
+        // COMPREHENSIVE FORMATTING PRESERVATION: Copy formatting from original value
+        newValue.copyFormattingFrom(currentValue);
         boolean success = updateProperty(ndfObject, propertyPath, newValue, null);
 
         // Record the modification if tracker is provided and update was successful
@@ -465,6 +472,8 @@ public class PropertyUpdater {
             // It's a direct template name - convert to template reference
             newValue = NDFValue.createTemplateRef("~/" + value);
         }
+        // COMPREHENSIVE FORMATTING PRESERVATION: Copy formatting from original value
+        newValue.copyFormattingFrom(currentValue);
         boolean success = updateProperty(ndfObject, propertyPath, newValue, null);
 
         // Record the modification if tracker is provided and update was successful
@@ -497,6 +506,8 @@ public class PropertyUpdater {
         } else {
             return false; // Not an enum type
         }
+        // COMPREHENSIVE FORMATTING PRESERVATION: Copy formatting from original value
+        newValue.copyFormattingFrom(currentValue);
         boolean success = updateProperty(ndfObject, propertyPath, newValue, null);
 
         // Record the modification if tracker is provided and update was successful

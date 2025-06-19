@@ -116,42 +116,105 @@ public class ModProfile {
 
     
     public void saveToFile(File file) throws IOException {
+        saveToFile(file, false);
+    }
+
+    /**
+     * SPYBORG ENHANCEMENT: Save with _meta/_input structure separation
+     */
+    public void saveToFile(File file, boolean useMetaInputStructure) throws IOException {
         try (PrintWriter writer = new PrintWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
-            writer.println("{");
-            writer.println("  \"formatVersion\": \"" + FORMAT_VERSION + "\",");
-            writer.println("  \"profileName\": \"" + escapeJson(profileName) + "\",");
-            writer.println("  \"description\": \"" + escapeJson(description) + "\",");
-            writer.println("  \"createdDate\": \"" + createdDate.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
-            writer.println("  \"lastModified\": \"" + lastModified.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
-            writer.println("  \"gameVersion\": \"" + escapeJson(gameVersion) + "\",");
-            writer.println("  \"sourceFileName\": \"" + escapeJson(sourceFileName) + "\",");
-            writer.println("  \"createdBy\": \"" + escapeJson(createdBy) + "\",");
-            writer.println("  \"modificationCount\": " + modifications.size() + ",");
-            writer.println("  \"modifications\": [");
-
-            for (int i = 0; i < modifications.size(); i++) {
-                ModificationRecord mod = modifications.get(i);
-                writer.println("    {");
-                writer.println("      \"unitName\": \"" + escapeJson(mod.getUnitName()) + "\",");
-                writer.println("      \"propertyPath\": \"" + escapeJson(mod.getPropertyPath()) + "\",");
-                writer.println("      \"oldValue\": \"" + escapeJson(mod.getOldValue()) + "\",");
-                writer.println("      \"newValue\": \"" + escapeJson(mod.getNewValue()) + "\",");
-                writer.println("      \"oldValueType\": \"" + mod.getOldValueType() + "\",");
-                writer.println("      \"newValueType\": \"" + mod.getNewValueType() + "\",");
-                writer.println("      \"timestamp\": \"" + mod.getTimestamp().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
-                writer.println("      \"modificationType\": \"" + mod.getModificationType().name() + "\",");
-                writer.println("      \"modificationDetails\": \"" + escapeJson(mod.getModificationDetails()) + "\"");
-                writer.print("    }");
-                if (i < modifications.size() - 1) {
-                    writer.println(",");
-                } else {
-                    writer.println();
-                }
+            if (useMetaInputStructure) {
+                saveWithMetaInputStructure(writer);
+            } else {
+                saveLegacyStructure(writer);
             }
-
-            writer.println("  ]");
-            writer.println("}");
         }
+    }
+
+    private void saveWithMetaInputStructure(PrintWriter writer) {
+        writer.println("{");
+        writer.println("  \"_meta\": {");
+        writer.println("    \"description\": \"Profile metadata and tracking information\",");
+        writer.println("    \"author\": \"" + escapeJson(createdBy) + "\",");
+        writer.println("    \"created\": \"" + createdDate.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
+        writer.println("    \"lastModified\": \"" + lastModified.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
+        writer.println("    \"version\": \"1.0\",");
+        writer.println("    \"modificationCount\": " + modifications.size() + ",");
+        writer.println("    \"tags\": [\"warno\", \"mod\", \"profile\"]");
+        writer.println("  },");
+        writer.println("  \"_input\": {");
+        writer.println("    \"formatVersion\": \"" + FORMAT_VERSION + "\",");
+        writer.println("    \"profileName\": \"" + escapeJson(profileName) + "\",");
+        writer.println("    \"description\": \"" + escapeJson(description) + "\",");
+        writer.println("    \"gameVersion\": \"" + escapeJson(gameVersion) + "\",");
+        writer.println("    \"sourceFileName\": \"" + escapeJson(sourceFileName) + "\",");
+        writer.println("    \"createdBy\": \"" + escapeJson(createdBy) + "\",");
+        writer.println("    \"createdDate\": \"" + createdDate.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
+        writer.println("    \"lastModified\": \"" + lastModified.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
+        writer.println("    \"modificationCount\": " + modifications.size() + ",");
+        writer.println("    \"modifications\": [");
+
+        for (int i = 0; i < modifications.size(); i++) {
+            ModificationRecord mod = modifications.get(i);
+            writer.println("      {");
+            writer.println("        \"unitName\": \"" + escapeJson(mod.getUnitName()) + "\",");
+            writer.println("        \"propertyPath\": \"" + escapeJson(mod.getPropertyPath()) + "\",");
+            writer.println("        \"oldValue\": \"" + escapeJson(mod.getOldValue()) + "\",");
+            writer.println("        \"newValue\": \"" + escapeJson(mod.getNewValue()) + "\",");
+            writer.println("        \"oldValueType\": \"" + mod.getOldValueType() + "\",");
+            writer.println("        \"newValueType\": \"" + mod.getNewValueType() + "\",");
+            writer.println("        \"timestamp\": \"" + mod.getTimestamp().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
+            writer.println("        \"modificationType\": \"" + mod.getModificationType().name() + "\",");
+            writer.println("        \"modificationDetails\": \"" + escapeJson(mod.getModificationDetails()) + "\"");
+            writer.print("      }");
+            if (i < modifications.size() - 1) {
+                writer.println(",");
+            } else {
+                writer.println();
+            }
+        }
+
+        writer.println("    ]");
+        writer.println("  }");
+        writer.println("}");
+    }
+
+    private void saveLegacyStructure(PrintWriter writer) {
+        writer.println("{");
+        writer.println("  \"formatVersion\": \"" + FORMAT_VERSION + "\",");
+        writer.println("  \"profileName\": \"" + escapeJson(profileName) + "\",");
+        writer.println("  \"description\": \"" + escapeJson(description) + "\",");
+        writer.println("  \"createdDate\": \"" + createdDate.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
+        writer.println("  \"lastModified\": \"" + lastModified.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
+        writer.println("  \"gameVersion\": \"" + escapeJson(gameVersion) + "\",");
+        writer.println("  \"sourceFileName\": \"" + escapeJson(sourceFileName) + "\",");
+        writer.println("  \"createdBy\": \"" + escapeJson(createdBy) + "\",");
+        writer.println("  \"modificationCount\": " + modifications.size() + ",");
+        writer.println("  \"modifications\": [");
+
+        for (int i = 0; i < modifications.size(); i++) {
+            ModificationRecord mod = modifications.get(i);
+            writer.println("    {");
+            writer.println("      \"unitName\": \"" + escapeJson(mod.getUnitName()) + "\",");
+            writer.println("      \"propertyPath\": \"" + escapeJson(mod.getPropertyPath()) + "\",");
+            writer.println("      \"oldValue\": \"" + escapeJson(mod.getOldValue()) + "\",");
+            writer.println("      \"newValue\": \"" + escapeJson(mod.getNewValue()) + "\",");
+            writer.println("      \"oldValueType\": \"" + mod.getOldValueType() + "\",");
+            writer.println("      \"newValueType\": \"" + mod.getNewValueType() + "\",");
+            writer.println("      \"timestamp\": \"" + mod.getTimestamp().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "\",");
+            writer.println("      \"modificationType\": \"" + mod.getModificationType().name() + "\",");
+            writer.println("      \"modificationDetails\": \"" + escapeJson(mod.getModificationDetails()) + "\"");
+            writer.print("    }");
+            if (i < modifications.size() - 1) {
+                writer.println(",");
+            } else {
+                writer.println();
+            }
+        }
+
+        writer.println("  ]");
+        writer.println("}");
     }
 
     
@@ -167,26 +230,85 @@ public class ModProfile {
             }
             String content = jsonContent.toString();
 
-            // Extract basic profile information
-            profile.profileName = extractJsonValue(content, "profileName");
-            profile.description = extractJsonValue(content, "description");
-            profile.gameVersion = extractJsonValue(content, "gameVersion");
-            profile.sourceFileName = extractJsonValue(content, "sourceFileName");
-            profile.createdBy = extractJsonValue(content, "createdBy");
-            String createdDateStr = extractJsonValue(content, "createdDate");
+            // SPYBORG ENHANCEMENT: Detect if this is a _meta/_input structure or legacy structure
+            if (content.contains("\"_input\"") && content.contains("\"_meta\"")) {
+                loadFromMetaInputStructure(profile, content);
+            } else {
+                loadFromLegacyStructure(profile, content);
+            }
+        }
+
+        return profile;
+    }
+
+    private static void loadFromMetaInputStructure(ModProfile profile, String content) {
+        // Extract from _input section
+        String inputSection = extractJsonSection(content, "_input");
+        if (!inputSection.isEmpty()) {
+            profile.profileName = extractJsonValue(inputSection, "profileName");
+            profile.description = extractJsonValue(inputSection, "description");
+            profile.gameVersion = extractJsonValue(inputSection, "gameVersion");
+            profile.sourceFileName = extractJsonValue(inputSection, "sourceFileName");
+            profile.createdBy = extractJsonValue(inputSection, "createdBy");
+
+            String createdDateStr = extractJsonValue(inputSection, "createdDate");
             if (!createdDateStr.isEmpty()) {
                 profile.createdDate = LocalDateTime.parse(createdDateStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
             }
 
-            String lastModifiedStr = extractJsonValue(content, "lastModified");
+            String lastModifiedStr = extractJsonValue(inputSection, "lastModified");
             if (!lastModifiedStr.isEmpty()) {
                 profile.lastModified = LocalDateTime.parse(lastModifiedStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
             }
-            mods = parseModifications(content);
-            profile.modifications = mods;
+
+            profile.modifications = parseModifications(inputSection);
+        }
+    }
+
+    private static void loadFromLegacyStructure(ModProfile profile, String content) {
+        // Extract basic profile information from root level
+        profile.profileName = extractJsonValue(content, "profileName");
+        profile.description = extractJsonValue(content, "description");
+        profile.gameVersion = extractJsonValue(content, "gameVersion");
+        profile.sourceFileName = extractJsonValue(content, "sourceFileName");
+        profile.createdBy = extractJsonValue(content, "createdBy");
+
+        String createdDateStr = extractJsonValue(content, "createdDate");
+        if (!createdDateStr.isEmpty()) {
+            profile.createdDate = LocalDateTime.parse(createdDateStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         }
 
-        return profile;
+        String lastModifiedStr = extractJsonValue(content, "lastModified");
+        if (!lastModifiedStr.isEmpty()) {
+            profile.lastModified = LocalDateTime.parse(lastModifiedStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        }
+
+        profile.modifications = parseModifications(content);
+    }
+
+    private static String extractJsonSection(String content, String sectionName) {
+        String pattern = "\"" + sectionName + "\"\\s*:\\s*\\{";
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(pattern);
+        java.util.regex.Matcher m = p.matcher(content);
+
+        if (m.find()) {
+            int start = m.end() - 1; // Include the opening brace
+            int braceCount = 1;
+            int i = start + 1;
+
+            while (i < content.length() && braceCount > 0) {
+                char c = content.charAt(i);
+                if (c == '{') braceCount++;
+                else if (c == '}') braceCount--;
+                i++;
+            }
+
+            if (braceCount == 0) {
+                return content.substring(start, i);
+            }
+        }
+
+        return "";
     }
 
     

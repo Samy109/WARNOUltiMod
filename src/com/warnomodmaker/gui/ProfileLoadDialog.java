@@ -251,13 +251,15 @@ public class ProfileLoadDialog extends JDialog {
             String suggestion = suggestedUnit != null ? "Try: " + suggestedUnit : "No similar units found";
             return new ValidationResult(modification, false, issue, suggestion);
         }
-        if (!PropertyUpdater.hasProperty(unit, propertyPath)) {
+        // Use file type for proper property validation - ALIGNED with single/mass modifications!
+        NDFValue.NDFFileType fileType = parentWindow.getCurrentFileType();
+        if (!PropertyUpdater.hasProperty(unit, propertyPath, fileType)) {
             String suggestedPath = findSimilarPropertyPath(unit, propertyPath);
             String issue = String.format("Property '%s' not found in unit '%s'", propertyPath, unitName);
             String suggestion = suggestedPath != null ? "Try: " + suggestedPath : "No similar properties found";
             return new ValidationResult(modification, false, issue, suggestion);
         }
-        NDFValue currentValue = PropertyUpdater.getPropertyValue(unit, propertyPath);
+        NDFValue currentValue = PropertyUpdater.getPropertyValue(unit, propertyPath, fileType);
         if (currentValue != null) {
             String currentValueStr = getValueForComparison(currentValue);
             String expectedOldValue = modification.getOldValue();
@@ -530,8 +532,9 @@ public class ProfileLoadDialog extends JDialog {
                         try {
                             NDFValue newValue = parseValueFromString(mod.getNewValue(), mod.getNewValueType());
 
-                            // Apply the modification
-                            if (PropertyUpdater.updateProperty(unit, mod.getPropertyPath(), newValue, modificationTracker)) {
+                            // Apply the modification with proper file type - ALIGNED with single/mass modifications!
+                            NDFValue.NDFFileType fileType = parentWindow.getCurrentFileType();
+                            if (PropertyUpdater.updateProperty(unit, mod.getPropertyPath(), newValue, modificationTracker, fileType)) {
                                 appliedCount++;
                             }
                         } catch (Exception ex) {
@@ -886,9 +889,10 @@ public class ProfileLoadDialog extends JDialog {
      * Check if a unit has a property using wildcard paths like "ModulesDescriptors[*].TagSet"
      */
     private boolean hasPropertyWithWildcards(ObjectValue unit, String propertyPath) {
-        // If no wildcards, use regular property checking
+        // If no wildcards, use regular property checking with file type
+        NDFValue.NDFFileType fileType = parentWindow.getCurrentFileType();
         if (!propertyPath.contains("[*]")) {
-            return PropertyUpdater.hasProperty(unit, propertyPath);
+            return PropertyUpdater.hasProperty(unit, propertyPath, fileType);
         }
 
         // Split on [*] to get the parts
@@ -913,7 +917,7 @@ public class ProfileLoadDialog extends JDialog {
             NDFValue element = array.getElements().get(i);
             if (element instanceof NDFValue.ObjectValue) {
                 NDFValue.ObjectValue elementObj = (NDFValue.ObjectValue) element;
-                if (PropertyUpdater.hasProperty(elementObj, remainingPath)) {
+                if (PropertyUpdater.hasProperty(elementObj, remainingPath, fileType)) {
                     return true; // Found at least one element with this property
                 }
             }

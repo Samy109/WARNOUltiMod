@@ -2,6 +2,7 @@ package com.warnomodmaker.parser;
 
 import com.warnomodmaker.model.NDFValue;
 import com.warnomodmaker.model.NDFValue.*;
+import com.warnomodmaker.model.ModificationTracker;
 
 import java.io.IOException;
 import java.io.Writer;
@@ -14,9 +15,8 @@ import java.util.Set;
 public class NDFWriter {
     private final Writer writer;
     private boolean preserveFormatting;
-    private List<NDFToken> originalTokens;
-    private List<String> preservedComments;
-    private Set<ObjectValue> modifiedObjects;
+    private String originalSourceContent;
+    private ModificationTracker modificationTracker;
 
 
     public NDFWriter(Writer writer) {
@@ -27,94 +27,50 @@ public class NDFWriter {
     public NDFWriter(Writer writer, boolean preserveFormatting) {
         this.writer = writer;
         this.preserveFormatting = preserveFormatting;
-        this.originalTokens = null;
-        this.preservedComments = new ArrayList<>();
-        this.modifiedObjects = new HashSet<>();
     }
 
 
     public void setOriginalTokens(List<NDFToken> tokens) {
-        this.originalTokens = tokens;
-        extractCommentsFromTokens(tokens);
+        // Keep for compatibility with MainWindow, but not used in line-based approach
     }
-
-
-    private void extractCommentsFromTokens(List<NDFToken> tokens) {
-        preservedComments.clear();
-        for (NDFToken token : tokens) {
-            if (token.getType() == NDFToken.TokenType.COMMENT) {
-                preservedComments.add(token.getValue());
-            }
-        }
-    }
-
 
     public void markObjectAsModified(ObjectValue object) {
-        modifiedObjects.add(object);
+        // Keep for compatibility with MainWindow, but not used in line-based approach
+    }
+
+    public void setOriginalSourceContent(String content) {
+        this.originalSourceContent = content;
+    }
+
+    public void setModificationTracker(ModificationTracker tracker) {
+        this.modificationTracker = tracker;
     }
 
 
     public void write(List<ObjectValue> ndfObjects) throws IOException {
-        setAllObjects(ndfObjects);
-        boolean hasModifiedObjects = ndfObjects.stream().anyMatch(modifiedObjects::contains);
-        boolean hasNewlyAddedObjects = ndfObjects.stream().anyMatch(obj -> !obj.hasOriginalTokenRange());
-        boolean isCompleteFile = isCompleteFileWrite(ndfObjects);
-
-        if (preserveFormatting && originalTokens != null && !originalTokens.isEmpty() &&
-            isCompleteFile && !hasModifiedObjects && !hasNewlyAddedObjects) {
-            writeExact(ndfObjects);
-        } else {
-            writePreservedComments();
-            for (ObjectValue ndfObject : ndfObjects) {
-                writeNDFObject(ndfObject);
-                writer.write("\n");
-            }
+        // ONLY line-based writing - NO FALLBACKS ALLOWED
+        if (originalSourceContent == null || modificationTracker == null) {
+            throw new IllegalStateException("Line-based writing requires originalSourceContent and modificationTracker - NO FALLBACKS ALLOWED");
         }
+
+        writeWithLineBasedReplacement(ndfObjects);
     }
 
 
-    private void writePreservedComments() throws IOException {
-        for (String comment : preservedComments) {
-            writer.write(comment);
-            writer.write("\n");
-        }
-        if (!preservedComments.isEmpty()) {
-            writer.write("\n");
-        }
+
+
+
+
+
+
+
+    private void writeWithLineBasedReplacement(List<ObjectValue> ndfObjects) throws IOException {
+        // NO FALLBACKS - line-based writing ONLY
+        LineBasedWriter lineWriter = new LineBasedWriter(writer, originalSourceContent, modificationTracker);
+        lineWriter.write(ndfObjects);
     }
 
 
-    private void writeExact(List<ObjectValue> ndfObjects) throws IOException {
-        int lastWrittenToken = -1;
-
-        for (ObjectValue ndfObject : ndfObjects) {
-            if (ndfObject.hasOriginalTokenRange() && originalTokens != null) {
-                int objectStartToken = ndfObject.getOriginalTokenStartIndex();
-                for (int i = lastWrittenToken + 1; i < objectStartToken; i++) {
-                    if (i >= 0 && i < originalTokens.size()) {
-                        NDFToken gapToken = originalTokens.get(i);
-                        if (gapToken != null) {
-                            String gapText = gapToken.getExactText();
-                            if (gapText != null && !gapText.isEmpty()) {
-                                writer.write(gapText);
-                            }
-                        }
-                    }
-                }
-
-                lastWrittenToken = ndfObject.getOriginalTokenEndIndex();
-            }
-            writeNDFObject(ndfObject);
-        }
-        if (originalTokens != null && lastWrittenToken >= 0) {
-            for (int i = lastWrittenToken + 1; i < originalTokens.size(); i++) {
-                NDFToken endToken = originalTokens.get(i);
-                if (endToken != null && endToken.getExactText() != null) {
-                    writer.write(endToken.getExactText());
-                }
-            }
-        }
-    }
 
 
     private void writeNDFObject(ObjectValue ndfObject) throws IOException {
@@ -130,47 +86,18 @@ public class NDFWriter {
             writer.write(typeName);
             writer.write("\n");
         } else if (ndfObject.isExported()) {
-            if (modifiedObjects.contains(ndfObject)) {
-                writer.write("export ");
-                writer.write(instanceName);
-                writer.write(" is ");
-                writer.write(ndfObject.getTypeName());
-                writer.write("\n");
-                writeCleanObjectFromMemoryModel(ndfObject);
-            } else if (ndfObject.hasOriginalTokenRange() && originalTokens != null) {
-                String originalText = reconstructOriginalText(
-                    ndfObject.getOriginalTokenStartIndex(),
-                    ndfObject.getOriginalTokenEndIndex()
-                );
-                writer.write(originalText);
-            } else {
-                writer.write("export ");
-                writer.write(instanceName);
-                writer.write(" is ");
-                writer.write(ndfObject.getTypeName());
-                writer.write("\n");
-                writeCleanObjectFromMemoryModel(ndfObject);
-            }
+            writer.write("export ");
+            writer.write(instanceName);
+            writer.write(" is ");
+            writer.write(ndfObject.getTypeName());
+            writer.write("\n");
+            writeCleanObjectFromMemoryModel(ndfObject);
         } else {
-            if (modifiedObjects.contains(ndfObject)) {
-                writer.write(instanceName);
-                writer.write(" is ");
-                writer.write(ndfObject.getTypeName());
-                writer.write("\n");
-                writeCleanObjectFromMemoryModel(ndfObject);
-            } else if (ndfObject.hasOriginalTokenRange() && originalTokens != null) {
-                String originalText = reconstructOriginalText(
-                    ndfObject.getOriginalTokenStartIndex(),
-                    ndfObject.getOriginalTokenEndIndex()
-                );
-                writer.write(originalText);
-            } else {
-                writer.write(instanceName);
-                writer.write(" is ");
-                writer.write(ndfObject.getTypeName());
-                writer.write("\n");
-                writeCleanObjectFromMemoryModel(ndfObject);
-            }
+            writer.write(instanceName);
+            writer.write(" is ");
+            writer.write(ndfObject.getTypeName());
+            writer.write("\n");
+            writeCleanObjectFromMemoryModel(ndfObject);
         }
     }
 
@@ -583,14 +510,8 @@ public class NDFWriter {
      * Check if we're writing a UniteDescriptor file
      */
     private boolean isUniteDescriptorFile() {
-        // Simple heuristic: check if any object has TEntityDescriptor type
-        // This is safe and additive - won't affect other files
-        List<ObjectValue> objects = allObjects != null ? allObjects : new ArrayList<>();
-        for (NDFValue.ObjectValue obj : objects) {
-            if ("TEntityDescriptor".equals(obj.getTypeName())) {
-                return true;
-            }
-        }
+        // Simple heuristic: always return false since we're using line-based approach
+        // The line-based writer handles all formatting correctly
         return false;
     }
 
@@ -654,7 +575,6 @@ public class NDFWriter {
                 writeCleanObjectFromMemoryModelInline(objectValue); // Use inline formatting for array elements
             }
         } else {
-            // Fallback to standard clean value writing
             writeCleanValue(element);
         }
     }
@@ -711,28 +631,11 @@ public class NDFWriter {
     }
 
     private void writeConstantDefinition(ObjectValue constantDef) throws IOException {
-        // PERFECT SURGICAL FIX: Prioritize token reconstruction for exact formatting preservation
         String instanceName = constantDef.getInstanceName();
         String typeName = constantDef.getTypeName();
         NDFValue value = constantDef.getProperties().get("Value");
 
-        if (constantDef.hasOriginalTokenRange() && originalTokens != null) {
-            if (modifiedObjects.contains(constantDef)) {
-                writer.write(instanceName);
-                writer.write(" is ");
-
-                if (value != null) {
-                    writeCleanValue(value);
-                }
-                writer.write("\n");
-            } else {
-                String originalText = reconstructOriginalText(
-                    constantDef.getOriginalTokenStartIndex(),
-                    constantDef.getOriginalTokenEndIndex()
-                );
-                writer.write(originalText);
-            }
-        } else if (instanceName != null && "ConstantDefinition".equals(typeName) && value != null) {
+        if (instanceName != null && "ConstantDefinition".equals(typeName) && value != null) {
             writer.write(instanceName);
             writer.write(" is ");
             writeCleanValue(value);
@@ -757,37 +660,6 @@ public class NDFWriter {
 
 
 
-    private List<ObjectValue> allObjects = null;
-
-
-    public void setAllObjects(List<ObjectValue> objects) {
-        this.allObjects = objects;
-    }
-
-
-
-
-
-    private String reconstructOriginalText(int startIndex, int endIndex) {
-        if (originalTokens == null || startIndex < 0 || endIndex < 0 ||
-            startIndex >= originalTokens.size() || endIndex >= originalTokens.size()) {
-            return "";
-        }
-
-        if (startIndex > endIndex) {
-            return "";
-        }
-
-        StringBuilder result = new StringBuilder();
-        for (int i = startIndex; i <= endIndex; i++) {
-            NDFToken token = originalTokens.get(i);
-            if (token != null && token.getExactText() != null) {
-                result.append(token.getExactText());
-            }
-        }
-
-        return result.toString();
-    }
 
 
 
@@ -795,12 +667,14 @@ public class NDFWriter {
 
 
 
-    private boolean isCompleteFileWrite(List<ObjectValue> ndfObjects) {
-        if (originalTokens == null || originalTokens.isEmpty()) {
-            return false;
-        }
-        return true;
-    }
+
+
+
+
+
+
+
+
 
 
 }

@@ -133,6 +133,10 @@ public abstract class NDFValue {
     protected String originalSuffix = "";
     protected boolean hasOriginalFormatting = false;
 
+    protected int sourceLineNumber = -1;
+    protected String originalLineContent = "";
+    protected boolean hasLineInfo = false;
+
     /**
      * Set the original formatting that surrounded this value in the source file
      * @param prefix The whitespace/indentation that appeared before this value
@@ -142,6 +146,24 @@ public abstract class NDFValue {
         this.originalPrefix = prefix != null ? prefix : "";
         this.originalSuffix = suffix != null ? suffix : "";
         this.hasOriginalFormatting = true;
+    }
+
+    public void setSourceLineInfo(int lineNumber, String lineContent) {
+        this.sourceLineNumber = lineNumber;
+        this.originalLineContent = lineContent != null ? lineContent : "";
+        this.hasLineInfo = true;
+    }
+
+    public int getSourceLineNumber() {
+        return sourceLineNumber;
+    }
+
+    public String getOriginalLineContent() {
+        return originalLineContent;
+    }
+
+    public boolean hasLineInfo() {
+        return hasLineInfo;
     }
 
     /**
@@ -165,13 +187,24 @@ public abstract class NDFValue {
         return hasOriginalFormatting;
     }
 
-    /**
-     * Clear formatting information (used when creating new values)
-     */
     public void clearOriginalFormatting() {
         this.originalPrefix = "";
         this.originalSuffix = "";
         this.hasOriginalFormatting = false;
+        this.sourceLineNumber = -1;
+        this.originalLineContent = "";
+        this.hasLineInfo = false;
+    }
+
+    public void copyFormattingFrom(NDFValue other) {
+        if (other != null) {
+            this.originalPrefix = other.originalPrefix;
+            this.originalSuffix = other.originalSuffix;
+            this.hasOriginalFormatting = other.hasOriginalFormatting;
+            this.sourceLineNumber = other.sourceLineNumber;
+            this.originalLineContent = other.originalLineContent;
+            this.hasLineInfo = other.hasLineInfo;
+        }
     }
 
 
