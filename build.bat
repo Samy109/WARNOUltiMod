@@ -8,9 +8,17 @@ set BUILD_DIR=build
 rem Create build directory
 if not exist %BUILD_DIR% mkdir %BUILD_DIR%
 
+rem Check Java version and set appropriate compiler flags
+echo Checking Java version...
+for /f "tokens=3" %%g in ('java -version 2^>^&1 ^| findstr /i "version"') do (
+    set JAVA_VERSION=%%g
+)
+set JAVA_VERSION=%JAVA_VERSION:"=%
+echo Detected Java version: %JAVA_VERSION%
+
 rem Compile Java files with FlatLaf on classpath
 echo Compiling Java files...
-javac -d %BUILD_DIR% -source 11 -target 11 -cp %FLATLAF_JAR%;src src/com/warnomodmaker/*.java src/com/warnomodmaker/model/*.java src/com/warnomodmaker/parser/*.java src/com/warnomodmaker/gui/*.java
+javac -d %BUILD_DIR% -source 11 -target 11 -cp %FLATLAF_JAR%;src src/com/warnomodmaker/*.java src/com/warnomodmaker/model/*.java src/com/warnomodmaker/parser/*.java src/com/warnomodmaker/gui/*.java src/com/warnomodmaker/gui/theme/*.java src/com/warnomodmaker/gui/components/*.java src/com/warnomodmaker/gui/renderers/*.java
 
 if %ERRORLEVEL% neq 0 (
     echo Compilation failed!

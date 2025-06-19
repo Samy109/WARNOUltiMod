@@ -52,7 +52,7 @@ copy WarnoModMaker.jar temp_input\
     --vendor "WARNO Mod Maker" ^
     --description "WARNO Mod Maker - NDF File Editor for WARNO Game Modifications" ^
     --copyright "2025" ^
-    --java-options "-Xmx2g"
+    --java-options "-Xmx1g"
 
 if %ERRORLEVEL% neq 0 (
     echo jpackage failed!

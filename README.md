@@ -82,7 +82,7 @@ WARNO Mod Maker is a comprehensive Java Swing application designed for advanced 
 
 - **Java 11 or higher** (Java 17+ recommended for optimal performance)
 - **Windows OS** (primary support, Linux/Mac may work but untested)
-- **4GB RAM minimum** (8GB recommended for large files and multiple tabs)
+- **2GB RAM minimum** (4GB recommended for large files and multiple tabs)
 - **1GB disk space** for application and temporary files
 
 ---
