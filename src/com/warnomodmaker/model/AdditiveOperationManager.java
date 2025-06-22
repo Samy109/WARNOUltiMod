@@ -228,6 +228,11 @@ public class AdditiveOperationManager {
     public boolean addPropertyToObject(NDFValue.ObjectValue targetObject, String propertyName,
                                      NDFValue propertyValue, ModificationTracker tracker) {
         try {
+            // Validate input parameters
+            if (targetObject == null || propertyName == null || propertyName.trim().isEmpty() || propertyValue == null) {
+                return false;
+            }
+
             // Validate property against schema
             if (!schemaRegistry.validateProperty(targetObject.getTypeName(), propertyName, propertyValue)) {
                 return false;

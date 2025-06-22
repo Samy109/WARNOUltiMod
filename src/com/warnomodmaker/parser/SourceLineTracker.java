@@ -11,12 +11,16 @@ public class SourceLineTracker {
     private final List<String> originalLines;
     private final Map<Integer, String> modifiedLines;
     private final Set<Integer> modifiedLineNumbers;
+    private final List<String> insertedLines;
+    private final Map<Integer, List<String>> insertionsAtLine;
     
     public SourceLineTracker(String sourceContent) {
         this.originalLines = new ArrayList<>();
         this.modifiedLines = new HashMap<>();
         this.modifiedLineNumbers = new HashSet<>();
-        
+        this.insertedLines = new ArrayList<>();
+        this.insertionsAtLine = new HashMap<>();
+
         // Split source content into lines, preserving line endings
         String[] lines = sourceContent.split("\n", -1); // -1 to preserve empty lines
         for (String line : lines) {
@@ -53,6 +57,15 @@ public class SourceLineTracker {
             modifiedLineNumbers.add(lineNumber);
         }
     }
+
+    /**
+     * Insert a new line at the specified position
+     */
+    public void insertLine(int lineNumber, String content) {
+        if (lineNumber >= 0 && lineNumber <= originalLines.size()) {
+            insertionsAtLine.computeIfAbsent(lineNumber, k -> new ArrayList<>()).add(content);
+        }
+    }
     
     /**
      * Check if a line has been modified
@@ -80,14 +93,32 @@ public class SourceLineTracker {
      */
     public String generateOutput() {
         StringBuilder output = new StringBuilder();
-        
+
         for (int i = 0; i < originalLines.size(); i++) {
-            if (i > 0) {
+            // Add any insertions before this line
+            if (insertionsAtLine.containsKey(i)) {
+                for (String insertedLine : insertionsAtLine.get(i)) {
+                    if (output.length() > 0) {
+                        output.append("\n");
+                    }
+                    output.append(insertedLine);
+                }
+            }
+
+            if (output.length() > 0) {
                 output.append("\n");
             }
             output.append(getCurrentLine(i));
         }
-        
+
+        // Add any insertions after the last line
+        if (insertionsAtLine.containsKey(originalLines.size())) {
+            for (String insertedLine : insertionsAtLine.get(originalLines.size())) {
+                output.append("\n");
+                output.append(insertedLine);
+            }
+        }
+
         return output.toString();
     }
     
@@ -119,6 +150,8 @@ public class SourceLineTracker {
     public void clearModifications() {
         modifiedLines.clear();
         modifiedLineNumbers.clear();
+        insertedLines.clear();
+        insertionsAtLine.clear();
     }
     
     /**

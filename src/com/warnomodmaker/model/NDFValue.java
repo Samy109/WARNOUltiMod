@@ -210,7 +210,12 @@ public abstract class NDFValue {
 
     public abstract ValueType getType();
 
-    
+    /**
+     * Create a deep copy of this NDFValue
+     */
+    public abstract NDFValue copy();
+
+
     public static NDFValue createString(String value) {
         return new StringValue(value);
     }
@@ -321,6 +326,13 @@ public abstract class NDFValue {
         }
 
         @Override
+        public NDFValue copy() {
+            StringValue copy = new StringValue(value, useDoubleQuotes);
+            copy.copyFormattingFrom(this);
+            return copy;
+        }
+
+        @Override
         public String toString() {
             if (useDoubleQuotes) {
                 return "\"" + value + "\"";
@@ -386,6 +398,18 @@ public abstract class NDFValue {
         }
 
         @Override
+        public NDFValue copy() {
+            NumberValue copy;
+            if (originalFormat != null) {
+                copy = new NumberValue(value, originalFormat);
+            } else {
+                copy = new NumberValue(value, wasOriginallyInteger);
+            }
+            copy.copyFormattingFrom(this);
+            return copy;
+        }
+
+        @Override
         public String toString() {
             // If we have original format information, try to preserve it
             if (originalFormat != null) {
@@ -440,6 +464,13 @@ public abstract class NDFValue {
         @Override
         public ValueType getType() {
             return ValueType.BOOLEAN;
+        }
+
+        @Override
+        public NDFValue copy() {
+            BooleanValue copy = new BooleanValue(value);
+            copy.copyFormattingFrom(this);
+            return copy;
         }
 
         @Override
@@ -576,6 +607,19 @@ public abstract class NDFValue {
         }
 
         @Override
+        public NDFValue copy() {
+            ArrayValue copy = new ArrayValue();
+            for (int i = 0; i < elements.size(); i++) {
+                copy.add(elements.get(i).copy(), hasCommaAfter(i));
+            }
+            copy.setOriginallyMultiLine(originallyMultiLine);
+            copy.setOriginalOpeningBracket(originalOpeningBracket);
+            copy.setOriginalClosingBracket(originalClosingBracket);
+            copy.copyFormattingFrom(this);
+            return copy;
+        }
+
+        @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
             sb.append("[");
@@ -627,6 +671,16 @@ public abstract class NDFValue {
         @Override
         public ValueType getType() {
             return ValueType.TUPLE;
+        }
+
+        @Override
+        public NDFValue copy() {
+            TupleValue copy = new TupleValue();
+            for (int i = 0; i < elements.size(); i++) {
+                copy.add(elements.get(i).copy(), hasCommaAfter(i));
+            }
+            copy.copyFormattingFrom(this);
+            return copy;
         }
 
         @Override
@@ -685,6 +739,17 @@ public abstract class NDFValue {
         @Override
         public ValueType getType() {
             return ValueType.MAP;
+        }
+
+        @Override
+        public NDFValue copy() {
+            MapValue copy = new MapValue();
+            for (int i = 0; i < entries.size(); i++) {
+                Map.Entry<NDFValue, NDFValue> entry = entries.get(i);
+                copy.add(entry.getKey().copy(), entry.getValue().copy(), hasCommaAfter(i));
+            }
+            copy.copyFormattingFrom(this);
+            return copy;
         }
 
         @Override
@@ -859,6 +924,26 @@ public abstract class NDFValue {
         }
 
         @Override
+        public NDFValue copy() {
+            ObjectValue copy = new ObjectValue(typeName);
+            copy.setInstanceName(instanceName);
+            copy.setModuleIdentifier(moduleIdentifier);
+            copy.setExported(isExported);
+
+            // Copy all properties
+            for (Map.Entry<String, NDFValue> entry : properties.entrySet()) {
+                copy.setProperty(entry.getKey(), entry.getValue().copy(), hasCommaAfter(entry.getKey()));
+            }
+
+            // Copy formatting
+            copy.setOriginalOpeningParen(originalOpeningParen);
+            copy.setOriginalClosingParen(originalClosingParen);
+            copy.copyFormattingFrom(this);
+
+            return copy;
+        }
+
+        @Override
         public String toString() {
             String name = getInstanceName();
             if (name != null && !name.isEmpty()) {
@@ -914,6 +999,14 @@ public abstract class NDFValue {
         }
 
         @Override
+        public NDFValue copy() {
+            TemplateRefValue copy = new TemplateRefValue(path);
+            copy.setInstanceName(instanceName);
+            copy.copyFormattingFrom(this);
+            return copy;
+        }
+
+        @Override
         public String toString() {
             if (instanceName != null) {
                 return instanceName + " is " + path;
@@ -950,6 +1043,14 @@ public abstract class NDFValue {
         }
 
         @Override
+        public NDFValue copy() {
+            ResourceRefValue copy = new ResourceRefValue(path);
+            copy.setInstanceName(instanceName);
+            copy.copyFormattingFrom(this);
+            return copy;
+        }
+
+        @Override
         public String toString() {
             if (instanceName != null) {
                 return instanceName + " is " + path;
@@ -973,6 +1074,13 @@ public abstract class NDFValue {
         @Override
         public ValueType getType() {
             return ValueType.GUID;
+        }
+
+        @Override
+        public NDFValue copy() {
+            GUIDValue copy = new GUIDValue(guid);
+            copy.copyFormattingFrom(this);
+            return copy;
         }
 
         @Override
@@ -1017,6 +1125,13 @@ public abstract class NDFValue {
             return ValueType.ENUM;
         }
 
+        @Override
+        public NDFValue copy() {
+            EnumValue copy = new EnumValue(enumType, enumValue);
+            copy.copyFormattingFrom(this);
+            return copy;
+        }
+
         public String getValue() {
             if (enumType.isEmpty()) {
                 return enumValue;
@@ -1045,6 +1160,13 @@ public abstract class NDFValue {
         @Override
         public ValueType getType() {
             return ValueType.RAW_EXPRESSION;
+        }
+
+        @Override
+        public NDFValue copy() {
+            RawExpressionValue copy = new RawExpressionValue(expression);
+            copy.copyFormattingFrom(this);
+            return copy;
         }
 
         @Override

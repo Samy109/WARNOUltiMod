@@ -9,6 +9,7 @@ import java.util.Map;
 import com.warnomodmaker.model.NDFValue.NumberValue;
 import com.warnomodmaker.model.NDFValue.NDFFileType;
 import com.warnomodmaker.model.PropertyUpdater;
+import com.warnomodmaker.model.TagExtractor;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -45,6 +46,7 @@ public class UnitBrowser extends JPanel {
     private static final String SEARCH_BY_NAME = "Search by Name";
     private static final String SEARCH_BY_PROPERTY = "Search by Property";
     private static final String SEARCH_HAS_PROPERTY = "Filter Tree by Property";
+    private static final String SEARCH_BY_TAG = "Search by Tag";
 
 
     public UnitBrowser() {
@@ -64,7 +66,8 @@ public class UnitBrowser extends JPanel {
         searchTypeComboBox = new JComboBox<>(new String[] {
             SEARCH_BY_NAME,
             SEARCH_BY_PROPERTY,
-            SEARCH_HAS_PROPERTY
+            SEARCH_HAS_PROPERTY,
+            SEARCH_BY_TAG
         });
         searchTypeComboBox.addActionListener(e -> {
             // Cancel any pending search timer and search immediately when search type changes
@@ -309,6 +312,9 @@ public class UnitBrowser extends JPanel {
         } else if (SEARCH_HAS_PROPERTY.equals(searchType)) {
             filterByHasPropertyCurrent(searchText); // Check current object only
             return;
+        } else if (SEARCH_BY_TAG.equals(searchType)) {
+            filterByTag(searchText); // Search by tags
+            return;
         } else {
             // Clear property filter when not in property search mode
             notifyPropertyFilterListeners(null);
@@ -351,6 +357,12 @@ public class UnitBrowser extends JPanel {
                                 // Search by unit name
                                 String unitName = unit.getInstanceName();
                                 matches = unitName.toLowerCase().contains(searchText.toLowerCase());
+                                break;
+                            case SEARCH_BY_TAG:
+                                // Search by tags in TTagsModuleDescriptor
+                                java.util.Set<String> unitTags = TagExtractor.extractTagsFromUnit(unit);
+                                matches = unitTags.stream().anyMatch(tag ->
+                                    tag.toLowerCase().contains(searchText.toLowerCase()));
                                 break;
                         }
                     } catch (Exception e) {
@@ -681,6 +693,76 @@ public class UnitBrowser extends JPanel {
         return false;
     }
 
+    private void filterByTag(String searchText) {
+        // Cancel any existing search
+        if (currentSearchWorker != null && !currentSearchWorker.isDone()) {
+            currentSearchWorker.cancel(true);
+        }
+
+        if (searchText.isEmpty()) {
+            resetToAllUnits();
+            return;
+        }
+
+        statusLabel.setText("Searching by tags...");
+
+        // Use SwingWorker to perform the search in a background thread
+        currentSearchWorker = new SwingWorker<List<ObjectValue>, Void>() {
+            @Override
+            protected List<ObjectValue> doInBackground() throws Exception {
+                List<ObjectValue> results = new ArrayList<>();
+
+                for (ObjectValue unit : ndfObjects) {
+                    try {
+                        // Extract tags from unit and check if any contain the search text
+                        java.util.Set<String> unitTags = TagExtractor.extractTagsFromUnit(unit);
+                        boolean matches = unitTags.stream().anyMatch(tag ->
+                            tag.toLowerCase().contains(searchText.toLowerCase()));
+
+                        if (matches) {
+                            results.add(unit);
+                        }
+                    } catch (Exception e) {
+                        // Skip units that cause errors
+                        continue;
+                    }
+                }
+
+                return results;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<ObjectValue> results = get();
+                    filteredObjects = results;
+                    DefaultListModel<ObjectValue> newModel = new DefaultListModel<>();
+                    for (ObjectValue unit : filteredObjects) {
+                        newModel.addElement(unit);
+                    }
+
+                    // Replace the entire model at once
+                    objectList.setModel(newModel);
+                    listModel = newModel;
+                    String objectTypeName = getObjectTypeNameForDisplay(currentFileType);
+                    statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found with tag containing '" + searchText + "'");
+
+                    // Select the first object if available
+                    if (!filteredObjects.isEmpty()) {
+                        objectList.setSelectedIndex(0);
+                    }
+                } catch (InterruptedException | ExecutionException e) {
+                    statusLabel.setText("Error searching by tags: " + e.getMessage());
+                } finally {
+                    // Re-enable the search field and restore focus
+                    searchField.setEnabled(true);
+                    searchField.requestFocusInWindow();
+                }
+            }
+        };
+
+        currentSearchWorker.execute();
+    }
 
     private String getObjectTypeNameForDisplay(NDFFileType fileType) {
         if (fileType != NDFFileType.UNKNOWN) {

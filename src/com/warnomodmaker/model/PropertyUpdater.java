@@ -24,6 +24,7 @@ public class PropertyUpdater {
         SUBTRACT("Subtract"),
         INCREASE_PERCENT("Percentage increase"),
         DECREASE_PERCENT("Percentage decrease"),
+        REPLACE_PROPERTY("Replace property"),
         OBJECT_ADDED("Object Added"),
         MODULE_ADDED("Module Added"),
         PROPERTY_ADDED("Property Added"),
@@ -519,6 +520,42 @@ public class PropertyUpdater {
         return success;
     }
 
+    /**
+     * Replace one property with another property's value
+     */
+    public static boolean replaceProperty(ObjectValue ndfObject, String oldPropertyPath, String newPropertyPath, ModificationTracker tracker) {
+        if (ndfObject == null || oldPropertyPath == null || newPropertyPath == null ||
+            oldPropertyPath.isEmpty() || newPropertyPath.isEmpty()) {
+            return false;
+        }
+
+        // Get the value from the new property path
+        NDFValue newPropertyValue = getPropertyValue(ndfObject, newPropertyPath);
+        if (newPropertyValue == null) {
+            return false; // New property doesn't exist
+        }
+
+        // Get the old value for tracking
+        NDFValue oldValue = getPropertyValue(ndfObject, oldPropertyPath);
+        if (oldValue == null) {
+            return false; // Old property doesn't exist
+        }
+
+        // Create a copy of the new value to avoid reference issues
+        NDFValue newValue = newPropertyValue.copy();
+
+        // Update the old property with the new value
+        boolean success = updateProperty(ndfObject, oldPropertyPath, newValue, null);
+
+        // Record the modification if tracker is provided and update was successful
+        if (success && tracker != null) {
+            String objectName = ndfObject.getInstanceName() != null ? ndfObject.getInstanceName() : "Unknown Object";
+            tracker.recordModification(objectName, oldPropertyPath, oldValue, newValue, ModificationType.REPLACE_PROPERTY,
+                "Replaced with value from " + newPropertyPath);
+        }
+
+        return success;
+    }
 
     public static NDFValue getPropertyValue(ObjectValue ndfObject, String propertyPath) {
         if (ndfObject == null || propertyPath == null || propertyPath.isEmpty()) {

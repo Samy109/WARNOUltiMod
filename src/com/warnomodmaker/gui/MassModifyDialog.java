@@ -29,6 +29,8 @@ public class MassModifyDialog extends JDialog {
     private JTextField propertyPathField;
     private JComboBox<PropertyUpdater.ModificationType> modificationTypeComboBox;
     private JTextField valueField;
+    private JTextField replacementPropertyField;
+    private JLabel replacementPropertyLabel;
     private JCheckBox filterUnitsCheckBox;
     private JTextField filterField;
     private JCheckBox tagFilterCheckBox;
@@ -212,6 +214,7 @@ public class MassModifyDialog extends JDialog {
         }
 
         modificationTypeComboBox = new JComboBox<>(userTypes.toArray(new PropertyUpdater.ModificationType[0]));
+        modificationTypeComboBox.addActionListener(this::modificationTypeChanged);
         formPanel.add(modificationTypeComboBox, gbc);
 
         // Value
@@ -226,9 +229,24 @@ public class MassModifyDialog extends JDialog {
         valueField.setToolTipText("Enter value. For arrays: 'Tag1,Tag2' to add, '-Tag1,-Tag2' to remove, 'Tag1,-Tag2,Tag3' for mixed operations");
         formPanel.add(valueField, gbc);
 
-        // Filter units checkbox
+        // Replacement property field (initially hidden)
         gbc.gridx = 0;
         gbc.gridy = 5;
+        gbc.weightx = 0.0;
+        replacementPropertyLabel = new JLabel("Replace with property:");
+        replacementPropertyLabel.setVisible(false);
+        formPanel.add(replacementPropertyLabel, gbc);
+
+        gbc.gridx = 1;
+        gbc.weightx = 1.0;
+        replacementPropertyField = new JTextField();
+        replacementPropertyField.setToolTipText("Enter the property path to copy the value from (e.g., ModulesDescriptors[0].BattleSupportRadiusInAPCase)");
+        replacementPropertyField.setVisible(false);
+        formPanel.add(replacementPropertyField, gbc);
+
+        // Filter units checkbox
+        gbc.gridx = 0;
+        gbc.gridy = 6;
         gbc.weightx = 0.0;
         filterUnitsCheckBox = new JCheckBox("Filter units:");
         filterUnitsCheckBox.addActionListener(e -> {
@@ -247,7 +265,7 @@ public class MassModifyDialog extends JDialog {
 
         // Tag filter checkbox
         gbc.gridx = 0;
-        gbc.gridy = 6;
+        gbc.gridy = 7;
         gbc.weightx = 0.0;
         tagFilterCheckBox = new JCheckBox("Filter by tags:");
         tagFilterCheckBox.addActionListener(e -> {
@@ -267,7 +285,7 @@ public class MassModifyDialog extends JDialog {
 
         // Status label
         gbc.gridx = 0;
-        gbc.gridy = 7;
+        gbc.gridy = 8;
         gbc.gridwidth = 3;
         gbc.weightx = 1.0;
         statusLabel = new JLabel();
@@ -339,6 +357,30 @@ public class MassModifyDialog extends JDialog {
         }
 
         updateStatusLabel();
+    }
+
+    private void modificationTypeChanged(ActionEvent e) {
+        PropertyUpdater.ModificationType selectedType =
+            (PropertyUpdater.ModificationType) modificationTypeComboBox.getSelectedItem();
+
+        boolean isReplaceProperty = selectedType == PropertyUpdater.ModificationType.REPLACE_PROPERTY;
+
+        // Show/hide replacement property field
+        replacementPropertyLabel.setVisible(isReplaceProperty);
+        replacementPropertyField.setVisible(isReplaceProperty);
+
+        // Update value field tooltip and label
+        if (isReplaceProperty) {
+            valueField.setToolTipText("This field is not used for property replacement");
+            valueField.setEnabled(false);
+        } else {
+            valueField.setToolTipText("Enter value. For arrays: 'Tag1,Tag2' to add, '-Tag1,-Tag2' to remove, 'Tag1,-Tag2,Tag3' for mixed operations");
+            valueField.setEnabled(true);
+        }
+
+        // Revalidate the layout
+        revalidate();
+        repaint();
     }
 
 
@@ -637,16 +679,33 @@ public class MassModifyDialog extends JDialog {
             return;
         }
 
-        String valueText = valueField.getText().trim();
+        PropertyUpdater.ModificationType modificationType =
+            (PropertyUpdater.ModificationType) modificationTypeComboBox.getSelectedItem();
 
-        if (valueText.isEmpty()) {
-            JOptionPane.showMessageDialog(
-                this,
-                "Please enter a value.",
-                "Error",
-                JOptionPane.ERROR_MESSAGE
-            );
-            return;
+        String valueText = valueField.getText().trim();
+        String replacementPropertyPath = replacementPropertyField.getText().trim();
+
+        // Validate input based on modification type
+        if (modificationType == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+            if (replacementPropertyPath.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Please enter a replacement property path.",
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+        } else {
+            if (valueText.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Please enter a value.",
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
         }
 
         try {
@@ -666,8 +725,6 @@ public class MassModifyDialog extends JDialog {
                     value = valueText.hashCode();
                 }
             }
-            PropertyUpdater.ModificationType modificationType =
-                (PropertyUpdater.ModificationType) modificationTypeComboBox.getSelectedItem();
             String filter = null;
             if (filterUnitsCheckBox.isSelected() && !filterField.getText().trim().isEmpty()) {
                 filter = filterField.getText().trim().toLowerCase();
@@ -683,10 +740,18 @@ public class MassModifyDialog extends JDialog {
                 return;
             }
 
+            String confirmationMessage;
+            if (modificationType == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+                confirmationMessage = String.format("This will modify %d units.\n\nProperty: %s\nModification: %s\nReplace with: %s\n\nContinue?",
+                    unitsToModify, propertyPath, modificationType.getDisplayName(), replacementPropertyPath);
+            } else {
+                confirmationMessage = String.format("This will modify %d units.\n\nProperty: %s\nModification: %s\nValue: %s\n\nContinue?",
+                    unitsToModify, propertyPath, modificationType.getDisplayName(), valueText);
+            }
+
             int confirm = JOptionPane.showConfirmDialog(
                 this,
-                String.format("This will modify %d units.\n\nProperty: %s\nModification: %s\nValue: %s\n\nContinue?",
-                            unitsToModify, propertyPath, modificationType.getDisplayName(), valueText),
+                confirmationMessage,
                 "Confirm Mass Modification",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.QUESTION_MESSAGE
@@ -697,21 +762,30 @@ public class MassModifyDialog extends JDialog {
             }
 
             // Apply the modification using PropertyUpdater (same as single updates!)
-            int modifiedCount = applyModificationToUnits(propertyPath, modificationType, value, valueText, filter);
+            int modifiedCount = applyModificationToUnits(propertyPath, modificationType, value, valueText, replacementPropertyPath, filter);
 
             if (modifiedCount > 0) {
                 modified = true;
 
+                String successMessage;
+                if (modificationType == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+                    successMessage = String.format("Successfully modified %d units.\n\nProperty: %s\nModification: %s\nReplaced with: %s",
+                        modifiedCount, propertyPath, modificationType.getDisplayName(), replacementPropertyPath);
+                } else {
+                    successMessage = String.format("Successfully modified %d units.\n\nProperty: %s\nModification: %s\nValue: %s",
+                        modifiedCount, propertyPath, modificationType.getDisplayName(), valueText);
+                }
+
                 JOptionPane.showMessageDialog(
                     this,
-                    String.format("Successfully modified %d units.\n\nProperty: %s\nModification: %s\nValue: %s",
-                                modifiedCount, propertyPath, modificationType.getDisplayName(), valueText),
+                    successMessage,
                     "Modification Applied",
                     JOptionPane.INFORMATION_MESSAGE
                 );
 
-                // Clear the value field to prepare for next modification
+                // Clear the fields to prepare for next modification
                 valueField.setText("");
+                replacementPropertyField.setText("");
                 updateStatusLabel();
             } else {
                 JOptionPane.showMessageDialog(
@@ -1042,7 +1116,7 @@ public class MassModifyDialog extends JDialog {
 
 
     private int applyModificationToUnits(String propertyPath, PropertyUpdater.ModificationType modificationType,
-                                       double value, String valueText, String filter) {
+                                       double value, String valueText, String replacementPropertyPath, String filter) {
         // Start with all units, then apply filters
         List<ObjectValue> workingUnits = new ArrayList<>(unitDescriptors);
 
@@ -1068,7 +1142,7 @@ public class MassModifyDialog extends JDialog {
             }
 
             // Use direct update - same logic as counting phase
-            if (updatePropertyDirect(unit, propertyPath, modificationType, value, valueText)) {
+            if (updatePropertyDirect(unit, propertyPath, modificationType, value, valueText, replacementPropertyPath)) {
                 modifiedCount++;
             }
         }
@@ -1078,7 +1152,12 @@ public class MassModifyDialog extends JDialog {
 
 
     private boolean updatePropertyDirect(ObjectValue unit, String propertyPath,
-                                      PropertyUpdater.ModificationType modificationType, double value, String valueText) {
+                                      PropertyUpdater.ModificationType modificationType, double value, String valueText, String replacementPropertyPath) {
+        // Handle property replacement
+        if (modificationType == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+            return PropertyUpdater.replaceProperty(unit, propertyPath, replacementPropertyPath, modificationTracker);
+        }
+
         // Wildcard paths: update ALL array elements that have the property
         if (propertyPath.contains("[*]")) {
             return updatePropertyWithWildcards(unit, propertyPath, modificationType, value, valueText);

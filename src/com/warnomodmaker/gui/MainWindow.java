@@ -191,6 +191,10 @@ public class MainWindow extends JFrame implements FileLoader {
         massModifyItem.addActionListener(this::showMassModifyDialog);
         toolsMenu.add(massModifyItem);
 
+        JMenuItem manualListItem = new JMenuItem("Create Manual List...");
+        manualListItem.addActionListener(this::showManualListDialog);
+        toolsMenu.add(manualListItem);
+
         JMenuItem tagOrderEditorItem = new JMenuItem("Edit Tags & Orders...");
         tagOrderEditorItem.addActionListener(this::showTagAndOrderEditor);
         toolsMenu.add(tagOrderEditorItem);
@@ -412,6 +416,37 @@ public class MainWindow extends JFrame implements FileLoader {
         }
     }
 
+    private void showManualListDialog(ActionEvent e) {
+        FileTabState currentTab = getCurrentTabState();
+        if (currentTab == null || !currentTab.hasData()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "No units loaded. Please open a file first.",
+                "No Units",
+                JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        ManualListDialog dialog = new ManualListDialog(this, currentTab.getUnitDescriptors());
+        dialog.setVisible(true);
+
+        if (dialog.isConfirmed()) {
+            List<NDFValue.ObjectValue> selectedUnits = dialog.getSelectedUnits();
+            if (!selectedUnits.isEmpty()) {
+                // Open mass modify dialog with the selected units
+                MassModifyDialog massModifyDialog = new MassModifyDialog(
+                    this, selectedUnits, currentTab.getModificationTracker(), currentTab.getFileType());
+                massModifyDialog.setVisible(true);
+
+                if (massModifyDialog.isModified()) {
+                    currentTab.setModified(true);
+                    refreshCurrentTab();
+                    updateTitle();
+                }
+            }
+        }
+    }
 
 
 
