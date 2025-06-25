@@ -67,11 +67,17 @@ public class TestRunner {
                 testCase.executor.execute();
                 long duration = System.currentTimeMillis() - testStart;
                 result = new TestResult(testCase.name, true, null, duration, testCase.category);
-                System.out.println("+ " + testCase.name + " (" + duration + "ms)");
+                // Only output to console if no progress listeners (console mode)
+                if (progressListeners.isEmpty()) {
+                    System.out.println("+ " + testCase.name + " (" + duration + "ms)");
+                }
             } catch (Exception e) {
                 long duration = System.currentTimeMillis() - testStart;
                 result = new TestResult(testCase.name, false, e, duration, testCase.category);
-                System.err.println("X " + testCase.name + " (" + duration + "ms): " + e.getMessage());
+                // Only output to console if no progress listeners (console mode)
+                if (progressListeners.isEmpty()) {
+                    System.err.println("X " + testCase.name + " (" + duration + "ms): " + e.getMessage());
+                }
             }
             
             results.add(result);
