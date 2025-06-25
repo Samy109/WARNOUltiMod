@@ -9,118 +9,12 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
+import javax.swing.*;
+import java.awt.event.*;
 
-// Test Framework Classes
-class TestRunner {
-    private List<TestCase> testCases = new ArrayList<>();
 
-    void addTest(String name, TestExecutor executor) {
-        testCases.add(new TestCase(name, executor));
-    }
 
-    TestResults runAll() {
-        List<TestResult> results = new ArrayList<>();
-        long startTime = System.currentTimeMillis();
 
-        for (TestCase testCase : testCases) {
-            long testStart = System.currentTimeMillis();
-            try {
-                testCase.executor.execute();
-                long duration = System.currentTimeMillis() - testStart;
-                System.out.println("+ " + testCase.name + " (" + duration + "ms)");
-                results.add(new TestResult(testCase.name, true, null, duration));
-            } catch (Exception e) {
-                long duration = System.currentTimeMillis() - testStart;
-                System.err.println("X " + testCase.name + " (" + duration + "ms): " + e.getMessage());
-                results.add(new TestResult(testCase.name, false, e, duration));
-            }
-        }
-
-        long totalDuration = System.currentTimeMillis() - startTime;
-        return new TestResults(results, totalDuration);
-    }
-
-    @FunctionalInterface
-    interface TestExecutor {
-        void execute() throws Exception;
-    }
-
-    static class TestCase {
-        final String name;
-        final TestExecutor executor;
-
-        TestCase(String name, TestExecutor executor) {
-            this.name = name;
-            this.executor = executor;
-        }
-    }
-
-    static class TestResult {
-        final String testName;
-        final boolean passed;
-        final Exception failure;
-        final long durationMs;
-
-        TestResult(String testName, boolean passed, Exception failure, long durationMs) {
-            this.testName = testName;
-            this.passed = passed;
-            this.failure = failure;
-            this.durationMs = durationMs;
-        }
-    }
-
-    static class TestResults {
-        final List<TestResult> results;
-        final long totalDurationMs;
-
-        TestResults(List<TestResult> results, long totalDurationMs) {
-            this.results = results;
-            this.totalDurationMs = totalDurationMs;
-        }
-
-        int getPassedCount() {
-            return (int) results.stream().filter(r -> r.passed).count();
-        }
-
-        int getFailedCount() {
-            return (int) results.stream().filter(r -> !r.passed).count();
-        }
-    }
-}
-
-class TestAssert {
-    static void assertTrue(String message, boolean condition) {
-        if (!condition) {
-            throw new AssertionError("ASSERTION FAILED: " + message);
-        }
-    }
-
-    static void assertFalse(String message, boolean condition) {
-        assertTrue(message, !condition);
-    }
-
-    static void assertNotNull(String message, Object obj) {
-        assertTrue(message + " (was null)", obj != null);
-    }
-
-    static void assertEquals(String message, Object expected, Object actual) {
-        if (!Objects.equals(expected, actual)) {
-            throw new AssertionError("ASSERTION FAILED: " + message +
-                " - Expected: " + expected + ", Actual: " + actual);
-        }
-    }
-
-    static void assertEquals(String message, double expected, double actual, double delta) {
-        if (Math.abs(expected - actual) > delta) {
-            throw new AssertionError("ASSERTION FAILED: " + message +
-                " - Expected: " + expected + ", Actual: " + actual + ", Delta: " + delta);
-        }
-    }
-
-    static void fail(String message) {
-        throw new AssertionError("TEST FAILED: " + message);
-    }
-}
 
 public class ComprehensiveE2ETest {
     private static final String TESTER_FILES_DIR = "tester files";
@@ -147,52 +41,108 @@ public class ComprehensiveE2ETest {
     };
 
     public static void main(String[] args) {
-        ComprehensiveE2ETest test = new ComprehensiveE2ETest();
-        
-        TestRunner runner = new TestRunner();
-        runner.addTest("Setup", () -> test.setUp());
-        runner.addTest("Parse Files", () -> test.parseAllTestFiles());
-        runner.addTest("Verify Model", () -> test.verifyInMemoryModelIntegrity());
-        runner.addTest("Singular Modifications", () -> test.testSingularModifications());
-        runner.addTest("Mass Modifications", () -> test.testMassModifications());
-        runner.addTest("Tag Search Functionality", () -> test.testTagSearchFunctionality());
-        runner.addTest("Manual List Creation", () -> test.testManualListCreation());
-        runner.addTest("Property Replacement", () -> test.testPropertyReplacement());
-        runner.addTest("Property Addition", () -> test.testPropertyAddition());
-        runner.addTest("NDFValue Copy Methods", () -> test.testNDFValueCopyMethods());
-        runner.addTest("Entity Creation", () -> test.testEntityCreationSystem());
-        runner.addTest("Additive Operations", () -> test.testAdditiveOperations());
-        runner.addTest("Collection Integrity", () -> test.validateCollectionIntegrity("After additive"));
-        runner.addTest("Comprehensive Additive", () -> test.testComprehensiveAdditiveOperations());
-        runner.addTest("Collection Integrity", () -> test.validateCollectionIntegrity("After comprehensive"));
-        runner.addTest("Entity Generation", () -> test.testCompleteEntityGeneration());
-        runner.addTest("Collection Integrity", () -> test.validateCollectionIntegrity("After generation"));
-        runner.addTest("File Writing", () -> test.testFileWritingAndRoundTrip());
-        runner.addTest("Formatting Preservation", () -> test.testExactFormattingPreservation());
-        runner.addTest("Modification Tracking", () -> test.verifyModificationTracking());
-        runner.addTest("Stress Tests", () -> test.runStressTests());
-        runner.addTest("Edge Cases", () -> test.runEdgeCaseTests());
+        // Check if console mode is requested (default is now UI mode)
+        boolean useConsole = args.length > 0 && args[0].equals("--console");
 
-        System.out.println("WARNO Mod Maker - E2E Test Suite");
+        ComprehensiveE2ETest test = new ComprehensiveE2ETest();
+
+        if (useConsole) {
+            // Run in console mode
+            runConsoleMode(test);
+        } else {
+            // Launch with UI (default behavior)
+            SwingUtilities.invokeLater(() -> {
+                // Set system look and feel
+                TestUI testUI = new TestUI(test);
+                testUI.setVisible(true);
+            });
+        }
+    }
+
+    private static void runConsoleMode(ComprehensiveE2ETest test) {
+        TestRunner runner = new TestRunner();
+        test.setupTestRunner(runner);
+
+        System.out.println("WARNO Mod Maker - E2E Test Suite (Console Mode)");
         System.out.println("==================================================");
-        
+        System.out.println("Tip: Use --ui argument to launch with graphical interface");
+        System.out.println();
+
         TestRunner.TestResults results = runner.runAll();
-        
+
         if (results.getFailedCount() == 0) {
             System.out.println("\n+ ALL TESTS PASSED");
         } else {
             System.err.println("\nX " + results.getFailedCount() + " TESTS FAILED");
         }
-        
+
         test.printComprehensiveStatistics();
-        
+
         try {
             test.cleanup();
         } catch (IOException e) {
             System.err.println("Cleanup failed: " + e.getMessage());
         }
-        
+
         System.exit(results.getFailedCount() > 0 ? 1 : 0);
+    }
+
+    /**
+     * Method called by TestUI to run tests with UI integration
+     */
+    public void runCompleteTestWithUI(TestRunner runner) throws Exception {
+        setupTestRunner(runner);
+        runner.runAll();
+        printComprehensiveStatistics();
+        cleanup();
+    }
+
+    /**
+     * Configure the test runner with all test cases organized by category
+     */
+    public void setupTestRunner(TestRunner runner) {
+        // Setup & Initialization Tests
+        runner.setCurrentCategory(TestRunner.TestCategory.SETUP);
+        runner.addTest("Environment Setup", () -> setUp());
+
+        // File Parsing Tests
+        runner.setCurrentCategory(TestRunner.TestCategory.PARSING);
+        runner.addTest("Parse All Test Files", () -> parseAllTestFiles());
+
+        // Model Integrity Tests
+        runner.setCurrentCategory(TestRunner.TestCategory.MODEL);
+        runner.addTest("Verify In-Memory Model Integrity", () -> verifyInMemoryModelIntegrity());
+        runner.addTest("NDFValue Copy Methods", () -> testNDFValueCopyMethods());
+
+        // Modification Tests
+        runner.setCurrentCategory(TestRunner.TestCategory.MODIFICATIONS);
+        runner.addTest("Singular Modifications", () -> testSingularModifications());
+        runner.addTest("Mass Modifications", () -> testMassModifications());
+        runner.addTest("Modification Tracking", () -> verifyModificationTracking());
+
+        // New Features Tests
+        runner.setCurrentCategory(TestRunner.TestCategory.FEATURES);
+        runner.addTest("Tag Search Functionality", () -> testTagSearchFunctionality());
+        runner.addTest("Manual List Creation", () -> testManualListCreation());
+        runner.addTest("Property Replacement", () -> testPropertyReplacement());
+        runner.addTest("Property Addition", () -> testPropertyAddition());
+        runner.addTest("Entity Creation System", () -> testEntityCreationSystem());
+        runner.addTest("Additive Operations", () -> testAdditiveOperations());
+        runner.addTest("Collection Integrity (After Additive)", () -> validateCollectionIntegrity("After additive"));
+        runner.addTest("Comprehensive Additive Operations", () -> testComprehensiveAdditiveOperations());
+        runner.addTest("Collection Integrity (After Comprehensive)", () -> validateCollectionIntegrity("After comprehensive"));
+        runner.addTest("Complete Entity Generation", () -> testCompleteEntityGeneration());
+        runner.addTest("Collection Integrity (After Generation)", () -> validateCollectionIntegrity("After generation"));
+
+        // File Writing Tests
+        runner.setCurrentCategory(TestRunner.TestCategory.WRITING);
+        runner.addTest("File Writing and Round Trip", () -> testFileWritingAndRoundTrip());
+        runner.addTest("Exact Formatting Preservation", () -> testExactFormattingPreservation());
+
+        // Stress Tests
+        runner.setCurrentCategory(TestRunner.TestCategory.STRESS);
+        runner.addTest("Stress Tests", () -> runStressTests());
+        runner.addTest("Edge Case Tests", () -> runEdgeCaseTests());
     }
 
     private void setUp() throws IOException {
