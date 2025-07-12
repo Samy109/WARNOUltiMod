@@ -2,7 +2,8 @@
 
 WARNO Mod Maker is a comprehensive Java Swing application designed for advanced editing of WARNO game files (NDF format). Built with the sleek FlatLaf dark UI theme, it offers a professional modding experience with enterprise-grade features for both casual tinkerers and advanced modders. Edit units, weapons, ammunition, buildings, and more with surgical precision and powerful automation tools.
 
-![image](https://github.com/user-attachments/assets/46d9f5f7-f690-4154-aaca-6f134fee3cc1)
+<img width="1283" height="713" alt="image" src="https://github.com/user-attachments/assets/fea700cf-2f9a-48a8-bc1d-ab7df72dad56" />
+
 
 ---
 
@@ -158,8 +159,7 @@ java -Xmx8g -jar WarnoModMaker.jar
 1. **Open Tools → Create Entity**
 2. **Select Entity Type**: Choose from discovered patterns (Tank, Infantry, etc.)
 3. **Enter Name**: Provide unique name for the new entity
-4. **Review Dependencies**: Check required files and cross-references
-5. **Create**: Generate complete entity across multiple files
+4. **Create**: Generate complete entity across multiple files
 
 ### Additive Operations (Expert)
 1. **Open Tools → Additive Operations**
@@ -185,7 +185,7 @@ java -Xmx8g -jar WarnoModMaker.jar
 ## ⚙️ Technical Architecture
 
 ### Core Systems
-- **Token-Based Parser**: 100% accurate NDF parsing with format preservation
+- **Non-token based parser**: 1-1 accurate NDF parsing with format preservation
 - **In-Memory Object Model**: Efficient representation of complex NDF structures
 - **Dynamic Schema Discovery**: Learns file structures without hardcoded assumptions
 - **Cross-File Reference Engine**: Tracks and validates relationships between files
@@ -252,7 +252,6 @@ WARNO-Mod-Maker/
 - **Performance issues**: Close other applications and increase JVM memory
 
 ### Advanced Troubleshooting
-- **Cross-file references broken**: Use Tools → Validate Integrity
 - **Profile won't load**: Check for path migration issues in the profile
 - **Entity creation fails**: Ensure all required files are open
 - **Mass modify not finding properties**: Use the Refresh button to rescan
@@ -299,6 +298,5 @@ Made with ❤️ for WARNO modders worldwide.
 For support, bug reports, feature requests, and community discussions:
 - **GitHub Issues**: Report bugs and request features
 - **GitHub Discussions**: Community support and modding tips
-- **Wiki**: Comprehensive documentation and tutorials
 
 **Happy Modding!** 🎮✨
