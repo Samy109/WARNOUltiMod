@@ -105,10 +105,14 @@ public class SourceLineTracker {
                 }
             }
 
-            if (output.length() > 0) {
-                output.append("\n");
+            String currentLine = getCurrentLine(i);
+            // Skip empty lines that were cleared during array replacement
+            if (!currentLine.isEmpty()) {
+                if (output.length() > 0) {
+                    output.append("\n");
+                }
+                output.append(currentLine);
             }
-            output.append(getCurrentLine(i));
         }
 
         // Add any insertions after the last line

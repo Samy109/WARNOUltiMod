@@ -847,95 +847,12 @@ public class MassModifyDialog extends JDialog {
 
 
     private boolean hasPropertyDirect(ObjectValue unit, String propertyPath) {
-        // Wildcard paths: check if ANY array element has the property
-        if (propertyPath.contains("[*]")) {
-            return hasPropertyWithWildcards(unit, propertyPath);
-        }
-
-        // Regular paths: check if property exists
-        if (!PropertyUpdater.hasProperty(unit, propertyPath)) {
-            return false;
-        }
-        NDFValue value = PropertyUpdater.getPropertyValue(unit, propertyPath);
-        if (value == null) {
-            return false;
-        }
-
-        // Apply the same comprehensive filtering as PropertyScanner
-        // Skip module type checking for core structural properties
-        String lowerPath = propertyPath.toLowerCase();
-        if (lowerPath.equals("modulesdescriptors") || lowerPath.matches("modulesdescriptors\\[\\d+\\]")) {
-            return isModifiableProperty(value, propertyPath); // Skip module type check for core structural access
-        }
-
-        return isModifiableProperty(value, propertyPath) && hasRequiredModuleType(unit, propertyPath);
+        // Use centralized property checking with wildcard support
+        return PropertyUpdater.hasModifiableProperty(unit, propertyPath, fileType);
     }
 
 
-    private boolean isModifiableProperty(NDFValue value, String propertyPath) {
-        System.out.println("DEBUG: isModifiableProperty called with path: " + propertyPath + ", value type: " + value.getType());
 
-        // 1. BOOLEAN PROPERTIES: Only count if True
-        if (value.getType() == NDFValue.ValueType.BOOLEAN) {
-            BooleanValue boolValue = (BooleanValue) value;
-            return boolValue.getValue();
-        }
-
-        // 2. TEMPLATE REFERENCES: Allow for "Set to value" operations
-        if (value.getType() == NDFValue.ValueType.TEMPLATE_REF ||
-            value.getType() == NDFValue.ValueType.RESOURCE_REF) {
-            return true; // Template references can be replaced with new values
-        }
-
-        // 3. STRING PROPERTIES: Exclude template references and system paths
-        if (value.getType() == NDFValue.ValueType.STRING) {
-            StringValue stringValue = (StringValue) value;
-            String str = stringValue.getValue();
-
-            if (str.startsWith("~/") || str.startsWith("$/") ||
-                str.startsWith("GUID:") || str.contains("Texture_") ||
-                str.contains("CommonTexture_") || str.contains("Descriptor_")) {
-                return false;
-            }
-            return true;
-        }
-
-        // 4. NUMERIC, ENUM: Include
-        if (value.getType() == NDFValue.ValueType.NUMBER ||
-            value.getType() == NDFValue.ValueType.ENUM) {
-            return true;
-        }
-
-        // 5. ARRAY PROPERTIES: Allow specific modifiable arrays AND core structural arrays
-        if (value.getType() == NDFValue.ValueType.ARRAY) {
-            String lowerPath = propertyPath.toLowerCase();
-            // Always allow ModulesDescriptors - it's a core structural array that should be accessible
-            if (lowerPath.equals("modulesdescriptors")) {
-                System.out.println("DEBUG: ModulesDescriptors special case triggered for path: " + propertyPath);
-                return true;
-            }
-            System.out.println("DEBUG: Array path '" + propertyPath + "' (lower: '" + lowerPath + "') not matching 'modulesdescriptors'");
-            return isModifiableArray(value, propertyPath);
-        }
-
-        // 6. OBJECT PROPERTIES: Allow access to core structural objects and module elements
-        if (value.getType() == NDFValue.ValueType.OBJECT) {
-            String lowerPath = propertyPath.toLowerCase();
-            // Allow access to individual modules within ModulesDescriptors array
-            if (lowerPath.matches("modulesdescriptors\\[\\d+\\]")) {
-                return true;
-            }
-            // Generally exclude other complex objects to avoid clutter
-            return false;
-        }
-
-        // 7. MAP PROPERTIES: Generally exclude to avoid clutter
-        if (value.getType() == NDFValue.ValueType.MAP) {
-            return false;
-        }
-
-        return true;
-    }
 
 
     private boolean isModifiableArray(NDFValue value, String propertyPath) {
@@ -1079,40 +996,7 @@ public class MassModifyDialog extends JDialog {
     }
 
 
-    private boolean hasPropertyWithWildcards(ObjectValue unit, String propertyPath) {
-        // Split on [*] to get the parts
-        String[] mainParts = propertyPath.split("\\[\\*\\]");
-        if (mainParts.length < 2) {
-            return false; // Invalid format
-        }
 
-        String arrayPropertyName = mainParts[0]; // "ModulesDescriptors"
-        String remainingPath = mainParts[1]; // ".BlindageProperties.ExplosiveReactiveArmor"
-        if (remainingPath.startsWith(".")) {
-            remainingPath = remainingPath.substring(1);
-        }
-        NDFValue arrayValue = unit.getProperty(arrayPropertyName);
-        if (!(arrayValue instanceof ArrayValue)) {
-            return false; // Not an array
-        }
-
-        ArrayValue array = (ArrayValue) arrayValue;
-        for (int i = 0; i < array.getElements().size(); i++) {
-            NDFValue element = array.getElements().get(i);
-            if (element instanceof ObjectValue) {
-                ObjectValue elementObj = (ObjectValue) element;
-                if (PropertyUpdater.hasProperty(elementObj, remainingPath)) {
-                    NDFValue value = PropertyUpdater.getPropertyValue(elementObj, remainingPath);
-                    if (value != null && isModifiableProperty(value, remainingPath) &&
-                        hasRequiredModuleType(unit, propertyPath)) {
-                        return true; // Found at least one modifiable property for this unit type
-                    }
-                }
-            }
-        }
-
-        return false; // Not found in any array element
-    }
 
 
     private int applyModificationToUnits(String propertyPath, PropertyUpdater.ModificationType modificationType,
@@ -1710,7 +1594,7 @@ public class MassModifyDialog extends JDialog {
                 boolean hasIndexBasedProperty = PropertyUpdater.hasProperty(unit, propertyPath);
                 debug.append("    Direct PropertyUpdater: ").append(hasIndexBasedProperty ? "FOUND" : "NOT FOUND").append("\n");
                 if (propertyPath.contains("[*]")) {
-                    boolean hasWildcardProperty = hasPropertyWithWildcards(unit, propertyPath);
+                    boolean hasWildcardProperty = PropertyUpdater.hasPropertyWithWildcards(unit, propertyPath, fileType);
                     debug.append("    Wildcard check: ").append(hasWildcardProperty ? "FOUND" : "NOT FOUND").append("\n");
                 }
 

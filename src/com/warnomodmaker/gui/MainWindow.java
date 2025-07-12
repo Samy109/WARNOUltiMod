@@ -195,9 +195,7 @@ public class MainWindow extends JFrame implements FileLoader {
         manualListItem.addActionListener(this::showManualListDialog);
         toolsMenu.add(manualListItem);
 
-        JMenuItem tagOrderEditorItem = new JMenuItem("Edit Tags & Orders...");
-        tagOrderEditorItem.addActionListener(this::showTagAndOrderEditor);
-        toolsMenu.add(tagOrderEditorItem);
+
 
         toolsMenu.addSeparator();
 
@@ -210,12 +208,6 @@ public class MainWindow extends JFrame implements FileLoader {
         JMenuItem entityCreationItem = new JMenuItem("Create Complete Entity...");
         entityCreationItem.addActionListener(this::showEntityCreationDialog);
         toolsMenu.add(entityCreationItem);
-
-        toolsMenu.addSeparator();
-
-        JMenuItem validateIntegrityItem = new JMenuItem("Validate Cross-File Integrity...");
-        validateIntegrityItem.addActionListener(this::showIntegrityValidationDialog);
-        toolsMenu.add(validateIntegrityItem);
 
         menuBar.add(toolsMenu);
 
@@ -452,28 +444,7 @@ public class MainWindow extends JFrame implements FileLoader {
 
 
 
-    private void showTagAndOrderEditor(ActionEvent e) {
-        FileTabState currentTab = getCurrentTabState();
-        if (currentTab == null || !currentTab.hasData()) {
-            JOptionPane.showMessageDialog(
-                this,
-                "No units loaded. Please open a file first.",
-                "No Units",
-                JOptionPane.WARNING_MESSAGE
-            );
-            return;
-        }
 
-        com.warnomodmaker.gui.TagAndOrderEditorDialog dialog = new com.warnomodmaker.gui.TagAndOrderEditorDialog(
-            this, currentTab.getUnitDescriptors(), currentTab.getModificationTracker());
-        dialog.setVisible(true);
-
-        if (dialog.isModified()) {
-            currentTab.setModified(true);
-            refreshCurrentTab();
-            updateTitle();
-        }
-    }
 
     private void showAdditiveOperationsDialog(ActionEvent e) {
         FileTabState currentTab = getCurrentTabState();
@@ -1913,59 +1884,7 @@ public class MainWindow extends JFrame implements FileLoader {
     }
 
 
-    private void showIntegrityValidationDialog(ActionEvent e) {
-        if (tabStates.isEmpty()) {
-            JOptionPane.showMessageDialog(
-                this,
-                "No files are currently open. Please open some NDF files first.",
-                "No Files Open",
-                JOptionPane.INFORMATION_MESSAGE
-            );
-            return;
-        }
 
-        // Perform validation
-        CrossSystemIntegrityManager.CrossSystemValidationResult result = integrityManager.validateAllSystems();
-
-        // Show results
-        StringBuilder message = new StringBuilder();
-        message.append("Cross-File Integrity Validation Results\n\n");
-        message.append(integrityManager.getSystemStatistics()).append("\n\n");
-
-        if (!result.hasIssues()) {
-            message.append("SUCCESS: No integrity issues found!\n");
-            message.append("All cross-file references and GUIDs are valid.");
-
-            JOptionPane.showMessageDialog(
-                this,
-                message.toString(),
-                "Integrity Validation - All Clear",
-                JOptionPane.INFORMATION_MESSAGE
-            );
-        } else {
-            message.append("WARNING: Issues Found:\n\n");
-
-            List<String> allIssues = result.getAllIssues();
-            for (String issue : allIssues) {
-                message.append(issue).append("\n");
-            }
-
-            // Show in a scrollable dialog for long lists
-            JTextArea textArea = new JTextArea(message.toString());
-            textArea.setEditable(false);
-            textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-
-            JScrollPane scrollPane = new JScrollPane(textArea);
-            scrollPane.setPreferredSize(new Dimension(600, 400));
-
-            JOptionPane.showMessageDialog(
-                this,
-                scrollPane,
-                "Integrity Validation - Issues Found",
-                JOptionPane.WARNING_MESSAGE
-            );
-        }
-    }
 
     private String getObjectTypeNameForFile(String fileName, NDFValue.NDFFileType fileType) {
         if (fileType != NDFValue.NDFFileType.UNKNOWN) {

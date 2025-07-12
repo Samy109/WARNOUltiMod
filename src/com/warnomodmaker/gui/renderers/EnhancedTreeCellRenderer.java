@@ -72,13 +72,7 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
         String propertyName = propertyNode.getName();
         NDFValue propertyValue = propertyNode.getValue();
 
-        // Get type-specific icon and formatting
-        String icon = getTypeIcon(propertyValue);
-        String displayText = formatDisplayText(propertyName, propertyValue);
-
         StringBuilder html = new StringBuilder("<html>");
-
-        html.append(icon).append(" ");
 
         String displayName = propertyName;
         if (showModificationIndicators && propertyNode.isModified()) {
@@ -136,12 +130,17 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
     }
 
     private String formatDisplayText(String propertyName, NDFValue propertyValue) {
-        // Handle array indices and map keys specially
+        // Remove array indices and map key brackets for cleaner display
         if (propertyName.startsWith("[") && propertyName.endsWith("]")) {
-            return "Item " + propertyName;
+            try {
+                int index = Integer.parseInt(propertyName.substring(1, propertyName.length() - 1));
+                return "Item " + (index + 1); // Convert to 1-based indexing for user display
+            } catch (NumberFormatException e) {
+                return "Item";
+            }
         }
         if (propertyName.startsWith("(") && propertyName.endsWith(")")) {
-            return "Key " + propertyName;
+            return propertyName.substring(1, propertyName.length() - 1); // Remove parentheses from map keys
         }
         return propertyName;
     }

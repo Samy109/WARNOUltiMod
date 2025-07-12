@@ -7,6 +7,7 @@ import com.warnomodmaker.model.PropertyUpdater;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -220,11 +221,24 @@ public class LineBasedWriter {
             return false;
         }
 
+        // Check if this is an array property
+        String propertyName = extractFinalPropertyName(propertyPath);
+        if (isArrayProperty(originalLine, propertyName, newValue)) {
+            // Check if it's a single-line array (complete array on one line)
+            if (originalLine.contains("[") && originalLine.contains("]")) {
+                // Single-line array: just replace the whole line content after the '='
+                return replaceSingleLineArray(lineNumber, propertyName, newValue);
+            } else {
+                // Multi-line array: use the working multi-line replacement logic
+                return replaceMultiLineArrayValue(lineNumber, propertyName, oldValue, newValue);
+            }
+        }
+
         // Clean the values for comparison
         String cleanOldValue = cleanValue(oldValue);
         String cleanNewValue = cleanValue(newValue);
 
-        // Try different replacement strategies
+        // Try different replacement strategies for single-line values
         String newLine = originalLine;
 
         // Strategy 1: Direct value replacement
@@ -370,10 +384,216 @@ public class LineBasedWriter {
      * Extract the final property name from a property path
      */
     private String extractFinalPropertyName(String propertyPath) {
+        String finalPart = propertyPath;
         if (propertyPath.contains(".")) {
-            return propertyPath.substring(propertyPath.lastIndexOf(".") + 1);
+            finalPart = propertyPath.substring(propertyPath.lastIndexOf(".") + 1);
         }
-        return propertyPath;
+
+        // Remove array indices for property matching
+        // BaseHitValueModifiers[1] -> BaseHitValueModifiers
+        if (finalPart.contains("[")) {
+            finalPart = finalPart.substring(0, finalPart.indexOf('['));
+        }
+
+        return finalPart;
+    }
+
+    /**
+     * Check if this is an array property (single-line or multi-line)
+     */
+    private boolean isArrayProperty(String line, String propertyName, String newValue) {
+        // Check if the line contains the property assignment (handle multiple spaces)
+        boolean hasPropertyAssignment = line.contains(propertyName) && line.contains("=");
+        boolean newValueIsArray = newValue.trim().startsWith("[") && newValue.trim().endsWith("]");
+
+        return hasPropertyAssignment && newValueIsArray;
+    }
+
+    /**
+     * Replace a single-line array by replacing everything after the '=' sign
+     */
+    private boolean replaceSingleLineArray(int lineNumber, String propertyName, String newValue) {
+        String originalLine = lineTracker.getOriginalLine(lineNumber);
+
+        // Find the '=' sign and replace everything after it
+        int equalsIndex = originalLine.indexOf('=');
+        if (equalsIndex < 0) {
+            return false;
+        }
+
+        String beforeEquals = originalLine.substring(0, equalsIndex + 1);
+        String newLine = beforeEquals + " " + newValue.trim();
+
+        lineTracker.modifyLine(lineNumber, newLine);
+        return true;
+    }
+
+    /**
+     * Replace a multi-line array value while preserving formatting
+     */
+    private boolean replaceMultiLineArrayValue(int startLine, String propertyName, String oldValue, String newValue) {
+        // Find the end of the array (look for the closing bracket)
+        int endLine = findArrayEndLine(startLine, propertyName);
+        if (endLine < 0) {
+            return false; // Couldn't find array end
+        }
+
+        // Get the indentation from the property line
+        String propertyLine = lineTracker.getOriginalLine(startLine);
+        String indentation = getLineIndentation(propertyLine);
+
+        // Parse the new array value and format it properly
+        String formattedArrayValue = formatArrayValue(newValue, indentation);
+
+        // Replace the entire array block
+        return replaceArrayBlock(startLine, endLine, propertyName, formattedArrayValue);
+    }
+
+    /**
+     * Find the line where an array ends (closing bracket)
+     */
+    private int findArrayEndLine(int startLine, String propertyName) {
+        int bracketDepth = 0;
+        boolean foundOpenBracket = false;
+
+        for (int i = startLine; i < lineTracker.getLineCount(); i++) {
+            String line = lineTracker.getOriginalLine(i);
+
+            for (char c : line.toCharArray()) {
+                if (c == '[') {
+                    bracketDepth++;
+                    foundOpenBracket = true;
+                } else if (c == ']') {
+                    bracketDepth--;
+                    if (foundOpenBracket && bracketDepth == 0) {
+                        return i; // Found the closing bracket
+                    }
+                }
+            }
+        }
+
+        return -1; // Couldn't find closing bracket
+    }
+
+    /**
+     * Get the indentation (leading whitespace) from a line
+     */
+    private String getLineIndentation(String line) {
+        StringBuilder indentation = new StringBuilder();
+        for (char c : line.toCharArray()) {
+            if (c == ' ' || c == '\t') {
+                indentation.append(c);
+            } else {
+                break;
+            }
+        }
+        return indentation.toString();
+    }
+
+    /**
+     * Format an array value with proper indentation and line breaks
+     */
+    private String formatArrayValue(String arrayValue, String baseIndentation) {
+        String trimmed = arrayValue.trim();
+        if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+            return arrayValue; // Not a proper array format
+        }
+
+        // Extract array content (without brackets)
+        String content = trimmed.substring(1, trimmed.length() - 1).trim();
+
+        if (content.isEmpty()) {
+            return "[]"; // Empty array
+        }
+
+        // Split array elements while respecting nested structures
+        String[] elements = splitArrayElements(content);
+
+        StringBuilder formatted = new StringBuilder();
+        formatted.append("=\n").append(baseIndentation).append("[\n");
+
+        for (int i = 0; i < elements.length; i++) {
+            String element = elements[i].trim();
+            formatted.append(baseIndentation).append("    ").append(element);
+
+            if (i < elements.length - 1) {
+                formatted.append(",");
+            }
+            formatted.append("\n");
+        }
+
+        formatted.append(baseIndentation).append("]");
+        return formatted.toString();
+    }
+
+    /**
+     * Split array elements while respecting nested parentheses and quotes
+     */
+    private String[] splitArrayElements(String content) {
+        List<String> elements = new ArrayList<>();
+        StringBuilder currentElement = new StringBuilder();
+        int parenthesesDepth = 0;
+        boolean inQuotes = false;
+        char quoteChar = 0;
+
+        for (int i = 0; i < content.length(); i++) {
+            char c = content.charAt(i);
+
+            if (!inQuotes) {
+                if (c == '\'' || c == '"') {
+                    inQuotes = true;
+                    quoteChar = c;
+                    currentElement.append(c);
+                } else if (c == '(') {
+                    parenthesesDepth++;
+                    currentElement.append(c);
+                } else if (c == ')') {
+                    parenthesesDepth--;
+                    currentElement.append(c);
+                } else if (c == ',' && parenthesesDepth == 0) {
+                    // Found a top-level comma - end current element
+                    elements.add(currentElement.toString().trim());
+                    currentElement.setLength(0);
+                } else {
+                    currentElement.append(c);
+                }
+            } else {
+                currentElement.append(c);
+                if (c == quoteChar) {
+                    inQuotes = false;
+                }
+            }
+        }
+
+        // Add the last element
+        if (currentElement.length() > 0) {
+            elements.add(currentElement.toString().trim());
+        }
+
+        return elements.toArray(new String[0]);
+    }
+
+    /**
+     * Replace an entire array block with new content
+     */
+    private boolean replaceArrayBlock(int startLine, int endLine, String propertyName, String newArrayContent) {
+        // Get the property line and extract the part before the '='
+        String propertyLine = lineTracker.getOriginalLine(startLine);
+        String beforeEquals = propertyLine.substring(0, propertyLine.indexOf('='));
+
+        // Create the new property line with the formatted array
+        String newPropertyLine = beforeEquals + newArrayContent;
+
+        // Replace the first line
+        lineTracker.modifyLine(startLine, newPropertyLine);
+
+        // Clear all the intermediate lines (from startLine+1 to endLine inclusive)
+        // by replacing them with empty lines
+        for (int i = startLine + 1; i <= endLine; i++) {
+            lineTracker.modifyLine(i, "");
+        }
+
+        return true;
     }
 
     /**

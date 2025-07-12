@@ -784,4 +784,94 @@ public class PropertyUpdater {
         }
         return count;
     }
+
+    /**
+     * Centralized property checking with wildcard support
+     * Consolidates logic from PropertyScanner, UnitBrowser, and MassModifyDialog
+     */
+    public static boolean hasPropertyWithWildcards(ObjectValue unit, String propertyPath, NDFValue.NDFFileType fileType) {
+        if (!propertyPath.contains("[*]")) {
+            return hasProperty(unit, propertyPath, fileType);
+        }
+
+        // Handle wildcard paths
+        int wildcardIndex = propertyPath.indexOf("[*]");
+        String beforeWildcard = propertyPath.substring(0, wildcardIndex);
+        String afterWildcard = propertyPath.substring(wildcardIndex + 3);
+
+        NDFValue arrayValue = getPropertyValue(unit, beforeWildcard, fileType);
+        if (!(arrayValue instanceof NDFValue.ArrayValue)) {
+            return false;
+        }
+
+        NDFValue.ArrayValue array = (NDFValue.ArrayValue) arrayValue;
+        for (int i = 0; i < array.getElements().size(); i++) {
+            String expandedPath = beforeWildcard + "[" + i + "]" + afterWildcard;
+            if (hasProperty(unit, expandedPath, fileType)) {
+                // For modifiable property checking, also verify the value is modifiable
+                NDFValue value = getPropertyValue(unit, expandedPath, fileType);
+                if (value != null && isValueModifiable(value)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if property exists and is modifiable (excludes template refs, false booleans, etc.)
+     */
+    public static boolean hasModifiableProperty(ObjectValue unit, String propertyPath, NDFValue.NDFFileType fileType) {
+        // Handle wildcard paths first
+        if (propertyPath.contains("[*]")) {
+            return hasPropertyWithWildcards(unit, propertyPath, fileType);
+        }
+
+        if (!hasProperty(unit, propertyPath, fileType)) {
+            return false;
+        }
+
+        NDFValue value = getPropertyValue(unit, propertyPath, fileType);
+        if (value == null) {
+            return false;
+        }
+
+        return isValueModifiable(value);
+    }
+
+    /**
+     * Check if a specific NDFValue is modifiable
+     */
+    private static boolean isValueModifiable(NDFValue value) {
+        // Boolean properties: Only count if True
+        if (value.getType() == NDFValue.ValueType.BOOLEAN) {
+            return ((NDFValue.BooleanValue) value).getValue();
+        }
+
+        // Template references: Allow for replacement
+        if (value.getType() == NDFValue.ValueType.TEMPLATE_REF ||
+            value.getType() == NDFValue.ValueType.RESOURCE_REF) {
+            return true;
+        }
+
+        // String properties: Exclude template references and system paths
+        if (value.getType() == NDFValue.ValueType.STRING) {
+            String str = ((NDFValue.StringValue) value).getValue();
+            if (str.startsWith("~/") || str.startsWith("$/") ||
+                str.startsWith("GUID:") || str.contains("Texture_") ||
+                str.contains("CommonTexture_") || str.contains("Descriptor_")) {
+                return false;
+            }
+            return true;
+        }
+
+        // Numeric and enum properties: Always modifiable
+        if (value.getType() == NDFValue.ValueType.NUMBER ||
+            value.getType() == NDFValue.ValueType.ENUM) {
+            return true;
+        }
+
+        // Other types: generally modifiable
+        return true;
+    }
 }

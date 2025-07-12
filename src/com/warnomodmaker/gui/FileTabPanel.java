@@ -78,10 +78,10 @@ public class FileTabPanel extends JPanel {
             // Restore selection if available
             restoreSelection();
         } else {
-            // Clear components
-            objectBrowser.setUnitDescriptors(null, NDFValue.NDFFileType.UNKNOWN);
+            // Clear components but preserve file type
+            objectBrowser.setUnitDescriptors(null, tabState.getFileType());
             objectBrowser.setModificationTracker(null);
-            objectEditor.setUnitDescriptor(null, null, NDFValue.NDFFileType.UNKNOWN);
+            objectEditor.setUnitDescriptor(null, null, tabState.getFileType());
         }
     }
 
@@ -95,10 +95,10 @@ public class FileTabPanel extends JPanel {
             // Restore selection if available
             restoreSelection();
         } else {
-            // Clear components
-            objectBrowser.setUnitDescriptors(null, NDFValue.NDFFileType.UNKNOWN);
+            // Clear components but preserve file type
+            objectBrowser.setUnitDescriptors(null, tabState.getFileType());
             objectBrowser.setModificationTracker(null);
-            objectEditor.setUnitDescriptor(null, null, NDFValue.NDFFileType.UNKNOWN);
+            objectEditor.setUnitDescriptor(null, null, tabState.getFileType());
         }
     }
 

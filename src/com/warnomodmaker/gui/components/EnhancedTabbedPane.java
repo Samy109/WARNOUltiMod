@@ -124,7 +124,7 @@ public class EnhancedTabbedPane extends JTabbedPane {
         }
     }
 
-    private JButton createCloseButton(int index) {
+    private JButton createCloseButton(int initialIndex) {
         JButton closeButton = new JButton("X");
         closeButton.setPreferredSize(new Dimension(16, 16));
         closeButton.setFont(closeButton.getFont().deriveFont(Font.BOLD, 12f));
@@ -134,6 +134,14 @@ public class EnhancedTabbedPane extends JTabbedPane {
         closeButton.setFocusPainted(false);
         closeButton.setContentAreaFilled(false);
         closeButton.setOpaque(false);
+
+        // Add ActionListener as primary close mechanism (more reliable than mouse events)
+        closeButton.addActionListener(e -> {
+            int currentIndex = findTabIndexForCloseButton(closeButton);
+            if (currentIndex >= 0) {
+                fireTabCloseEvent(currentIndex);
+            }
+        });
 
         // Hover effects
         closeButton.addMouseListener(new MouseAdapter() {
@@ -152,16 +160,48 @@ public class EnhancedTabbedPane extends JTabbedPane {
 
             @Override
             public void mouseClicked(MouseEvent e) {
-                fireTabCloseEvent(index);
+                // Backup mechanism - only handle left mouse button clicks
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    int currentIndex = findTabIndexForCloseButton(closeButton);
+                    if (currentIndex >= 0) {
+                        fireTabCloseEvent(currentIndex);
+                    }
+                }
             }
         });
 
         return closeButton;
     }
 
+    /**
+     * Find the current tab index for a close button by traversing up the component hierarchy
+     */
+    private int findTabIndexForCloseButton(JButton closeButton) {
+        // Walk up the component hierarchy to find the tab component
+        Container parent = closeButton.getParent();
+        while (parent != null && !(parent instanceof JPanel)) {
+            parent = parent.getParent();
+        }
+
+        if (parent != null) {
+            // Search through all tabs to find which one contains this tab component
+            for (int i = 0; i < getTabCount(); i++) {
+                Component tabComponent = getTabComponentAt(i);
+                if (tabComponent == parent) {
+                    return i;
+                }
+            }
+        }
+
+        return -1; // Not found
+    }
+
     private void fireTabCloseEvent(int index) {
-        // Fire a property change event that MainWindow can listen to
-        firePropertyChange("tabClose", -1, index);
+        // Validate index before firing event
+        if (index >= 0 && index < getTabCount()) {
+            // Fire a property change event that MainWindow can listen to
+            firePropertyChange("tabClose", -1, index);
+        }
     }
 
     public void updateTabState(Component component, FileTabState tabState) {
@@ -169,11 +209,10 @@ public class EnhancedTabbedPane extends JTabbedPane {
 
         int index = indexOfComponent(component);
         if (index >= 0) {
-            String title = getTitleAt(index);
-            // Remove any existing modification indicators from title
-            if (title.contains("*")) {
-                title = title.substring(title.indexOf(" ") + 1);
-            }
+            // Get the base title from the tab state, not from the current tab title
+            String title = (tabState != null && tabState.getFile() != null)
+                ? tabState.getFile().getName()
+                : "Untitled";
 
             setTabComponentAt(index, createTabComponent(title, tabState, index));
 

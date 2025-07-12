@@ -16,7 +16,9 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -346,7 +348,7 @@ public class UnitEditor extends JPanel {
 
         // Create enhanced display name for better usability
         String displayName = createEnhancedDisplayName(propertyName, propertyValue, currentPath);
-        EnhancedTreeCellRenderer.PropertyNode node = new EnhancedTreeCellRenderer.PropertyNode(displayName, propertyValue);
+        EnhancedTreeCellRenderer.PropertyNode node = new EnhancedTreeCellRenderer.PropertyNode(displayName, propertyName, propertyValue);
 
         // Check if this property has been modified
         if (modificationTracker != null && ndfObject != null) {
@@ -395,14 +397,21 @@ public class UnitEditor extends JPanel {
             case ARRAY:
                 ArrayValue arrayValue = (ArrayValue) propertyValue;
 
-                for (int i = 0; i < arrayValue.getElements().size(); i++) {
-                    NDFValue element = arrayValue.getElements().get(i);
-                    String childName = "[" + i + "]";
+                // Determine if this array should be treated as a single property or expanded
+                if (shouldExpandArray(arrayValue, propertyName)) {
+                    // Expand complex arrays (arrays of objects, etc.)
+                    for (int i = 0; i < arrayValue.getElements().size(); i++) {
+                        NDFValue element = arrayValue.getElements().get(i);
+                        String childName = "[" + i + "]";
 
-                    DefaultMutableTreeNode childNode = createPropertyNode(childName, element, fullPath);
-                    if (childNode != null) {
-                        treeNode.add(childNode);
+                        DefaultMutableTreeNode childNode = createPropertyNode(childName, element, fullPath);
+                        if (childNode != null) {
+                            treeNode.add(childNode);
+                        }
                     }
+                } else {
+                    // Treat simple arrays as single properties (like TraitsToken, BaseHitValueModifiers)
+                    // No child nodes - the array will be editable as a whole
                 }
                 break;
 
@@ -438,6 +447,52 @@ public class UnitEditor extends JPanel {
         return treeNode;
     }
 
+    /**
+     * Determines whether an array should be expanded into individual elements
+     * or treated as a single editable property.
+     */
+    private boolean shouldExpandArray(ArrayValue arrayValue, String propertyName) {
+        // Empty arrays should not be expanded
+        if (arrayValue.getElements().isEmpty()) {
+            return false;
+        }
+
+        // Special cases for known simple array properties that should remain as single properties
+        if ("TraitsToken".equals(propertyName) ||
+            "BaseHitValueModifiers".equals(propertyName) ||
+            propertyName.endsWith("Token") ||
+            propertyName.endsWith("Tokens")) {
+            return false; // Keep as single property
+        }
+
+        // Check the type of elements in the array
+        NDFValue firstElement = arrayValue.getElements().get(0);
+
+        // Arrays of objects should always be expanded (like ModulesDescriptors)
+        if (firstElement instanceof ObjectValue) {
+            return true;
+        }
+
+        // Arrays of simple values (strings, numbers, enums, tuples) should remain as single properties
+        // unless they are specifically known to need expansion
+        if (firstElement instanceof StringValue ||
+            firstElement instanceof NumberValue ||
+            firstElement instanceof BooleanValue ||
+            firstElement instanceof EnumValue ||
+            firstElement instanceof TupleValue) {
+
+            // Special case: ModulesDescriptors should always be expanded even if it contains tuples/other values
+            if ("ModulesDescriptors".equals(propertyName)) {
+                return true;
+            }
+
+            return false; // Keep as single property
+        }
+
+        // For other complex types (maps, nested arrays), expand by default
+        return true;
+    }
+
     private String createEnhancedDisplayName(String propertyName, NDFValue propertyValue, String currentPath) {
         if (propertyName.startsWith("[") && propertyName.endsWith("]")) {
             return createArrayElementDisplayName(propertyName, propertyValue, currentPath);
@@ -461,21 +516,21 @@ public class UnitEditor extends JPanel {
             ObjectValue objValue = (ObjectValue) elementValue;
             String typeName = objValue.getTypeName();
             if (typeName != null && !typeName.isEmpty()) {
-                return "[" + index + "] " + typeName;
+                return typeName;
             }
         } else if (elementValue.getType() == NDFValue.ValueType.TEMPLATE_REF) {
             String templateRef = elementValue.toString();
             String displayRef = extractTemplateDisplayName(templateRef);
-            return "[" + index + "] " + displayRef;
+            return displayRef;
         } else if (elementValue.getType() == NDFValue.ValueType.STRING) {
             String strValue = elementValue.toString();
             if (strValue.length() > 20) {
                 strValue = strValue.substring(0, 17) + "...";
             }
-            return "[" + index + "] " + strValue;
+            return strValue;
         }
 
-        return "[" + index + "]";
+        return "Item " + (Integer.parseInt(index) + 1); // Convert to 1-based indexing for user display
     }
 
     private String createModuleDisplayName(String index, NDFValue moduleValue) {
@@ -485,17 +540,17 @@ public class UnitEditor extends JPanel {
 
             String instanceName = objValue.getInstanceName();
             if (instanceName != null && !instanceName.isEmpty()) {
-                return "[" + index + "] " + instanceName + " (" + typeName + ")";
+                return instanceName + " (" + typeName + ")";
             } else {
-                return "[" + index + "] " + typeName;
+                return typeName;
             }
         } else if (moduleValue.getType() == NDFValue.ValueType.TEMPLATE_REF) {
             String templateRef = moduleValue.toString();
             String displayRef = extractTemplateDisplayName(templateRef);
-            return "[" + index + "] " + displayRef;
+            return displayRef;
         }
 
-        return "[" + index + "] Module";
+        return "Module";
     }
 
     private String createMapKeyDisplayName(String keyName, NDFValue keyValue) {
@@ -622,10 +677,9 @@ public class UnitEditor extends JPanel {
 
             if (node.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
                 EnhancedTreeCellRenderer.PropertyNode propertyNode = (EnhancedTreeCellRenderer.PropertyNode) node.getUserObject();
-                String nodeName = propertyNode.getName();
 
-                // Extract the actual property name from enhanced display names
-                String actualPropertyName = extractActualPropertyName(nodeName);
+                // Use the original property name for path construction
+                String actualPropertyName = propertyNode.getOriginalPropertyName();
 
                 if (actualPropertyName.startsWith("[") && actualPropertyName.endsWith("]")) {
                     // This is an array index, append it directly to the path without a dot
@@ -643,20 +697,7 @@ public class UnitEditor extends JPanel {
         return path.toString();
     }
 
-    private String extractActualPropertyName(String displayName) {
-        if (displayName.startsWith("[") && displayName.contains("]")) {
-            int closeBracket = displayName.indexOf("]");
-            if (closeBracket != -1) {
-                return displayName.substring(0, closeBracket + 1);
-            }
-        }
 
-        if (displayName.startsWith("(") && displayName.endsWith(")")) {
-            return displayName;
-        }
-
-        return displayName;
-    }
 
 
     private ObjectValue findParentObject(TreePath treePath) {
@@ -681,10 +722,9 @@ public class UnitEditor extends JPanel {
 
             if (node.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
                 EnhancedTreeCellRenderer.PropertyNode propertyNode = (EnhancedTreeCellRenderer.PropertyNode) node.getUserObject();
-                String displayName = propertyNode.getName();
 
-                // Extract the actual property name from enhanced display names
-                String propertyName = extractActualPropertyName(displayName);
+                // Use the original property name for navigation
+                String propertyName = propertyNode.getOriginalPropertyName();
 
                 // Skip "Type" node
                 if ("Type".equals(propertyName)) {
@@ -707,10 +747,9 @@ public class UnitEditor extends JPanel {
                         DefaultMutableTreeNode nextNode = (DefaultMutableTreeNode) nodes[i + 1];
                         if (nextNode.getUserObject() instanceof EnhancedTreeCellRenderer.PropertyNode) {
                             EnhancedTreeCellRenderer.PropertyNode nextPropertyNode = (EnhancedTreeCellRenderer.PropertyNode) nextNode.getUserObject();
-                            String nextDisplayName = nextPropertyNode.getName();
 
-                            // Extract the actual index from enhanced display names
-                            String indexStr = extractActualPropertyName(nextDisplayName);
+                            // Use the original property name to get the array index
+                            String indexStr = nextPropertyNode.getOriginalPropertyName();
 
                             if (indexStr.startsWith("[") && indexStr.endsWith("]")) {
                                 try {
@@ -807,8 +846,10 @@ public class UnitEditor extends JPanel {
                 return true;
 
             case ARRAY:
-                // Arrays themselves are not directly editable, but their elements might be
-                return false;
+                // Simple arrays (like TraitsToken, BaseHitValueModifiers) should be editable
+                // Complex arrays (like ModulesDescriptors) should not be directly editable
+                ArrayValue arrayValue = (ArrayValue) value;
+                return isSimpleArray(arrayValue);
 
             case OBJECT:
                 // Objects themselves are not directly editable, but their properties might be
@@ -821,6 +862,25 @@ public class UnitEditor extends JPanel {
             default:
                 return false;
         }
+    }
+
+    /**
+     * Determines if an array contains simple values that can be edited as a complete array.
+     */
+    private boolean isSimpleArray(ArrayValue arrayValue) {
+        if (arrayValue.getElements().isEmpty()) {
+            return true; // Empty arrays are editable
+        }
+
+        // Check the type of elements in the array
+        NDFValue firstElement = arrayValue.getElements().get(0);
+
+        // Arrays of simple values are editable
+        return firstElement instanceof StringValue ||
+               firstElement instanceof NumberValue ||
+               firstElement instanceof BooleanValue ||
+               firstElement instanceof EnumValue ||
+               firstElement instanceof TupleValue;
     }
 
 
@@ -976,9 +1036,107 @@ public class UnitEditor extends JPanel {
 
                 return newTuple;
 
+            case ARRAY:
+                // Handle array editing: [ 'MOTION', 'HE', 'KINETIC' ] or [ (tuple1), (tuple2) ]
+                if (!text.startsWith("[") || !text.endsWith("]")) {
+                    throw new IllegalArgumentException("Array must be in the format '[ element1, element2, element3 ]'");
+                }
+
+                String arrayContent = text.substring(1, text.length() - 1).trim();
+                ArrayValue newArray = NDFValue.createArray();
+
+                if (!arrayContent.isEmpty()) {
+                    String[] arrayElements = splitArrayElements(arrayContent);
+
+                    for (String element : arrayElements) {
+                        element = element.trim();
+
+                        // Parse each element based on its format
+                        NDFValue elementValue;
+                        if (element.startsWith("'") && element.endsWith("'")) {
+                            // String element with single quotes
+                            elementValue = NDFValue.createString(element.substring(1, element.length() - 1), false);
+                        } else if (element.startsWith("\"") && element.endsWith("\"")) {
+                            // String element with double quotes
+                            elementValue = NDFValue.createString(element.substring(1, element.length() - 1), true);
+                        } else if (element.startsWith("(") && element.endsWith(")")) {
+                            // Tuple element - parse recursively
+                            elementValue = parseValue(element, NDFValue.createTuple());
+                        } else if (element.equalsIgnoreCase("true") || element.equalsIgnoreCase("false")) {
+                            // Boolean element
+                            elementValue = NDFValue.createBoolean(Boolean.parseBoolean(element));
+                        } else if (element.matches("-?\\d+(\\.\\d+)?")) {
+                            // Number element
+                            elementValue = NDFValue.createNumber(Double.parseDouble(element));
+                        } else if (element.contains("/")) {
+                            // Enum element
+                            String[] enumParts = element.split("/");
+                            if (enumParts.length == 2) {
+                                elementValue = NDFValue.createEnum(enumParts[0], enumParts[1]);
+                            } else {
+                                elementValue = NDFValue.createString(element);
+                            }
+                        } else {
+                            // Default to string
+                            elementValue = NDFValue.createString(element);
+                        }
+
+                        newArray.add(elementValue, true); // Add with comma
+                    }
+                }
+
+                return newArray;
+
             default:
                 throw new IllegalArgumentException("Cannot edit this type of value");
         }
+    }
+
+    /**
+     * Split array elements while respecting nested parentheses and quotes.
+     */
+    private String[] splitArrayElements(String arrayContent) {
+        List<String> elements = new ArrayList<>();
+        StringBuilder currentElement = new StringBuilder();
+        int parenthesesDepth = 0;
+        boolean inQuotes = false;
+        char quoteChar = 0;
+
+        for (int i = 0; i < arrayContent.length(); i++) {
+            char c = arrayContent.charAt(i);
+
+            if (!inQuotes) {
+                if (c == '\'' || c == '"') {
+                    inQuotes = true;
+                    quoteChar = c;
+                    currentElement.append(c);
+                } else if (c == '(') {
+                    parenthesesDepth++;
+                    currentElement.append(c);
+                } else if (c == ')') {
+                    parenthesesDepth--;
+                    currentElement.append(c);
+                } else if (c == ',' && parenthesesDepth == 0) {
+                    // Found a top-level comma - end current element
+                    elements.add(currentElement.toString().trim());
+                    currentElement.setLength(0);
+                } else {
+                    currentElement.append(c);
+                }
+            } else {
+                currentElement.append(c);
+                if (c == quoteChar) {
+                    inQuotes = false;
+                }
+            }
+        }
+
+        // Add the last element
+        if (currentElement.length() > 0) {
+            elements.add(currentElement.toString().trim());
+        }
+
+        return elements.toArray(new String[0]);
     }
 
 

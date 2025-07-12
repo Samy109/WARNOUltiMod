@@ -21,6 +21,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
@@ -46,7 +47,13 @@ public class UnitBrowser extends JPanel {
     private static final String SEARCH_BY_NAME = "Search by Name";
     private static final String SEARCH_BY_PROPERTY = "Search by Property";
     private static final String SEARCH_HAS_PROPERTY = "Filter Tree by Property";
-    private static final String SEARCH_BY_TAG = "Search by Tag";
+    private static final String SEARCH_BY_UNIT_TYPES = "Search by Unit Types";
+    private static final String SEARCH_BY_WEAPONS_COMBAT = "Search by Weapons & Combat";
+    private static final String SEARCH_BY_MOVEMENT_MOBILITY = "Search by Movement & Mobility";
+    private static final String SEARCH_BY_SPECIAL_ABILITIES = "Search by Special Abilities";
+    private static final String SEARCH_BY_UNIT_ROLE = "Search by Unit Role";
+    private static final String SEARCH_BY_SPECIALTIES = "Search by Specialties";
+    private static final String SEARCH_BY_OTHER_TAGS = "Search by Other Tags";
 
 
     public UnitBrowser() {
@@ -54,6 +61,7 @@ public class UnitBrowser extends JPanel {
         setBorder(BorderFactory.createTitledBorder("Objects"));
         ndfObjects = new ArrayList<>();
         filteredObjects = new ArrayList<>();
+        originalObjects = new ArrayList<>();
         selectionListeners = new ArrayList<>();
         propertyFilterListeners = new ArrayList<>();
         currentFileType = NDFFileType.UNKNOWN;
@@ -63,12 +71,8 @@ public class UnitBrowser extends JPanel {
         // Top row: Search type dropdown
         JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
         topRow.add(new JLabel("Search by:"));
-        searchTypeComboBox = new JComboBox<>(new String[] {
-            SEARCH_BY_NAME,
-            SEARCH_BY_PROPERTY,
-            SEARCH_HAS_PROPERTY,
-            SEARCH_BY_TAG
-        });
+        searchTypeComboBox = new JComboBox<>();
+        updateSearchTypeOptions(); // Initialize with appropriate options
         searchTypeComboBox.addActionListener(e -> {
             // Cancel any pending search timer and search immediately when search type changes
             searchTimer.stop();
@@ -143,6 +147,44 @@ public class UnitBrowser extends JPanel {
         add(scrollPane, BorderLayout.CENTER);
     }
 
+    /**
+     * Update search type options based on current file type
+     */
+    private void updateSearchTypeOptions() {
+        String currentSelection = (String) searchTypeComboBox.getSelectedItem();
+        searchTypeComboBox.removeAllItems();
+
+        // Always available search types
+        searchTypeComboBox.addItem(SEARCH_BY_NAME);
+        searchTypeComboBox.addItem(SEARCH_BY_PROPERTY);
+        searchTypeComboBox.addItem(SEARCH_HAS_PROPERTY);
+
+        // Tag-based searches - always available for all files
+        searchTypeComboBox.addItem(SEARCH_BY_WEAPONS_COMBAT);
+        searchTypeComboBox.addItem(SEARCH_BY_MOVEMENT_MOBILITY);
+        searchTypeComboBox.addItem(SEARCH_BY_SPECIAL_ABILITIES);
+
+        // Only add unit role and specialties searches for unitdescriptor files
+        if (currentFileType == NDFFileType.UNITE_DESCRIPTOR) {
+            searchTypeComboBox.addItem(SEARCH_BY_UNIT_ROLE);
+            searchTypeComboBox.addItem(SEARCH_BY_SPECIALTIES);
+            searchTypeComboBox.addItem(SEARCH_BY_UNIT_TYPES);
+        }
+
+        // Add "Other Tags" last as it's a catch-all category
+        searchTypeComboBox.addItem(SEARCH_BY_OTHER_TAGS);
+
+        // Try to restore previous selection if it's still available
+        if (currentSelection != null) {
+            for (int i = 0; i < searchTypeComboBox.getItemCount(); i++) {
+                if (currentSelection.equals(searchTypeComboBox.getItemAt(i))) {
+                    searchTypeComboBox.setSelectedIndex(i);
+                    break;
+                }
+            }
+        }
+    }
+
 
     public void setUnitDescriptors(List<ObjectValue> unitDescriptors) {
         setUnitDescriptors(unitDescriptors, NDFFileType.UNKNOWN);
@@ -166,6 +208,9 @@ public class UnitBrowser extends JPanel {
         // Store a separate copy of the original objects
         this.originalObjects = new ArrayList<>(this.ndfObjects);
         this.filteredObjects = new ArrayList<>(this.ndfObjects);
+
+        // Update search type options based on file type (after originalObjects is initialized)
+        updateSearchTypeOptions();
         String borderTitle = fileType != NDFFileType.UNKNOWN ? fileType.getDisplayName() + "s" : "Objects";
         setBorder(BorderFactory.createTitledBorder(borderTitle));
         String objectTypeName = fileType != NDFFileType.UNKNOWN ? fileType.getDisplayName().toLowerCase() + "s" : "objects";
@@ -208,6 +253,9 @@ public class UnitBrowser extends JPanel {
         // Store a separate copy of the original objects
         this.originalObjects = new ArrayList<>(this.ndfObjects);
         this.filteredObjects = new ArrayList<>(this.ndfObjects);
+
+        // Update search type options based on file type (after originalObjects is initialized)
+        updateSearchTypeOptions();
         String borderTitle = fileType != NDFFileType.UNKNOWN ? fileType.getDisplayName() + "s" : "Objects";
         setBorder(BorderFactory.createTitledBorder(borderTitle));
 
@@ -312,8 +360,26 @@ public class UnitBrowser extends JPanel {
         } else if (SEARCH_HAS_PROPERTY.equals(searchType)) {
             filterByHasPropertyCurrent(searchText); // Check current object only
             return;
-        } else if (SEARCH_BY_TAG.equals(searchType)) {
-            filterByTag(searchText); // Search by tags
+        } else if (SEARCH_BY_UNIT_TYPES.equals(searchType)) {
+            filterByTagCategory(searchText, "Unit Types"); // Search by unit type tags
+            return;
+        } else if (SEARCH_BY_WEAPONS_COMBAT.equals(searchType)) {
+            filterByTagCategory(searchText, "Weapons & Combat"); // Search by weapons & combat tags
+            return;
+        } else if (SEARCH_BY_MOVEMENT_MOBILITY.equals(searchType)) {
+            filterByTagCategory(searchText, "Movement & Mobility"); // Search by movement & mobility tags
+            return;
+        } else if (SEARCH_BY_SPECIAL_ABILITIES.equals(searchType)) {
+            filterByTagCategory(searchText, "Special Abilities"); // Search by special abilities tags
+            return;
+        } else if (SEARCH_BY_OTHER_TAGS.equals(searchType)) {
+            filterByTagCategory(searchText, "Other"); // Search by other tags
+            return;
+        } else if (SEARCH_BY_UNIT_ROLE.equals(searchType)) {
+            filterByUnitRole(searchText); // Search by unit role
+            return;
+        } else if (SEARCH_BY_SPECIALTIES.equals(searchType)) {
+            filterBySpecialties(searchText); // Search by specialties
             return;
         } else {
             // Clear property filter when not in property search mode
@@ -358,11 +424,31 @@ public class UnitBrowser extends JPanel {
                                 String unitName = unit.getInstanceName();
                                 matches = unitName.toLowerCase().contains(searchText.toLowerCase());
                                 break;
-                            case SEARCH_BY_TAG:
-                                // Search by tags in TTagsModuleDescriptor
-                                java.util.Set<String> unitTags = TagExtractor.extractTagsFromUnit(unit);
-                                matches = unitTags.stream().anyMatch(tag ->
-                                    tag.toLowerCase().contains(searchText.toLowerCase()));
+                            case SEARCH_BY_UNIT_TYPES:
+                                matches = matchesTagCategory(unit, searchText, "Unit Types");
+                                break;
+                            case SEARCH_BY_WEAPONS_COMBAT:
+                                matches = matchesTagCategory(unit, searchText, "Weapons & Combat");
+                                break;
+                            case SEARCH_BY_MOVEMENT_MOBILITY:
+                                matches = matchesTagCategory(unit, searchText, "Movement & Mobility");
+                                break;
+                            case SEARCH_BY_SPECIAL_ABILITIES:
+                                matches = matchesTagCategory(unit, searchText, "Special Abilities");
+                                break;
+                            case SEARCH_BY_OTHER_TAGS:
+                                matches = matchesTagCategory(unit, searchText, "Other");
+                                break;
+                            case SEARCH_BY_UNIT_ROLE:
+                                // Search by unit role
+                                String unitRole = TagExtractor.extractUnitRole(unit);
+                                matches = unitRole != null && unitRole.toLowerCase().contains(searchText.toLowerCase());
+                                break;
+                            case SEARCH_BY_SPECIALTIES:
+                                // Search by specialties
+                                java.util.Set<String> specialties = TagExtractor.extractSpecialtiesList(unit);
+                                matches = specialties.stream().anyMatch(specialty ->
+                                    specialty.toLowerCase().contains(searchText.toLowerCase()));
                                 break;
                         }
                     } catch (Exception e) {
@@ -641,7 +727,7 @@ public class UnitBrowser extends JPanel {
     }
 
     private boolean hasExactProperty(ObjectValue unit, String propertyPath) {
-        // First try exact match
+        // Use centralized property checking
         if (com.warnomodmaker.model.PropertyUpdater.hasProperty(unit, propertyPath)) {
             return true;
         }
@@ -693,7 +779,9 @@ public class UnitBrowser extends JPanel {
         return false;
     }
 
-    private void filterByTag(String searchText) {
+
+
+    private void filterByTagCategory(String searchText, String category) {
         // Cancel any existing search
         if (currentSearchWorker != null && !currentSearchWorker.isDone()) {
             currentSearchWorker.cancel(true);
@@ -704,7 +792,7 @@ public class UnitBrowser extends JPanel {
             return;
         }
 
-        statusLabel.setText("Searching by tags...");
+        statusLabel.setText("Searching by " + category.toLowerCase() + " tags...");
 
         // Use SwingWorker to perform the search in a background thread
         currentSearchWorker = new SwingWorker<List<ObjectValue>, Void>() {
@@ -714,10 +802,177 @@ public class UnitBrowser extends JPanel {
 
                 for (ObjectValue unit : ndfObjects) {
                     try {
-                        // Extract tags from unit and check if any contain the search text
-                        java.util.Set<String> unitTags = TagExtractor.extractTagsFromUnit(unit);
-                        boolean matches = unitTags.stream().anyMatch(tag ->
-                            tag.toLowerCase().contains(searchText.toLowerCase()));
+                        if (matchesTagCategory(unit, searchText, category)) {
+                            results.add(unit);
+                        }
+                    } catch (Exception e) {
+                        // Skip units that cause errors
+                        continue;
+                    }
+                }
+
+                return results;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<ObjectValue> results = get();
+                    filteredObjects = results;
+                    DefaultListModel<ObjectValue> newModel = new DefaultListModel<>();
+                    for (ObjectValue unit : filteredObjects) {
+                        newModel.addElement(unit);
+                    }
+
+                    // Replace the entire model at once
+                    objectList.setModel(newModel);
+                    listModel = newModel;
+                    String objectTypeName = getObjectTypeNameForDisplay(currentFileType);
+                    statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found with " + category.toLowerCase() + " tag containing '" + searchText + "'");
+
+                    // Select the first object if available
+                    if (!filteredObjects.isEmpty()) {
+                        objectList.setSelectedIndex(0);
+                    }
+                } catch (InterruptedException | ExecutionException e) {
+                    statusLabel.setText("Error searching by " + category.toLowerCase() + " tags: " + e.getMessage());
+                } finally {
+                    // Re-enable the search field and restore focus
+                    searchField.setEnabled(true);
+                    searchField.requestFocusInWindow();
+                }
+            }
+        };
+
+        currentSearchWorker.execute();
+    }
+
+    private boolean matchesTagCategory(ObjectValue unit, String searchText, String category) {
+        // Get all tags from the unit
+        java.util.Set<String> unitTags = TagExtractor.extractTagsFromUnit(unit);
+
+        // Get the categorized tags for this category
+        java.util.Set<String> categoryTags = getCategoryTags(unitTags, category);
+
+        // Check if any tag in this category contains the search text
+        return categoryTags.stream().anyMatch(tag ->
+            tag.toLowerCase().contains(searchText.toLowerCase()));
+    }
+
+    private java.util.Set<String> getCategoryTags(java.util.Set<String> allTags, String category) {
+        switch (category) {
+            case "Unit Types":
+                return TagExtractor.categorizeUnitTypeTags(allTags);
+            case "Weapons & Combat":
+                return TagExtractor.categorizeWeaponTags(allTags);
+            case "Movement & Mobility":
+                return TagExtractor.categorizeMobilityTags(allTags);
+            case "Special Abilities":
+                return TagExtractor.categorizeSpecialTags(allTags);
+            case "Other":
+                // For "Other", we need to get all tags that don't belong to other categories
+                java.util.Set<String> otherTags = new java.util.HashSet<>(allTags);
+                otherTags.removeAll(TagExtractor.categorizeUnitTypeTags(allTags));
+                otherTags.removeAll(TagExtractor.categorizeWeaponTags(allTags));
+                otherTags.removeAll(TagExtractor.categorizeMobilityTags(allTags));
+                otherTags.removeAll(TagExtractor.categorizeSpecialTags(allTags));
+                return otherTags;
+            default:
+                return new java.util.HashSet<>();
+        }
+    }
+
+    private void filterByUnitRole(String searchText) {
+        // Cancel any existing search
+        if (currentSearchWorker != null && !currentSearchWorker.isDone()) {
+            currentSearchWorker.cancel(true);
+        }
+
+        if (searchText.isEmpty()) {
+            resetToAllUnits();
+            return;
+        }
+
+        statusLabel.setText("Searching by unit role...");
+
+        // Use SwingWorker to perform the search in a background thread
+        currentSearchWorker = new SwingWorker<List<ObjectValue>, Void>() {
+            @Override
+            protected List<ObjectValue> doInBackground() throws Exception {
+                List<ObjectValue> results = new ArrayList<>();
+
+                for (ObjectValue unit : ndfObjects) {
+                    try {
+                        String unitRole = TagExtractor.extractUnitRole(unit);
+                        if (unitRole != null && unitRole.toLowerCase().contains(searchText.toLowerCase())) {
+                            results.add(unit);
+                        }
+                    } catch (Exception e) {
+                        // Skip units that cause errors
+                        continue;
+                    }
+                }
+
+                return results;
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<ObjectValue> results = get();
+                    filteredObjects = results;
+                    DefaultListModel<ObjectValue> newModel = new DefaultListModel<>();
+                    for (ObjectValue unit : filteredObjects) {
+                        newModel.addElement(unit);
+                    }
+
+                    // Replace the entire model at once
+                    objectList.setModel(newModel);
+                    listModel = newModel;
+                    String objectTypeName = getObjectTypeNameForDisplay(currentFileType);
+                    statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found with unit role containing '" + searchText + "'");
+
+                    // Select the first object if available
+                    if (!filteredObjects.isEmpty()) {
+                        objectList.setSelectedIndex(0);
+                    }
+                } catch (InterruptedException | ExecutionException e) {
+                    statusLabel.setText("Error searching by unit role: " + e.getMessage());
+                } finally {
+                    // Re-enable the search field and restore focus
+                    searchField.setEnabled(true);
+                    searchField.requestFocusInWindow();
+                }
+            }
+        };
+
+        currentSearchWorker.execute();
+    }
+
+    private void filterBySpecialties(String searchText) {
+        // Cancel any existing search
+        if (currentSearchWorker != null && !currentSearchWorker.isDone()) {
+            currentSearchWorker.cancel(true);
+        }
+
+        if (searchText.isEmpty()) {
+            resetToAllUnits();
+            return;
+        }
+
+        statusLabel.setText("Searching by specialties...");
+
+        // Use SwingWorker to perform the search in a background thread
+        currentSearchWorker = new SwingWorker<List<ObjectValue>, Void>() {
+            @Override
+            protected List<ObjectValue> doInBackground() throws Exception {
+                List<ObjectValue> results = new ArrayList<>();
+
+                for (ObjectValue unit : ndfObjects) {
+                    try {
+                        Set<String> specialties = TagExtractor.extractSpecialtiesList(unit);
+                        boolean matches = specialties.stream().anyMatch(specialty ->
+                            specialty.toLowerCase().contains(searchText.toLowerCase()));
 
                         if (matches) {
                             results.add(unit);
@@ -745,14 +1000,14 @@ public class UnitBrowser extends JPanel {
                     objectList.setModel(newModel);
                     listModel = newModel;
                     String objectTypeName = getObjectTypeNameForDisplay(currentFileType);
-                    statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found with tag containing '" + searchText + "'");
+                    statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found with specialty containing '" + searchText + "'");
 
                     // Select the first object if available
                     if (!filteredObjects.isEmpty()) {
                         objectList.setSelectedIndex(0);
                     }
                 } catch (InterruptedException | ExecutionException e) {
-                    statusLabel.setText("Error searching by tags: " + e.getMessage());
+                    statusLabel.setText("Error searching by specialties: " + e.getMessage());
                 } finally {
                     // Re-enable the search field and restore focus
                     searchField.setEnabled(true);

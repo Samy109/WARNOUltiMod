@@ -616,83 +616,12 @@ public class PropertyScanner {
 
 
     public boolean hasPropertyDirect(ObjectValue unit, String propertyPath) {
-        if (propertyPath.contains("[*]")) {
-            return hasPropertyWithWildcards(unit, propertyPath);
-        }
-
-        if (!PropertyUpdater.hasProperty(unit, propertyPath)) {
-            return false;
-        }
-        NDFValue value = PropertyUpdater.getPropertyValue(unit, propertyPath);
-        if (value == null) {
-            return false;
-        }
-
-        if (!isModifiableProperty(value, propertyPath)) {
-            return false;
-        }
-
-        return true;
+        // Use centralized property checking from PropertyUpdater
+        return PropertyUpdater.hasModifiableProperty(unit, propertyPath, fileType);
     }
 
 
-    private boolean isModifiableProperty(NDFValue value, String propertyPath) {
-        // 1. BOOLEAN PROPERTIES: Only count if True (False means unit doesn't have capability)
-        if (value.getType() == NDFValue.ValueType.BOOLEAN) {
-            BooleanValue boolValue = (BooleanValue) value;
-            return boolValue.getValue(); // Only count if True
-        }
 
-        // 2. TEMPLATE REFERENCES: Allow for "Set to value" operations
-        if (value.getType() == NDFValue.ValueType.TEMPLATE_REF ||
-            value.getType() == NDFValue.ValueType.RESOURCE_REF) {
-            return true; // Template references can be replaced with new values
-        }
-
-        // 3. STRING PROPERTIES: Exclude template references and system paths
-        if (value.getType() == NDFValue.ValueType.STRING) {
-            StringValue stringValue = (StringValue) value;
-            String str = stringValue.getValue();
-
-            // Exclude template references (~/..., $/...)
-            if (str.startsWith("~/") || str.startsWith("$/")) {
-                return false;
-            }
-
-            // Exclude system identifiers and GUIDs
-            if (str.startsWith("GUID:") || str.contains("Texture_") ||
-                str.contains("CommonTexture_") || str.contains("Descriptor_")) {
-                return false;
-            }
-
-            // Include actual modifiable strings (unit names, etc.)
-            return true;
-        }
-
-        // 4. NUMERIC PROPERTIES: Include all numbers (they're modifiable)
-        if (value.getType() == NDFValue.ValueType.NUMBER) {
-            return true;
-        }
-
-        // 5. ENUM PROPERTIES: Include enums (they're modifiable)
-        if (value.getType() == NDFValue.ValueType.ENUM) {
-            return true;
-        }
-
-        // 6. COMPLEX OBJECTS: Exclude structural containers, but allow modifiable arrays
-        if (value.getType() == NDFValue.ValueType.OBJECT ||
-            value.getType() == NDFValue.ValueType.MAP) {
-            return false; // These are containers, not values
-        }
-
-        // 6a. ARRAY PROPERTIES: Allow specific modifiable arrays
-        if (value.getType() == NDFValue.ValueType.ARRAY) {
-            return isModifiableArray(value, propertyPath);
-        }
-
-        // 7. DEFAULT: Include other types
-        return true;
-    }
 
 
     private boolean isModifiableArray(NDFValue value, String propertyPath) {
@@ -886,38 +815,5 @@ public class PropertyScanner {
     }
 
 
-    private boolean hasPropertyWithWildcards(ObjectValue unit, String propertyPath) {
-        // Split on [*] to get the parts
-        String[] mainParts = propertyPath.split("\\[\\*\\]");
-        if (mainParts.length < 2) {
-            return false; // Invalid format
-        }
 
-        String arrayPropertyName = mainParts[0]; // "ModulesDescriptors"
-        String remainingPath = mainParts[1]; // ".BlindageProperties.ExplosiveReactiveArmor"
-        if (remainingPath.startsWith(".")) {
-            remainingPath = remainingPath.substring(1);
-        }
-        NDFValue arrayValue = unit.getProperty(arrayPropertyName);
-        if (!(arrayValue instanceof ArrayValue)) {
-            return false; // Not an array
-        }
-
-        ArrayValue array = (ArrayValue) arrayValue;
-        for (int i = 0; i < array.getElements().size(); i++) {
-            NDFValue element = array.getElements().get(i);
-            if (element instanceof ObjectValue) {
-                ObjectValue elementObj = (ObjectValue) element;
-                if (PropertyUpdater.hasProperty(elementObj, remainingPath)) {
-                    NDFValue value = PropertyUpdater.getPropertyValue(elementObj, remainingPath);
-                    if (value != null && isModifiableProperty(value, remainingPath) &&
-                        hasRequiredModuleType(unit, propertyPath)) {
-                        return true; // Found at least one modifiable property for this unit type
-                    }
-                }
-            }
-        }
-
-        return false; // Not found in any array element
-    }
 }
