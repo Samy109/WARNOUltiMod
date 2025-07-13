@@ -47,9 +47,7 @@ public class PropertyUpdater {
     }
 
 
-    public static boolean updateProperty(ObjectValue ndfObject, String propertyPath, NDFValue newValue) {
-        return updateProperty(ndfObject, propertyPath, newValue, null);
-    }
+
 
 
     public static boolean updateProperty(ObjectValue ndfObject, String propertyPath, NDFValue newValue, ModificationTracker tracker) {
@@ -60,6 +58,17 @@ public class PropertyUpdater {
         if (ndfObject == null || propertyPath == null || propertyPath.isEmpty()) {
             return false;
         }
+
+        // Current value in the in-memory model
+        NDFValue currentValue = getPropertyValue(ndfObject, propertyPath);
+
+        // ── EARLY EXIT : nothing really changes ───────────────────────────
+        if (isEffectivelyEqual(currentValue, newValue)) {
+            return false;
+        }
+
+
+
         NDFValue oldValue = null;
         if (tracker != null) {
             oldValue = getPropertyValue(ndfObject, propertyPath, fileType);
@@ -70,6 +79,29 @@ public class PropertyUpdater {
 
         return success;
     }
+
+    /**
+     * Determine whether two NDFValue instances represent the same logical data.
+     * Ignores cosmetic formatting differences.
+     */
+    private static boolean isEffectivelyEqual(NDFValue a, NDFValue b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        if (a.getClass() != b.getClass()) return false;
+
+        if (a instanceof NDFValue.NumberValue nvA && b instanceof NDFValue.NumberValue nvB) {
+            return Math.abs(nvA.getValue() - nvB.getValue()) < 1e-9;
+        }
+
+        if (a instanceof NDFValue.StringValue svA && b instanceof NDFValue.StringValue svB) {
+            return svA.getValue().equals(svB.getValue())
+                    && svA.useDoubleQuotes() == svB.useDoubleQuotes();
+        }
+
+        // For all other types fall back to equals()
+        return a.equals(b);
+    }
+
 
     private static boolean navigateToPropertyAndUpdateWithFileType(ObjectValue ndfObject, String propertyPath, NDFValue newValue, ModificationTracker tracker, NDFValue oldValue, NDFValue.NDFFileType fileType) {
         // Route to appropriate navigation logic based on file type
@@ -362,6 +394,7 @@ public class PropertyUpdater {
 
         // Calculate the new value
         double newNumericValue = calculateNewValue(currentNumericValue, modificationType, value);
+
         String modificationDetails = null;
         if (tracker != null) {
             modificationDetails = String.format("%s %.2f", modificationType.getDisplayName(), value);
