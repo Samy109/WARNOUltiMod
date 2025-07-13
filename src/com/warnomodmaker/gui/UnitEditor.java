@@ -948,7 +948,14 @@ public class UnitEditor extends JPanel {
 
             case NUMBER:
                 try {
-                    return NDFValue.createNumber(Double.parseDouble(text));
+                    double numValue = Double.parseDouble(text);
+                    // Preserve format with decimal point if the original text contains one
+                    boolean hasDecimalPoint = text.contains(".");
+                    if (hasDecimalPoint) {
+                        return NDFValue.createNumber(numValue, text);
+                    } else {
+                        return NDFValue.createNumber(numValue, (int)numValue == numValue);
+                    }
                 } catch (NumberFormatException e) {
                     throw new IllegalArgumentException("Invalid number format");
                 }

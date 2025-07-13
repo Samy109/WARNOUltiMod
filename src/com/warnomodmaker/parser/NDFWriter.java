@@ -580,6 +580,58 @@ public class NDFWriter {
     }
 
     /**
+     * Writes a number value to the output, carefully preserving float values
+     * @param numberValue The NumberValue to write
+     * @throws IOException If an I/O error occurs
+     */
+    private void writeNumberValue(NumberValue numberValue) throws IOException {
+        // If there's an original format, try to use it for exact reproduction
+        if (numberValue.getOriginalFormat() != null) {
+            writer.write(numberValue.getOriginalFormat());
+            return;
+        }
+
+        double value = numberValue.getValue();
+
+        // Only convert to integer if it was originally an integer
+        if (numberValue.wasOriginallyInteger()) {
+            writer.write(Integer.toString((int) Math.round(value)));
+        } else {
+            // For floating point values, preserve the decimal point
+            String formattedValue = formatDecimalNumber(value);
+            writer.write(formattedValue);
+        }
+    }
+
+    /**
+     * Formats a decimal number to preserve precision while avoiding scientific notation
+     * when possible
+     * @param value The double value to format
+     * @return A formatted string representation
+     */
+    private String formatDecimalNumber(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return Double.toString(value);
+        }
+
+        // For reasonable ranges, avoid scientific notation
+        if (Math.abs(value) >= 1e-15 && Math.abs(value) < 1e15) {
+            java.math.BigDecimal bd = java.math.BigDecimal.valueOf(value);
+            String result = bd.stripTrailingZeros().toPlainString();
+
+            // Make sure we always have a decimal point for float values
+            if (!result.contains(".")) {
+                result += ".0";
+            }
+
+            return result;
+        }
+
+        // For very large or very small numbers, use scientific notation
+        return Double.toString(value);
+    }
+
+    /**
      * Write object content inline (without newline before opening parenthesis)
      * Used for array elements where the type name and content should be on the same line
      */

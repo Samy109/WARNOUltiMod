@@ -365,6 +365,8 @@ public abstract class NDFValue {
             this.originalFormat = originalFormat;
             // Determine if original was integer by checking if format contains decimal point
             this.wasOriginallyInteger = originalFormat != null && !originalFormat.contains(".");
+
+
         }
 
         public double getValue() {
@@ -400,11 +402,13 @@ public abstract class NDFValue {
         @Override
         public NDFValue copy() {
             NumberValue copy;
+
             if (originalFormat != null) {
                 copy = new NumberValue(value, originalFormat);
             } else {
                 copy = new NumberValue(value, wasOriginallyInteger);
             }
+
             copy.copyFormattingFrom(this);
             return copy;
         }
@@ -413,26 +417,22 @@ public abstract class NDFValue {
         public String toString() {
             // If we have original format information, try to preserve it
             if (originalFormat != null) {
-                if (wasOriginallyInteger) {
-                    return Integer.toString((int) Math.round(value));
-                } else {
-                    // For decimals, preserve reasonable precision
-                    if (Math.abs(value - Math.round(value)) < 0.0001) {
-                        // Very close to integer, but was originally decimal
-                        return String.format("%.1f", value);
-                    }
-                    return formatDecimalNumber(value);
-                }
+                return originalFormat;
             }
 
-            // Legacy behavior with smart rounding
-            if (wasOriginallyInteger || (value == Math.floor(value) && !Double.isInfinite(value) && Math.abs(value) < 1e10)) {
+            // For values that were originally integers, return integer representation
+            if (wasOriginallyInteger) {
                 return Integer.toString((int) Math.round(value));
             }
-            return formatDecimalNumber(value);
+
+            // For float values, ensure we return a float representation even if it's a whole number
+            String formattedValue = formatDecimalNumber(value);
+            if (!formattedValue.contains(".")) {
+                return formattedValue + ".0";
+            }
+            return formattedValue;
         }
 
-        
         private String formatDecimalNumber(double value) {
             if (Double.isNaN(value) || Double.isInfinite(value)) {
                 return Double.toString(value);
@@ -441,12 +441,16 @@ public abstract class NDFValue {
             // For reasonable ranges, avoid scientific notation
             if (Math.abs(value) >= 1e-15 && Math.abs(value) < 1e15) {
                 java.math.BigDecimal bd = java.math.BigDecimal.valueOf(value);
-                return bd.stripTrailingZeros().toPlainString();
+                String result = bd.toPlainString(); // Don't strip trailing zeros
+                return result;
             }
 
             // For very large or very small numbers, use scientific notation
             return Double.toString(value);
         }
+
+        
+
     }
 
     
