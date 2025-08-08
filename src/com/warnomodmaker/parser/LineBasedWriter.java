@@ -93,24 +93,25 @@ public class LineBasedWriter {
             // Search within the entire unit definition (until next export or end of file)
             int unitEnd = findUnitDefinitionEnd(unitLineStart);
 
-            System.out.println("DEBUG: Searching for " + propertyPath + " in unit " + unitName + " from line " + (unitLineStart + 1) + " to " + unitEnd);
+
 
             // For complex nested array paths with multiple array levels, use structural navigation
             // Example: TurretDescriptorList[1].MountedWeaponDescriptorList[0].Ammunition
             if (propertyPath.contains("[") && propertyPath.contains(".") &&
                 propertyPath.split("\\[").length > 2) { // More than one array access
-                return findPropertyLineWithStructuralNavigation(unitLineStart, unitEnd, propertyPath);
+                System.out.println("DEBUG: Using structural navigation for: " + propertyPath);
+                int result = findPropertyLineWithStructuralNavigation(unitLineStart, unitEnd, propertyPath);
+                System.out.println("DEBUG: Structural navigation result: " + result);
+                return result;
             }
 
             // For simple properties, use the original logic
             for (int i = unitLineStart; i < unitEnd; i++) {
                 String line = lineTracker.getOriginalLine(i);
                 if (containsProperty(line, propertyPath)) {
-                    System.out.println("DEBUG: Found property at line " + (i + 1) + ": " + line.trim());
                     return i;
                 }
             }
-            System.out.println("DEBUG: Property not found in range");
         }
 
         return -1;
@@ -136,15 +137,13 @@ public class LineBasedWriter {
                 }
             }
 
-            // Debug: Print when we think we found the end
+            // If we've found the opening paren and we're back to depth 0, this is the end
             if (foundOpenParen && parenDepth == 0) {
-                System.out.println("DEBUG: Found unit end at line " + (i + 1) + ": " + line.trim());
                 return i + 1;
             }
 
             // If we hit another export, this is the end
             if (i > unitStart && line.trim().startsWith("export ")) {
-                System.out.println("DEBUG: Found next export at line " + (i + 1) + ": " + line.trim());
                 return i;
             }
         }
@@ -174,14 +173,20 @@ public class LineBasedWriter {
                 int arrayIndex = Integer.parseInt(part.substring(part.indexOf('[') + 1, part.indexOf(']')));
 
                 // Find the array property line
+                System.out.println("DEBUG: Looking for array '" + arrayName + "' in range " + currentSearchStart + "-" + currentSearchEnd);
                 int arrayPropertyLine = findArrayPropertyInRange(currentSearchStart, currentSearchEnd, arrayName);
+                System.out.println("DEBUG: Array property line: " + arrayPropertyLine);
                 if (arrayPropertyLine < 0) {
+                    System.out.println("DEBUG: Array property not found");
                     return -1;
                 }
 
                 // Navigate to the specific array element
+                System.out.println("DEBUG: Looking for array element [" + arrayIndex + "] starting from line " + arrayPropertyLine);
                 int elementStart = findArrayElementStart(arrayPropertyLine, arrayIndex);
+                System.out.println("DEBUG: Array element start: " + elementStart);
                 if (elementStart < 0) {
+                    System.out.println("DEBUG: Array element not found");
                     return -1;
                 }
 
@@ -416,12 +421,7 @@ public class LineBasedWriter {
         String propertyName = extractFinalPropertyName(propertyPath);
         String trimmed = line.trim();
 
-        // Debug for the specific case we're tracking
-        if (propertyPath.contains("ProductionRessourcesNeeded") && line.contains("$/GFX/Resources/Resource_CommandPoints")) {
-            System.out.println("DEBUG: Checking line for ProductionRessourcesNeeded: " + line.trim());
-            System.out.println("DEBUG: PropertyPath: " + propertyPath);
-            System.out.println("DEBUG: PropertyName: " + propertyName);
-        }
+
 
         // UNIVERSAL PATTERN 1: Standalone property assignment
         // Examples: "MaxPhysicalDamages = 6", "  Coalition = ECoalition/PACT"
@@ -449,10 +449,7 @@ public class LineBasedWriter {
                 pathParts[2].startsWith("(") && pathParts[2].endsWith(")")) {
                 // This is a MAP key access pattern - check if line contains the MAP key
                 String mapKey = pathParts[2].substring(1, pathParts[2].length() - 1);
-                System.out.println("DEBUG: MAP key access detected, looking for key: " + mapKey);
-                boolean found = line.contains(mapKey);
-                System.out.println("DEBUG: MAP key found in line: " + found);
-                return found;
+                return line.contains(mapKey);
             }
 
             // Special case: Simple array property access like "ModulesDescriptors[34].ProductionRessourcesNeeded"
@@ -498,11 +495,7 @@ public class LineBasedWriter {
                 int keyEnd = propertyPath.lastIndexOf(")");
                 if (keyStart < keyEnd) {
                     String mapKey = propertyPath.substring(keyStart, keyEnd);
-                    System.out.println("DEBUG: Checking MAP key '" + mapKey + "' in line: " + line.trim());
-                    // Check if the line contains this MAP key
-                    boolean found = line.contains(mapKey);
-                    System.out.println("DEBUG: MAP key found: " + found);
-                    return found;
+                    return line.contains(mapKey);
                 }
             }
 
@@ -549,6 +542,13 @@ public class LineBasedWriter {
             }
         }
 
+        // Check if this is a MAP key-value pair replacement
+        if (propertyPath.contains(".(") && propertyPath.contains(")") &&
+            originalLine.contains("(") && originalLine.contains(",") && originalLine.contains(")")) {
+            // Handle MAP entry replacement like "($/GFX/Resources/Resource_CommandPoints, 155),"
+            return replaceMapEntryValue(lineNumber, propertyPath, oldValue, newValue, originalLine);
+        }
+
         // Clean the values for comparison
         String cleanOldValue = cleanValue(oldValue);
         String cleanNewValue = cleanValue(newValue);
@@ -570,6 +570,58 @@ public class LineBasedWriter {
 
         // Apply the modification if the line changed
         if (!newLine.equals(originalLine)) {
+            lineTracker.modifyLine(lineNumber, newLine);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Replace the value in a MAP entry line
+     * Example: "($/GFX/Resources/Resource_CommandPoints, 155)," -> "($/GFX/Resources/Resource_CommandPoints, 200),"
+     */
+    private boolean replaceMapEntryValue(int lineNumber, String propertyPath, String oldValue, String newValue, String originalLine) {
+        // Extract the MAP key from the property path
+        int keyStart = propertyPath.indexOf(".(") + 2;
+        int keyEnd = propertyPath.lastIndexOf(")");
+        if (keyStart >= keyEnd) {
+            return false;
+        }
+
+        String mapKey = propertyPath.substring(keyStart, keyEnd);
+
+        // Find the MAP entry pattern: (mapKey, value)
+        // Look for the comma after the map key
+        int keyIndex = originalLine.indexOf(mapKey);
+        if (keyIndex < 0) {
+            return false;
+        }
+
+        int commaIndex = originalLine.indexOf(",", keyIndex);
+        if (commaIndex < 0) {
+            return false;
+        }
+
+        // Find the closing parenthesis
+        int closeParenIndex = originalLine.indexOf(")", commaIndex);
+        if (closeParenIndex < 0) {
+            return false;
+        }
+
+        // Extract the current value between comma and closing paren
+        String valueSection = originalLine.substring(commaIndex + 1, closeParenIndex).trim();
+
+        // Replace the old value with the new value
+        String cleanOldValue = cleanValue(oldValue);
+        String cleanNewValue = cleanValue(newValue);
+
+        if (valueSection.equals(cleanOldValue)) {
+            // Build the new line
+            String beforeValue = originalLine.substring(0, commaIndex + 1) + " ";
+            String afterValue = originalLine.substring(closeParenIndex);
+            String newLine = beforeValue + cleanNewValue + afterValue;
+
             lineTracker.modifyLine(lineNumber, newLine);
             return true;
         }
