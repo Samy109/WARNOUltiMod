@@ -93,12 +93,24 @@ public class LineBasedWriter {
             // Search within the entire unit definition (until next export or end of file)
             int unitEnd = findUnitDefinitionEnd(unitLineStart);
 
+            System.out.println("DEBUG: Searching for " + propertyPath + " in unit " + unitName + " from line " + (unitLineStart + 1) + " to " + unitEnd);
+
+            // For complex nested array paths with multiple array levels, use structural navigation
+            // Example: TurretDescriptorList[1].MountedWeaponDescriptorList[0].Ammunition
+            if (propertyPath.contains("[") && propertyPath.contains(".") &&
+                propertyPath.split("\\[").length > 2) { // More than one array access
+                return findPropertyLineWithStructuralNavigation(unitLineStart, unitEnd, propertyPath);
+            }
+
+            // For simple properties, use the original logic
             for (int i = unitLineStart; i < unitEnd; i++) {
                 String line = lineTracker.getOriginalLine(i);
                 if (containsProperty(line, propertyPath)) {
+                    System.out.println("DEBUG: Found property at line " + (i + 1) + ": " + line.trim());
                     return i;
                 }
             }
+            System.out.println("DEBUG: Property not found in range");
         }
 
         return -1;
@@ -124,18 +136,276 @@ public class LineBasedWriter {
                 }
             }
 
-            // If we've found the opening paren and we're back to depth 0, this is the end
+            // Debug: Print when we think we found the end
             if (foundOpenParen && parenDepth == 0) {
+                System.out.println("DEBUG: Found unit end at line " + (i + 1) + ": " + line.trim());
                 return i + 1;
             }
 
             // If we hit another export, this is the end
             if (i > unitStart && line.trim().startsWith("export ")) {
+                System.out.println("DEBUG: Found next export at line " + (i + 1) + ": " + line.trim());
                 return i;
             }
         }
 
         return lineTracker.getLineCount();
+    }
+
+    /**
+     * Find property line using structural navigation for complex nested array paths
+     * Example: TurretDescriptorList[1].MountedWeaponDescriptorList[0].Ammunition
+     */
+    private int findPropertyLineWithStructuralNavigation(int unitStart, int unitEnd, String propertyPath) {
+        String[] pathParts = propertyPath.split("\\.");
+
+        // Start from the unit definition
+        int currentSearchStart = unitStart;
+        int currentSearchEnd = unitEnd;
+
+        // Navigate through each part of the path
+        for (int partIndex = 0; partIndex < pathParts.length; partIndex++) {
+            String part = pathParts[partIndex];
+            boolean isLastPart = (partIndex == pathParts.length - 1);
+
+            if (part.contains("[") && part.contains("]")) {
+                // Array access like TurretDescriptorList[1]
+                String arrayName = part.substring(0, part.indexOf('['));
+                int arrayIndex = Integer.parseInt(part.substring(part.indexOf('[') + 1, part.indexOf(']')));
+
+                // Find the array property line
+                int arrayPropertyLine = findArrayPropertyInRange(currentSearchStart, currentSearchEnd, arrayName);
+                if (arrayPropertyLine < 0) {
+                    return -1;
+                }
+
+                // Navigate to the specific array element
+                int elementStart = findArrayElementStart(arrayPropertyLine, arrayIndex);
+                if (elementStart < 0) {
+                    return -1;
+                }
+
+                if (isLastPart) {
+                    // This shouldn't happen for our use case, but handle it
+                    return elementStart;
+                } else {
+                    // Update search range to within this array element
+                    int elementEnd = findArrayElementEnd(elementStart);
+                    currentSearchStart = elementStart;
+                    currentSearchEnd = elementEnd;
+                }
+            } else {
+                // Simple property access
+                if (isLastPart) {
+                    // Find the final property within the current range
+                    return findSimplePropertyInRange(currentSearchStart, currentSearchEnd, part);
+                } else {
+                    // Find the object property and update search range
+                    int propertyLine = findSimplePropertyInRange(currentSearchStart, currentSearchEnd, part);
+                    if (propertyLine < 0) {
+                        return -1;
+                    }
+
+                    // Update search range to within this object
+                    int objectEnd = findObjectEnd(propertyLine);
+                    currentSearchStart = propertyLine;
+                    currentSearchEnd = objectEnd;
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    /**
+     * Find an array property line within a specific range
+     */
+    private int findArrayPropertyInRange(int startLine, int endLine, String arrayName) {
+        for (int i = startLine; i < endLine; i++) {
+            String line = lineTracker.getOriginalLine(i);
+            String trimmed = line.trim();
+
+            // Look for array property assignment like "TurretDescriptorList = ["
+            if (trimmed.startsWith(arrayName)) {
+                String afterProperty = trimmed.substring(arrayName.length()).trim();
+                if (afterProperty.startsWith("=")) {
+                    // Check if this line or the next few lines contain the opening bracket
+                    if (afterProperty.contains("[")) {
+                        return i;
+                    }
+
+                    // Check next few lines for the opening bracket
+                    for (int j = i + 1; j < Math.min(i + 3, endLine); j++) {
+                        String nextLine = lineTracker.getOriginalLine(j);
+                        if (nextLine.trim().equals("[")) {
+                            return i;
+                        }
+                    }
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Find the start line of a specific array element (0-based index)
+     */
+    private int findArrayElementStart(int arrayPropertyLine, int elementIndex) {
+        int currentIndex = 0;
+        int bracketDepth = 0;
+        boolean inArray = false;
+
+        for (int i = arrayPropertyLine; i < lineTracker.getLineCount(); i++) {
+            String line = lineTracker.getOriginalLine(i);
+
+            for (char c : line.toCharArray()) {
+                if (c == '[') {
+                    bracketDepth++;
+                    if (bracketDepth == 1) {
+                        inArray = true;
+                    }
+                } else if (c == ']') {
+                    bracketDepth--;
+                    if (bracketDepth == 0) {
+                        return -1; // End of array without finding element
+                    }
+                }
+            }
+
+            if (inArray && bracketDepth == 1) {
+                // We're at the top level of the array
+                String trimmed = line.trim();
+
+                // Skip empty lines and the opening bracket line
+                if (trimmed.isEmpty() || trimmed.equals("[") || trimmed.startsWith(extractArrayName(arrayPropertyLine))) {
+                    continue;
+                }
+
+                // Check if this line starts a new element (not a continuation)
+                if (isArrayElementStart(line)) {
+                    if (currentIndex == elementIndex) {
+                        return i; // Found the target element
+                    }
+                    currentIndex++;
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    /**
+     * Find the end line of an array element starting from elementStart
+     */
+    private int findArrayElementEnd(int elementStart) {
+        int parenDepth = 0;
+        int bracketDepth = 0;
+        boolean foundStructure = false;
+
+        for (int i = elementStart; i < lineTracker.getLineCount(); i++) {
+            String line = lineTracker.getOriginalLine(i);
+
+            for (char c : line.toCharArray()) {
+                if (c == '(') {
+                    parenDepth++;
+                    foundStructure = true;
+                } else if (c == ')') {
+                    parenDepth--;
+                } else if (c == '[') {
+                    bracketDepth++;
+                } else if (c == ']') {
+                    bracketDepth--;
+                }
+            }
+
+            // If we've found structure and we're back to depth 0, this is the end
+            if (foundStructure && parenDepth == 0 && bracketDepth <= 0) {
+                return i + 1;
+            }
+
+            // Also check for comma at the same level (end of array element)
+            if (foundStructure && parenDepth == 0 && bracketDepth == 0 && line.trim().endsWith(",")) {
+                return i + 1;
+            }
+        }
+
+        return lineTracker.getLineCount();
+    }
+
+    /**
+     * Find a simple property within a specific range
+     */
+    private int findSimplePropertyInRange(int startLine, int endLine, String propertyName) {
+        for (int i = startLine; i < endLine; i++) {
+            String line = lineTracker.getOriginalLine(i);
+            String trimmed = line.trim();
+
+            // Look for property assignment
+            if (trimmed.startsWith(propertyName)) {
+                String afterProperty = trimmed.substring(propertyName.length()).trim();
+                if (afterProperty.startsWith("=")) {
+                    return i;
+                }
+            }
+
+            // Also check for function parameter style
+            if (line.contains(propertyName + "=") || line.contains(propertyName + " =")) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Find the end of an object starting from a property line
+     */
+    private int findObjectEnd(int propertyLine) {
+        // For now, use a simple heuristic - this could be improved
+        return findArrayElementEnd(propertyLine);
+    }
+
+    /**
+     * Check if a line starts a new array element
+     */
+    private boolean isArrayElementStart(String line) {
+        String trimmed = line.trim();
+
+        // Skip empty lines, comments, and structural elements
+        if (trimmed.isEmpty() || trimmed.startsWith("//") || trimmed.equals("[") || trimmed.equals("]")) {
+            return false;
+        }
+
+        // Look for object constructors (with or without opening paren on same line)
+        if (trimmed.contains("(")) {
+            return true;
+        }
+
+        // Look for type names that start array elements (like "TTurretTwoAxisDescriptor")
+        if (trimmed.matches("^T[A-Z][a-zA-Z]*$")) {
+            return true;
+        }
+
+        // Look for property assignments that start elements
+        if (trimmed.contains("=") && !trimmed.startsWith("export")) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Extract array name from array property line
+     */
+    private String extractArrayName(int arrayPropertyLine) {
+        String line = lineTracker.getOriginalLine(arrayPropertyLine);
+        String trimmed = line.trim();
+
+        int equalsIndex = trimmed.indexOf('=');
+        if (equalsIndex > 0) {
+            return trimmed.substring(0, equalsIndex).trim();
+        }
+
+        return "";
     }
 
     /**
@@ -145,6 +415,13 @@ public class LineBasedWriter {
     private boolean containsProperty(String line, String propertyPath) {
         String propertyName = extractFinalPropertyName(propertyPath);
         String trimmed = line.trim();
+
+        // Debug for the specific case we're tracking
+        if (propertyPath.contains("ProductionRessourcesNeeded") && line.contains("$/GFX/Resources/Resource_CommandPoints")) {
+            System.out.println("DEBUG: Checking line for ProductionRessourcesNeeded: " + line.trim());
+            System.out.println("DEBUG: PropertyPath: " + propertyPath);
+            System.out.println("DEBUG: PropertyName: " + propertyName);
+        }
 
         // UNIVERSAL PATTERN 1: Standalone property assignment
         // Examples: "MaxPhysicalDamages = 6", "  Coalition = ECoalition/PACT"
@@ -166,6 +443,28 @@ public class LineBasedWriter {
         // For paths like "BlindageProperties.ResistanceSides.Index", ensure parent context exists
         if (propertyPath.contains(".")) {
             String[] pathParts = propertyPath.split("\\.");
+
+            // Special case: MAP key access like "ModulesDescriptors[34].ProductionRessourcesNeeded.($/GFX/Resources/Resource_CommandPoints)"
+            if (pathParts.length == 3 && pathParts[0].matches(".*\\[\\d+\\]") &&
+                pathParts[2].startsWith("(") && pathParts[2].endsWith(")")) {
+                // This is a MAP key access pattern - check if line contains the MAP key
+                String mapKey = pathParts[2].substring(1, pathParts[2].length() - 1);
+                System.out.println("DEBUG: MAP key access detected, looking for key: " + mapKey);
+                boolean found = line.contains(mapKey);
+                System.out.println("DEBUG: MAP key found in line: " + found);
+                return found;
+            }
+
+            // Special case: Simple array property access like "ModulesDescriptors[34].ProductionRessourcesNeeded"
+            if (pathParts.length == 2 && pathParts[0].matches(".*\\[\\d+\\]")) {
+                // Check for the property name followed by = (with possible content in between)
+                if (trimmed.startsWith(propertyName)) {
+                    String afterProperty = trimmed.substring(propertyName.length()).trim();
+                    return afterProperty.startsWith("=") || afterProperty.contains(" = ");
+                }
+                // Also check for inline property assignments
+                return line.contains(propertyName + "=") || line.contains(propertyName + " =");
+            }
 
             // Skip array index parts like "ModulesDescriptors[15]"
             int startIndex = 0;
@@ -190,8 +489,24 @@ public class LineBasedWriter {
 
         // UNIVERSAL PATTERN 4: MAP key-value pairs
         // Examples: "( 'FOB_BEL', 'FOB_Nato_03' )", "( EVisionRange/Standard, 3500.0 )"
+        // Also handles: "($/GFX/Resources/Resource_CommandPoints, 155)"
         if (line.contains("(") && line.contains(",") && line.contains(")")) {
-            // For MAP patterns, the property name might be the key
+            // Check if this is a MAP key access pattern like "PropertyName.(MapKey)"
+            if (propertyPath.contains(".(") && propertyPath.contains(")")) {
+                // Extract the MAP key from the property path
+                int keyStart = propertyPath.indexOf(".(") + 2;
+                int keyEnd = propertyPath.lastIndexOf(")");
+                if (keyStart < keyEnd) {
+                    String mapKey = propertyPath.substring(keyStart, keyEnd);
+                    System.out.println("DEBUG: Checking MAP key '" + mapKey + "' in line: " + line.trim());
+                    // Check if the line contains this MAP key
+                    boolean found = line.contains(mapKey);
+                    System.out.println("DEBUG: MAP key found: " + found);
+                    return found;
+                }
+            }
+
+            // For other MAP patterns, the property name might be the key
             return line.contains(propertyName) || line.contains("'" + propertyName + "'") || line.contains("\"" + propertyName + "\"");
         }
 
@@ -387,6 +702,17 @@ public class LineBasedWriter {
         String finalPart = propertyPath;
         if (propertyPath.contains(".")) {
             finalPart = propertyPath.substring(propertyPath.lastIndexOf(".") + 1);
+        }
+
+        // Handle MAP key access patterns like "($/GFX/Resources/Resource_CommandPoints)"
+        if (finalPart.startsWith("(") && finalPart.endsWith(")")) {
+            // For MAP key access, extract the key name
+            String mapKey = finalPart.substring(1, finalPart.length() - 1);
+            // Extract the final part of the key path
+            if (mapKey.contains("/")) {
+                return mapKey.substring(mapKey.lastIndexOf("/") + 1);
+            }
+            return mapKey;
         }
 
         // Remove array indices for property matching
