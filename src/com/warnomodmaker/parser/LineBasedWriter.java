@@ -424,7 +424,7 @@ public class LineBasedWriter {
 
 
         // UNIVERSAL PATTERN 1: Standalone property assignment
-        // Examples: "MaxPhysicalDamages = 6", "  Coalition = ECoalition/PACT"
+        // Examples: "MaxPhysicalDamages = 6", "Coalition = ECoalition/PACT"
         if (trimmed.startsWith(propertyName)) {
             String afterProperty = trimmed.substring(propertyName.length()).trim();
             if (afterProperty.startsWith("=")) {
