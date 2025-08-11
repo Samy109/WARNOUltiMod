@@ -106,8 +106,11 @@ public class SourceLineTracker {
             }
 
             String currentLine = getCurrentLine(i);
-            // Skip empty lines that were cleared during array replacement
-            if (!currentLine.isEmpty()) {
+            // Only skip lines that were explicitly cleared during modifications
+            // (modified to empty string), not original empty lines
+            boolean shouldSkip = isLineModified(i) && currentLine.isEmpty();
+
+            if (!shouldSkip) {
                 if (output.length() > 0) {
                     output.append("\n");
                 }

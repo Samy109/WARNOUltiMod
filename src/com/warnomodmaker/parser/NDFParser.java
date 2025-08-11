@@ -75,11 +75,9 @@ public class NDFParser {
                     advance();
                 }
             } catch (NDFParseException e) {
-                // CRITICAL: Log parsing errors to help debug missing objects
-                System.err.println("WARNING: General parsing error at line " + currentToken.getLine() +
+                System.err.println("Parsing error at line " + currentToken.getLine() +
                                  ", token: " + currentToken.getValue() + " (" + currentToken.getType() + "): " + e.getMessage());
 
-                // Try to recover more gracefully - advance just one token instead of skipping to next major token
                 if (currentToken.getType() != NDFToken.TokenType.EOF) {
                     advance();
                 }
@@ -93,21 +91,19 @@ public class NDFParser {
     private ObjectValue parseExportedDescriptor() throws NDFParseException {
         int exportTokenIndex = currentTokenIndex;
 
-        // Expect 'export DescriptorName is TypeName'
         expect(NDFToken.TokenType.EXPORT);
         String descriptorName;
         if (currentToken.getType() == NDFToken.TokenType.IDENTIFIER) {
             descriptorName = currentToken.getValue();
             advance();
             if (currentToken.getType() == NDFToken.TokenType.OPEN_BRACKET) {
-                advance(); // consume [
-                // Skip array index content
+                advance();
                 while (currentToken.getType() != NDFToken.TokenType.CLOSE_BRACKET &&
                        currentToken.getType() != NDFToken.TokenType.EOF) {
                     advance();
                 }
                 if (currentToken.getType() == NDFToken.TokenType.CLOSE_BRACKET) {
-                    advance(); // consume ]
+                    advance();
                 }
             }
         } else {
@@ -117,11 +113,10 @@ public class NDFParser {
         expect(NDFToken.TokenType.IS);
         NDFToken typeNameToken = expect(NDFToken.TokenType.IDENTIFIER);
         String typeName = typeNameToken.getValue();
-        int typeNameTokenIndex = currentTokenIndex - 1; // -1 because we just advanced past it
+        int typeNameTokenIndex = currentTokenIndex - 1;
         ObjectValue descriptor = NDFValue.createObject(typeName);
         descriptor.setInstanceName(descriptorName);
-        descriptor.setExported(true); // Mark as exported
-        // Use the export token index to include the entire export declaration
+        descriptor.setExported(true);
         if (exportTokenIndex >= 0) {
             descriptor.setOriginalTokenStartIndex(exportTokenIndex);
         }
@@ -135,8 +130,7 @@ public class NDFParser {
         expect(NDFToken.TokenType.CLOSE_PAREN);
         descriptor.setOriginalClosingParen(closeParenToken.getExactText());
 
-        // Store token range end
-        int closeParenTokenIndex = currentTokenIndex - 1; // -1 because we already advanced past it
+        int closeParenTokenIndex = currentTokenIndex - 1;
         descriptor.setOriginalTokenEndIndex(closeParenTokenIndex);
 
         return descriptor;
@@ -144,14 +138,12 @@ public class NDFParser {
 
 
     private boolean isDescriptorDefinition() {
-        // Look ahead to check if we have "IDENTIFIER is IDENTIFIER" pattern
         if (currentTokenIndex + 2 < tokens.size()) {
             NDFToken nextToken = tokens.get(currentTokenIndex + 1);
             NDFToken thirdToken = tokens.get(currentTokenIndex + 2);
             if (nextToken.getType() == NDFToken.TokenType.IS &&
                 thirdToken.getType() == NDFToken.TokenType.IDENTIFIER) {
 
-                // Look ahead for opening parenthesis to confirm it's a descriptor
                 if (currentTokenIndex + 3 < tokens.size()) {
                     NDFToken fourthToken = tokens.get(currentTokenIndex + 3);
                     return fourthToken.getType() == NDFToken.TokenType.OPEN_PAREN;
@@ -163,7 +155,6 @@ public class NDFParser {
 
 
     private boolean isSimpleAssignment() {
-        // Look ahead to check if we have "IDENTIFIER is VALUE" pattern
         if (currentTokenIndex + 2 < tokens.size()) {
             NDFToken nextToken = tokens.get(currentTokenIndex + 1);
             NDFToken thirdToken = tokens.get(currentTokenIndex + 2);
@@ -173,7 +164,7 @@ public class NDFParser {
                        thirdToken.getType() == NDFToken.TokenType.STRING_LITERAL ||
                        thirdToken.getType() == NDFToken.TokenType.OPEN_BRACKET ||
                        (thirdToken.getType() == NDFToken.TokenType.IDENTIFIER &&
-                        !isDescriptorDefinition()); // Not a descriptor type
+                        !isDescriptorDefinition());
             }
         }
         return false;
@@ -181,7 +172,6 @@ public class NDFParser {
 
 
     private ObjectValue parseDescriptorDefinition() throws NDFParseException {
-        // TOKEN RANGE PRESERVATION - CAPTURE START TOKEN INDEX
         int startTokenIndex = currentTokenIndex;
         String descriptorName = expect(NDFToken.TokenType.IDENTIFIER).getValue();
         expect(NDFToken.TokenType.IS);
@@ -189,14 +179,12 @@ public class NDFParser {
         ObjectValue descriptor = NDFValue.createObject(typeName);
         descriptor.setInstanceName(descriptorName);
 
-        // TOKEN RANGE PRESERVATION - SET START INDEX
         descriptor.setOriginalTokenStartIndex(startTokenIndex);
         expect(NDFToken.TokenType.OPEN_PAREN);
         parseObjectProperties(descriptor);
         expect(NDFToken.TokenType.CLOSE_PAREN);
 
-        // TOKEN RANGE PRESERVATION - SET END INDEX
-        int endTokenIndex = currentTokenIndex - 1; // -1 because we already advanced past the closing paren
+        int endTokenIndex = currentTokenIndex - 1;
         descriptor.setOriginalTokenEndIndex(endTokenIndex);
 
         return descriptor;
@@ -204,19 +192,14 @@ public class NDFParser {
 
 
     private void skipSimpleAssignment() throws NDFParseException {
-        // Skip "IDENTIFIER is VALUE"
-        advance(); // Skip identifier
-        expect(NDFToken.TokenType.IS); // Skip "is"
+        advance();
+        expect(NDFToken.TokenType.IS);
 
-        // Skip the value (could be number, string, identifier, or array)
         if (currentToken.getType() == NDFToken.TokenType.OPEN_BRACKET) {
-            // Skip array
             skipArray();
         } else if (currentToken.getType() == NDFToken.TokenType.OPEN_PAREN) {
-            // Skip object instantiation
             skipObjectInstantiation();
         } else {
-            // Skip simple value
             advance();
         }
     }
@@ -253,13 +236,11 @@ public class NDFParser {
 
 
     private ObjectValue parseNonExportedDefinition() throws NDFParseException {
-        // Capture start token index
         int startTokenIndex = currentTokenIndex;
 
-        // Expect 'IdentifierName is Value' or other patterns
         String identifierName = expect(NDFToken.TokenType.IDENTIFIER).getValue();
         if (currentToken.getType() == NDFToken.TokenType.IS) {
-            advance(); // consume 'is'
+            advance();
             NDFValue value = parseValue();
             ObjectValue definition = NDFValue.createObject("ConstantDefinition");
             definition.setInstanceName(identifierName);
@@ -271,25 +252,18 @@ public class NDFParser {
 
             return definition;
         } else if (currentToken.getType() == NDFToken.TokenType.IDENTIFIER) {
-            // This could be:
-            // 1. "unnamed TypeName(...)" - object definition with unnamed instance
-            // 2. "IdentifierName TypeName" - type declaration
             String secondIdentifier = currentToken.getValue();
             advance();
             if (currentToken.getType() == NDFToken.TokenType.OPEN_PAREN) {
-                // This is an object definition: "instanceName TypeName(...)"
-                // For "unnamed TypeName(...)", instanceName will be "unnamed"
                 ObjectValue definition = parseObject(secondIdentifier, startTokenIndex);
                 definition.setInstanceName(identifierName);
 
                 return definition;
             } else {
-                // This is a type declaration or other construct
                 ObjectValue definition = NDFValue.createObject("TypeDeclaration");
                 definition.setInstanceName(identifierName);
                 definition.setProperty("Type", NDFValue.createString(secondIdentifier));
 
-                // Skip any remaining tokens until we find a reasonable stopping point
                 while (currentToken.getType() != NDFToken.TokenType.EOF &&
                        currentToken.getType() != NDFToken.TokenType.EXPORT &&
                        currentToken.getType() != NDFToken.TokenType.IDENTIFIER) {
@@ -303,11 +277,9 @@ public class NDFParser {
                 return definition;
             }
         } else {
-            // Unknown pattern, create a placeholder and skip CONSERVATIVELY
             ObjectValue definition = NDFValue.createObject("UnknownDefinition");
             definition.setInstanceName(identifierName);
 
-            // Skip tokens conservatively to avoid consuming entire file
             int parenDepth = 0;
             boolean foundOpenParen = false;
             int tokensSkipped = 0;
@@ -322,12 +294,10 @@ public class NDFParser {
                 } else if (currentToken.getType() == NDFToken.TokenType.CLOSE_PAREN) {
                     parenDepth--;
                     if (foundOpenParen && parenDepth == 0) {
-                        // Found the end of this object
-                        advance(); // Consume the closing paren
+                        advance();
                         break;
                     }
                 } else if (currentToken.getType() == NDFToken.TokenType.EXPORT && !foundOpenParen) {
-                    // If we haven't found an opening paren yet and we hit an export, stop
                     break;
                 }
 
@@ -361,7 +331,6 @@ public class NDFParser {
 
     private void parseObjectProperties(ObjectValue object) throws NDFParseException {
         while (currentToken.getType() != NDFToken.TokenType.CLOSE_PAREN) {
-            // CAPTURE ORIGINAL WHITESPACE/INDENTATION BEFORE PROPERTY
             String propertyPrefix = currentToken.getLeadingWhitespace();
 
             String propertyName;
@@ -372,7 +341,6 @@ public class NDFParser {
                 propertyName = currentToken.getValue();
                 advance();
             } else {
-                // Skip unexpected tokens and try to continue
                 advance();
                 continue;
             }
@@ -384,8 +352,6 @@ public class NDFParser {
             try {
                 propertyValue = parseValue();
             } catch (NDFParseException e) {
-                // Skip failed property parsing and continue - only log if debugging
-                // System.err.println("Warning: Failed to parse property '" + propertyName + "': " + e.getMessage());
                 while (currentToken.getType() != NDFToken.TokenType.COMMA &&
                        currentToken.getType() != NDFToken.TokenType.CLOSE_PAREN &&
                        currentToken.getType() != NDFToken.TokenType.EOF) {
@@ -409,27 +375,22 @@ public class NDFParser {
                     bitwiseExpr.append(rightOperand.toString());
                 }
 
-                // Store as a special raw expression value
                 propertyValue = NDFValue.createRawExpression(bitwiseExpr.toString());
             }
             boolean hasComma = currentToken.getType() == NDFToken.TokenType.COMMA;
             String propertySuffix = "";
 
             if (hasComma) {
-                // CAPTURE COMMA AND ANY TRAILING WHITESPACE/NEWLINES
                 NDFToken commaToken = currentToken;
-                advance(); // Consume the comma
+                advance();
 
-                // CRITICAL FIX: Include comma + whitespace that follows the comma
                 String commaText = commaToken.getExactText();
                 String followingWhitespace = currentToken.getLeadingWhitespace();
                 propertySuffix = commaText + followingWhitespace;
             } else {
-                // CAPTURE ANY TRAILING WHITESPACE/NEWLINES AFTER PROPERTY
                 propertySuffix = currentToken.getLeadingWhitespace();
             }
 
-            // Store original formatting for this property
             object.setOriginalPropertyPrefix(propertyName, propertyPrefix);
             object.setOriginalPropertyEquals(propertyName, originalEquals);
             object.setOriginalPropertySuffix(propertyName, propertySuffix);
@@ -530,17 +491,14 @@ public class NDFParser {
                 int identifierTokenIndex = currentTokenIndex;
                 advance();
 
-                // Skip any whitespace
                 while (currentToken.getType() == NDFToken.TokenType.UNKNOWN &&
                        Character.isWhitespace(currentToken.getValue().charAt(0))) {
                     advance();
                 }
 
                 if (currentToken.getType() == NDFToken.TokenType.IS) {
-                    // Named instance: 'name is Type(...)'
                     advance();
 
-                    // Skip any whitespace after 'is'
                     while (currentToken.getType() == NDFToken.TokenType.UNKNOWN &&
                            Character.isWhitespace(currentToken.getValue().charAt(0))) {
                         advance();
@@ -581,35 +539,26 @@ public class NDFParser {
                                 // This is a function call with named parameters
                                 ObjectValue functionCall = NDFValue.createObject(identifier);
 
-                                // TOKEN RANGE PRESERVATION - SIMPLER AND MORE RELIABLE APPROACH
-                                // Store the start token index (the identifier token we captured earlier)
                                 functionCall.setOriginalTokenStartIndex(identifierTokenIndex);
 
-                                // CAPTURE ORIGINAL OPENING PARENTHESIS FORMATTING
                                 NDFToken openParenToken = tokens.get(savedIndex);
                                 functionCall.setOriginalOpeningParen(openParenToken.getExactText());
                                 while (currentToken.getType() == NDFToken.TokenType.IDENTIFIER) {
-                                    // CAPTURE ORIGINAL WHITESPACE/SPACING BEFORE PARAMETER
                                     String paramPrefix = currentToken.getLeadingWhitespace();
 
                                     String paramName = currentToken.getValue();
                                     NDFToken paramNameToken = currentToken;
                                     advance();
 
-                                    // CAPTURE ORIGINAL EQUALS SIGN WITH EXACT FORMATTING
                                     NDFToken equalsToken = currentToken;
                                     expect(NDFToken.TokenType.EQUALS);
                                     String originalEquals = equalsToken.getExactText();
 
-                                    // CAPTURE THE TOKEN BEFORE PARSING THE VALUE (to get trailing whitespace)
                                     int valueStartIndex = currentTokenIndex;
                                     NDFValue paramValue = parseValue();
 
-                                    // CAPTURE ORIGINAL SPACING AFTER PARAMETER VALUE
-                                    // The space is in the trailing whitespace of the last token of the parameter value
                                     String paramSuffix = "";
                                     if (valueStartIndex < tokens.size()) {
-                                        // Look at the token just before the current position
                                         int lastValueTokenIndex = currentTokenIndex - 1;
                                         if (lastValueTokenIndex >= 0 && lastValueTokenIndex < tokens.size()) {
                                             NDFToken lastValueToken = tokens.get(lastValueTokenIndex);
@@ -617,32 +566,27 @@ public class NDFParser {
                                         }
                                     }
 
-                                    // Store original formatting for this parameter
                                     functionCall.setOriginalPropertyPrefix(paramName, paramPrefix);
                                     functionCall.setOriginalPropertyEquals(paramName, originalEquals);
                                     functionCall.setOriginalPropertySuffix(paramName, paramSuffix);
 
                                     functionCall.setProperty(paramName, paramValue);
 
-                                    // Skip whitespace tokens
                                     while (currentToken.getType() == NDFToken.TokenType.UNKNOWN &&
                                            Character.isWhitespace(currentToken.getValue().charAt(0))) {
                                         advance();
                                     }
 
-                                    // If we hit the closing paren, we're done
                                     if (currentToken.getType() == NDFToken.TokenType.CLOSE_PAREN) {
                                         break;
                                     }
                                 }
 
-                                // CAPTURE ORIGINAL CLOSING PARENTHESIS FORMATTING
                                 NDFToken closeParenToken = currentToken;
                                 expect(NDFToken.TokenType.CLOSE_PAREN);
                                 functionCall.setOriginalClosingParen(closeParenToken.getExactText());
 
-                                // Store the end token index (the closing parenthesis token)
-                                int functionEndIndex = currentTokenIndex - 1; // -1 because we already advanced past the closing paren
+                                int functionEndIndex = currentTokenIndex - 1;
                                 functionCall.setOriginalTokenEndIndex(functionEndIndex);
 
                                 return functionCall;
@@ -1219,9 +1163,7 @@ public class NDFParser {
      * Handles all the unique patterns in UniteDescriptorOLD.ndf without using standard parsing
      */
     private NDFValue parseUniteDescriptorValueStandalone() throws NDFParseException {
-        // Handle different value types with UniteDescriptor-specific logic
 
-        // 1. Handle pipe-separated values (like GameplayBehavior=EGameplayBehavior/Nothing | EGameplayBehavior/TacticalAttackNearCover)
         if (currentToken.getType() == NDFToken.TokenType.IDENTIFIER || currentToken.getType() == NDFToken.TokenType.ENUM_VALUE) {
             // Look ahead to see if there's a pipe after this value
             int lookAheadIndex = currentTokenIndex + 1;
@@ -1243,9 +1185,7 @@ public class NDFParser {
             }
         }
 
-        // 2. Handle template references with pipes (like TerrainListMask = ~/ETerrainType/None | ~/ETerrainType/ForetLegere)
         if (currentToken.getType() == NDFToken.TokenType.TEMPLATE_REF) {
-            // Look ahead to see if there's a pipe after this template ref
             int lookAheadIndex = currentTokenIndex + 1;
             while (lookAheadIndex < tokens.size()) {
                 NDFToken lookAheadToken = tokens.get(lookAheadIndex);
@@ -1258,21 +1198,17 @@ public class NDFParser {
                     // End of value, no pipe found - treat as simple template ref
                     break;
                 } else if (!isWhitespaceOrComment(lookAheadToken)) {
-                    // Non-whitespace, non-comment token that's not a pipe
                     break;
                 }
                 lookAheadIndex++;
             }
 
-            // Not a pipe-separated template ref, treat as simple template ref
             String templateValue = currentToken.getValue();
             advance();
             return NDFValue.createTemplateRef(templateValue);
         }
 
-        // 3. Handle objects (like TBlindageProperties(...))
         if (currentToken.getType() == NDFToken.TokenType.IDENTIFIER) {
-            // Look ahead to see if this is an object
             int lookAheadIndex = currentTokenIndex + 1;
             while (lookAheadIndex < tokens.size()) {
                 NDFToken lookAheadToken = tokens.get(lookAheadIndex);

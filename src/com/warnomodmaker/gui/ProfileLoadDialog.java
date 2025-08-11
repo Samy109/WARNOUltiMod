@@ -2,6 +2,7 @@ package com.warnomodmaker.gui;
 
 import com.warnomodmaker.model.*;
 import com.warnomodmaker.model.NDFValue.ObjectValue;
+import com.warnomodmaker.util.StringSimilarity;
 
 import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
@@ -326,13 +327,13 @@ public class ProfileLoadDialog extends JDialog {
         }
 
         // 3. Levenshtein distance (fuzzy matching for typos)
-        double levenshteinScore = 1.0 - (double) levenshteinDistance(target, candidate) / Math.max(target.length(), candidate.length());
+        double levenshteinScore = StringSimilarity.calculateSimilarity(target, candidate);
 
         // 4. Token-based matching (for multi-word names)
-        double tokenScore = calculateTokenSimilarity(target, candidate);
+        double tokenScore = StringSimilarity.calculateTokenSimilarity(target, candidate);
 
         // 5. Common prefix/suffix matching
-        double affixScore = calculateAffixSimilarity(target, candidate);
+        double affixScore = StringSimilarity.calculateAffixSimilarity(target, candidate);
 
         // Combine scores with weights
         return Math.max(levenshteinScore * 0.4 + tokenScore * 0.4 + affixScore * 0.2, 0.0);
@@ -395,12 +396,12 @@ public class ProfileLoadDialog extends JDialog {
         }
 
         // 5. Levenshtein distance for typo tolerance
-        double levenshteinScore = 1.0 - (double) levenshteinDistance(target, candidate) / Math.max(target.length(), candidate.length());
+        double levenshteinScore = StringSimilarity.calculateSimilarity(target, candidate);
 
         // 6. End-of-path matching (property name similarity)
         String targetEnd = targetParts[targetParts.length - 1];
         String candidateEnd = candidateParts[candidateParts.length - 1];
-        double endScore = calculateTokenSimilarity(targetEnd, candidateEnd);
+        double endScore = StringSimilarity.calculateTokenSimilarity(targetEnd, candidateEnd);
 
         // Combine scores with weights favoring structural and normalized matches
         return Math.max(Math.max(normalizedScore, structuralScore * 0.6 + endScore * 0.4),
@@ -788,76 +789,7 @@ public class ProfileLoadDialog extends JDialog {
     }
 
 
-    private int levenshteinDistance(String a, String b) {
-        if (a.length() == 0) return b.length();
-        if (b.length() == 0) return a.length();
 
-        int[][] matrix = new int[a.length() + 1][b.length() + 1];
-
-        for (int i = 0; i <= a.length(); i++) {
-            matrix[i][0] = i;
-        }
-        for (int j = 0; j <= b.length(); j++) {
-            matrix[0][j] = j;
-        }
-
-        for (int i = 1; i <= a.length(); i++) {
-            for (int j = 1; j <= b.length(); j++) {
-                int cost = (a.charAt(i - 1) == b.charAt(j - 1)) ? 0 : 1;
-                matrix[i][j] = Math.min(Math.min(
-                    matrix[i - 1][j] + 1,      // deletion
-                    matrix[i][j - 1] + 1),     // insertion
-                    matrix[i - 1][j - 1] + cost); // substitution
-            }
-        }
-
-        return matrix[a.length()][b.length()];
-    }
-
-
-    private double calculateTokenSimilarity(String target, String candidate) {
-        String[] targetTokens = target.split("[\\s_-]+");
-        String[] candidateTokens = candidate.split("[\\s_-]+");
-
-        int matches = 0;
-        for (String targetToken : targetTokens) {
-            for (String candidateToken : candidateTokens) {
-                if (targetToken.equals(candidateToken) ||
-                    targetToken.contains(candidateToken) ||
-                    candidateToken.contains(targetToken)) {
-                    matches++;
-                    break;
-                }
-            }
-        }
-
-        return (double) matches / Math.max(targetTokens.length, candidateTokens.length);
-    }
-
-
-    private double calculateAffixSimilarity(String target, String candidate) {
-        int commonPrefix = 0;
-        int minLength = Math.min(target.length(), candidate.length());
-
-        for (int i = 0; i < minLength; i++) {
-            if (target.charAt(i) == candidate.charAt(i)) {
-                commonPrefix++;
-            } else {
-                break;
-            }
-        }
-
-        int commonSuffix = 0;
-        for (int i = 1; i <= minLength - commonPrefix; i++) {
-            if (target.charAt(target.length() - i) == candidate.charAt(candidate.length() - i)) {
-                commonSuffix++;
-            } else {
-                break;
-            }
-        }
-
-        return (double) (commonPrefix + commonSuffix) / Math.max(target.length(), candidate.length());
-    }
 
 
     private double calculatePathStructuralSimilarity(String[] targetParts, String[] candidateParts) {

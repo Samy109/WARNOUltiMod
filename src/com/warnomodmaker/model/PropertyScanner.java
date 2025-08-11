@@ -87,7 +87,12 @@ public class PropertyScanner {
             // Accumulate counts for normalized paths
             normalizedOccurrences.put(normalizedPath,
                 normalizedOccurrences.getOrDefault(normalizedPath, 0) + count);
-            normalizedTypes.put(normalizedPath, type);
+
+            // For normalized paths, keep the type consistent (prefer NUMBER over other types for math operations)
+            NDFValue.ValueType existingType = normalizedTypes.get(normalizedPath);
+            if (existingType == null || (type == NDFValue.ValueType.NUMBER && existingType != NDFValue.ValueType.NUMBER)) {
+                normalizedTypes.put(normalizedPath, type);
+            }
 
             // Keep track of one original path for each normalized path
             if (!normalizedToOriginal.containsKey(normalizedPath)) {
@@ -98,8 +103,8 @@ public class PropertyScanner {
             String normalizedPath = entry.getKey();
             NDFValue.ValueType type = normalizedTypes.get(normalizedPath);
 
-            // For wildcard paths, use the normalized path as the original path for mass updates
-            String originalPath = normalizedPath.contains("[*]") ? normalizedPath : normalizedToOriginal.get(normalizedPath);
+            // For mass updates, always use the normalized wildcard path
+            String originalPath = normalizedPath;
 
             // Calculate ACCURATE unit count using direct property checking
             int actualUnitCount = countUnitsWithProperty(originalPath);
@@ -111,8 +116,17 @@ public class PropertyScanner {
                 String description = generateDescription(normalizedPath, name, actualUnitCount);
 
                 PropertyInfo info = new PropertyInfo(name, originalPath, description, type, category, actualUnitCount);
-                discoveredProperties.put(normalizedPath, info);
-                categorizedProperties.computeIfAbsent(category, k -> new ArrayList<>()).add(info);
+
+                // Only add if we haven't already added this exact normalized path
+                // Also check for duplicate names within the same category
+                // Filter out properties that aren't suitable for mass modification
+                if (!discoveredProperties.containsKey(normalizedPath) &&
+                    categorizedProperties.getOrDefault(category, new ArrayList<>())
+                        .stream().noneMatch(p -> p.name.equals(name)) &&
+                    isSuitableForMassModification(originalPath, name)) {
+                    discoveredProperties.put(normalizedPath, info);
+                    categorizedProperties.computeIfAbsent(category, k -> new ArrayList<>()).add(info);
+                }
             }
         }
 
@@ -157,6 +171,16 @@ public class PropertyScanner {
                             }
                         }
                     }
+                } else if (value instanceof MapValue) {
+                    // Expand MAP entries into discoverable paths using exact key tokens
+                    MapValue mapValue = (MapValue) value;
+                    for (Map.Entry<NDFValue, NDFValue> entryKV : mapValue.getEntries()) {
+                        String keyToken = entryKV.getKey().toString(); // exact NDF token, no conversion
+                        String mapEntryPath = fullPath + ".(" + keyToken + ")";
+                        // Record occurrence and the type of the VALUE for operator filtering
+                        occurrences.put(mapEntryPath, occurrences.getOrDefault(mapEntryPath, 0) + 1);
+                        types.put(mapEntryPath, entryKV.getValue().getType());
+                    }
                 }
             }
         }
@@ -168,9 +192,41 @@ public class PropertyScanner {
         for (NDFValue element : modulesArray.getElements()) {
             if (element instanceof ObjectValue) {
                 ObjectValue module = (ObjectValue) element;
-                scanObject(module, "ModulesDescriptors[*]", occurrences, types);
+
+                // Detect structure type and scan accordingly
+                if (isOldModuleStructure(module)) {
+                    // Old structure: TModuleSelector with Default sub-object
+                    // Scan the Default sub-object if it exists
+                    NDFValue defaultValue = module.getProperty("Default");
+                    if (defaultValue instanceof ObjectValue) {
+                        scanObject((ObjectValue) defaultValue, "ModulesDescriptors[*].Default", occurrences, types);
+                    }
+                    // Also scan other properties of the module selector itself
+                    for (Map.Entry<String, NDFValue> entry : module.getProperties().entrySet()) {
+                        String propertyName = entry.getKey();
+                        NDFValue value = entry.getValue();
+
+                        if (!"Default".equals(propertyName) && isEditableType(value.getType())) {
+                            String fullPath = "ModulesDescriptors[*]." + propertyName;
+                            occurrences.put(fullPath, occurrences.getOrDefault(fullPath, 0) + 1);
+                            types.put(fullPath, value.getType());
+                        }
+                    }
+                } else {
+                    // New structure: Direct module descriptor (e.g., TGenericMovementModuleDescriptor)
+                    scanObject(module, "ModulesDescriptors[*]", occurrences, types);
+                }
             }
         }
+    }
+
+    /**
+     * Detect if this is an old-style module structure (TModuleSelector with Default sub-object)
+     */
+    private boolean isOldModuleStructure(ObjectValue module) {
+        // Check if the module has a "Default" property and "Condition" property
+        // This indicates it's a TModuleSelector structure
+        return module.getProperty("Default") != null && module.getProperty("Condition") != null;
     }
 
 
@@ -188,7 +244,14 @@ public class PropertyScanner {
     private String normalizePropertyPath(String path) {
         // Replace specific array indices like [0], [1], [19] with [*]
         // This groups similar properties together regardless of their array position
-        return path.replaceAll("\\[\\d+\\]", "[*]");
+        String normalized = path.replaceAll("\\[\\d+\\]", "[*]");
+
+        // For MAP entries, also normalize the key part to avoid duplicates
+        // Example: ModulesDescriptors[*].OpticalStrengths.(EOpticalStrength/Standard)
+        // becomes: ModulesDescriptors[*].OpticalStrengths.(EOpticalStrength/Standard)
+        // This ensures MAP entries from different array indices are grouped together
+
+        return normalized;
     }
 
 
@@ -196,6 +259,34 @@ public class PropertyScanner {
         String[] parts = path.split("\\.");
         String lastPart = parts[parts.length - 1];
         lastPart = lastPart.replaceAll("\\[\\*\\]", "").replaceAll("\\[\\d+\\]", "");
+
+        // Handle MAP entries: extract meaningful name from key
+        if (lastPart.startsWith("(") && lastPart.endsWith(")")) {
+            String mapKey = lastPart.substring(1, lastPart.length() - 1); // Remove parentheses
+
+            // Skip pure numeric keys or very short keys that aren't meaningful
+            if (mapKey.matches("^\\d+$") || mapKey.length() <= 2) {
+                // Use the property name before the map key instead
+                if (parts.length >= 2) {
+                    String mapPropertyName = parts[parts.length - 2];
+                    return mapPropertyName + " Entry";
+                }
+                return "Map Entry";
+            }
+
+            // Extract the meaningful part after the last slash
+            if (mapKey.contains("/")) {
+                String[] keyParts = mapKey.split("/");
+                String meaningfulPart = keyParts[keyParts.length - 1];
+                // Get the property name before the map key
+                if (parts.length >= 2) {
+                    String mapPropertyName = parts[parts.length - 2];
+                    return mapPropertyName + ": " + meaningfulPart;
+                }
+                return meaningfulPart;
+            }
+            return mapKey;
+        }
 
         // Context-aware naming for resistance properties
         if (isResistanceProperty(path)) {
@@ -814,6 +905,99 @@ public class PropertyScanner {
         return true;
     }
 
+    /**
+     * Check if a property is suitable for mass modification
+     */
+    private boolean isSuitableForMassModification(String originalPath, String name) {
+        // Exclude complex array properties with multiple indices
+        if (originalPath.matches(".*\\[\\d+\\].*\\[\\d+\\].*")) {
+            return false; // Multi-dimensional arrays are too complex
+        }
 
+        // Exclude MAP properties that are complex
+        if (originalPath.contains("(") && originalPath.contains(")") && originalPath.contains("/")) {
+            return false; // Complex MAP entries
+        }
 
+        // Exclude properties that are clearly identifiers or names
+        if (name.toLowerCase().contains("name") || name.toLowerCase().contains("id") ||
+            name.toLowerCase().contains("guid") || name.toLowerCase().contains("descriptor")) {
+            return false;
+        }
+
+        // Exclude template references
+        if (name.startsWith("~/") || name.startsWith("$/")) {
+            return false;
+        }
+
+        // Exclude very short property names that are likely indices or flags
+        if (name.length() <= 2 && name.matches("\\d+")) {
+            return false;
+        }
+
+        // Get the actual property value to check its type (but don't fail if we can't find it)
+        NDFValue propertyValue = getPropertyValueFromPath(originalPath);
+
+        // If we found a property value, do strict checking
+        if (propertyValue != null) {
+            // CRITICAL: Exclude properties with reference values (like CanonsLoadingTime)
+            if (propertyValue.getType() == NDFValue.ValueType.RAW_EXPRESSION) {
+                RawExpressionValue rawValue = (RawExpressionValue) propertyValue;
+                String expression = rawValue.getExpression();
+                // Exclude if it's a reference to a constant (contains letters)
+                if (expression.matches(".*[a-zA-Z].*")) {
+                    return false;
+                }
+            }
+
+            // Exclude template and resource references
+            if (propertyValue.getType() == NDFValue.ValueType.TEMPLATE_REF ||
+                propertyValue.getType() == NDFValue.ValueType.RESOURCE_REF) {
+                return false;
+            }
+
+            // Exclude enums
+            if (propertyValue.getType() == NDFValue.ValueType.ENUM) {
+                return false;
+            }
+
+            // Only allow NUMBER types for mass modification
+            if (propertyValue.getType() != NDFValue.ValueType.NUMBER) {
+                return false;
+            }
+        }
+
+        // If we couldn't find the property value, use heuristic filtering
+        // Include numeric properties that are clearly modifiable values
+        if (name.toLowerCase().contains("value") || name.toLowerCase().contains("amount") ||
+            name.toLowerCase().contains("speed") || name.toLowerCase().contains("damage") ||
+            name.toLowerCase().contains("range") || name.toLowerCase().contains("cost") ||
+            name.toLowerCase().contains("time") || name.toLowerCase().contains("rate") ||
+            name.toLowerCase().contains("level") || name.toLowerCase().contains("max") ||
+            name.toLowerCase().contains("min") || name.toLowerCase().contains("bonus")) {
+            return true;
+        }
+
+        // Default: include simple properties in known modules (but exclude complex ones)
+        return originalPath.contains("ModulesDescriptors") && !originalPath.contains("TagSet") &&
+               !originalPath.contains("WeaponDescriptor") && !originalPath.contains("TurretDescriptor");
+    }
+
+    /**
+     * Helper method to get property value from a path for validation
+     */
+    private NDFValue getPropertyValueFromPath(String path) {
+        // Try to find the property in the first unit that has it
+        for (ObjectValue unit : unitDescriptors) {
+            try {
+                NDFValue value = PropertyUpdater.getPropertyValue(unit, path);
+                if (value != null) {
+                    return value;
+                }
+            } catch (Exception e) {
+                // Ignore errors and continue
+            }
+        }
+        return null;
+    }
 }

@@ -23,6 +23,9 @@ import java.awt.event.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -403,7 +406,7 @@ public class MainWindow extends JFrame implements FileLoader {
 
         if (dialog.isModified()) {
             currentTab.setModified(true);
-            refreshCurrentTab();
+            refreshCurrentTabWithProgress();
             updateTitle();
         }
     }
@@ -433,7 +436,7 @@ public class MainWindow extends JFrame implements FileLoader {
 
                 if (massModifyDialog.isModified()) {
                     currentTab.setModified(true);
-                    refreshCurrentTab();
+                    refreshCurrentTabWithProgress();
                     updateTitle();
                 }
             }
@@ -1231,13 +1234,23 @@ public class MainWindow extends JFrame implements FileLoader {
 
     private void loadFileInBackground(File file) {
         JDialog progressDialog = new JDialog(this, "Loading File", true);
-        JLabel progressLabel = new JLabel("Loading " + file.getName() + "...", SwingConstants.CENTER);
-        progressLabel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        progressDialog.add(progressLabel);
-        progressDialog.setSize(400, 100);
+        JProgressBar progressBar = new JProgressBar();
+        progressBar.setIndeterminate(true);
+        progressBar.setString("Loading " + file.getName() + "...");
+        progressBar.setStringPainted(true);
+
+        JLabel statusLabel = new JLabel("Initializing...", SwingConstants.CENTER);
+
+        JPanel progressPanel = new JPanel(new BorderLayout(10, 10));
+        progressPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        progressPanel.add(statusLabel, BorderLayout.NORTH);
+        progressPanel.add(progressBar, BorderLayout.CENTER);
+
+        progressDialog.add(progressPanel);
+        progressDialog.setSize(450, 120);
         progressDialog.setLocationRelativeTo(this);
-        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+        SwingWorker<Void, String> worker = new SwingWorker<Void, String>() {
             private List<NDFValue.ObjectValue> ndfObjects;
             private NDFValue.NDFFileType fileType;
             private NDFParser parser;
@@ -1246,20 +1259,31 @@ public class MainWindow extends JFrame implements FileLoader {
             @Override
             protected Void doInBackground() throws Exception {
                 try {
+                    publish("Reading file...");
                     fileType = NDFValue.NDFFileType.fromFilename(file.getName());
 
                     String sourceContent = Files.readString(file.toPath(), StandardCharsets.UTF_8);
 
+                    publish("Parsing NDF content...");
                     try (Reader reader = new StringReader(sourceContent)) {
                         parser = new NDFParser(reader);
                         parser.setFileType(fileType);
                         parser.setOriginalSourceContent(sourceContent);
                         ndfObjects = parser.parse();
                     }
+
+                    publish("Parsed " + ndfObjects.size() + " objects");
                 } catch (Exception e) {
                     error = e;
                 }
                 return null;
+            }
+
+            @Override
+            protected void process(List<String> chunks) {
+                if (!chunks.isEmpty()) {
+                    statusLabel.setText(chunks.get(chunks.size() - 1));
+                }
             }
 
             @Override
@@ -1282,7 +1306,8 @@ public class MainWindow extends JFrame implements FileLoader {
                         error.printStackTrace();
                     } else {
                         // Update progress text to show UI initialization
-                        progressLabel.setText("Initializing UI with " + ndfObjects.size() + " objects...");
+                        statusLabel.setText("Initializing UI with " + ndfObjects.size() + " objects...");
+                        progressBar.setString("Scanning properties...");
 
                         // Use a normal Java Thread for heavy operations
                         new Thread(() -> {
@@ -1393,43 +1418,108 @@ public class MainWindow extends JFrame implements FileLoader {
     }
 
     private void saveTabToFile(FileTabState tabState, File file) {
-        try {
-            try (Writer writer = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
-                NDFWriter ndfWriter = new NDFWriter(writer, true); // Enable formatting preservation
+        // Create progress dialog
+        JDialog progressDialog = new JDialog(this, "Saving File", true);
+        JProgressBar progressBar = new JProgressBar();
+        progressBar.setIndeterminate(true);
+        progressBar.setString("Saving " + file.getName() + "...");
+        progressBar.setStringPainted(true);
 
-                if (tabState.getParser() != null) {
-                    ndfWriter.setOriginalTokens(tabState.getParser().getOriginalTokens());
+        progressDialog.add(progressBar);
+        progressDialog.setSize(300, 100);
+        progressDialog.setLocationRelativeTo(this);
 
-                    String[] sourceLines = tabState.getParser().getSourceLines();
-                    if (sourceLines != null) {
-                        String originalContent = String.join("\n", sourceLines);
-                        ndfWriter.setOriginalSourceContent(originalContent);
-                    }
+        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            private Exception error;
+
+            @Override
+            protected Void doInBackground() throws Exception {
+                try {
+                    saveTabToFileInternal(tabState, file);
+                } catch (Exception e) {
+                    error = e;
                 }
-
-                ndfWriter.setModificationTracker(tabState.getModificationTracker());
-                markModifiedObjects(ndfWriter, tabState);
-
-                ndfWriter.write(tabState.getUnitDescriptors());
+                return null;
             }
-            tabState.setModified(false);
-            updateTabTitle(tabState);
-            updateTitle();
 
-            JOptionPane.showMessageDialog(
-                this,
-                "File saved successfully.",
-                "File Saved",
-                JOptionPane.INFORMATION_MESSAGE
-            );
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(
-                this,
-                "Error saving file: " + ex.getMessage(),
-                "Error",
-                JOptionPane.ERROR_MESSAGE
-            );
-            ex.printStackTrace();
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+                if (error != null) {
+                    JOptionPane.showMessageDialog(
+                        MainWindow.this,
+                        "Error saving file: " + error.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE
+                    );
+                    error.printStackTrace();
+                } else {
+                    refreshCurrentTabWithProgress();
+                    JOptionPane.showMessageDialog(
+                        MainWindow.this,
+                        "File saved successfully.",
+                        "File Saved",
+                        JOptionPane.INFORMATION_MESSAGE
+                    );
+                }
+            }
+        };
+
+        worker.execute();
+        progressDialog.setVisible(true);
+    }
+
+    private void saveTabToFileInternal(FileTabState tabState, File file) throws Exception {
+        Path originalPath = file.toPath();
+        Path dir = originalPath.getParent();
+        if (dir == null) dir = Paths.get(".");
+        Path tempPath = dir.resolve(file.getName() + ".saving.tmp");
+        Path backupPath = dir.resolve(file.getName() + ".bak");
+
+        // 1) Write to temp file first
+        if (Files.exists(tempPath)) {
+            Files.delete(tempPath);
+        }
+        try (Writer writer = new BufferedWriter(new FileWriter(tempPath.toFile(), StandardCharsets.UTF_8))) {
+            NDFWriter ndfWriter = new NDFWriter(writer, true); // Enable formatting preservation
+
+            if (tabState.getParser() != null) {
+                ndfWriter.setOriginalTokens(tabState.getParser().getOriginalTokens());
+
+                String[] sourceLines = tabState.getParser().getSourceLines();
+                if (sourceLines != null) {
+                    String originalContent = String.join("\n", sourceLines);
+                    ndfWriter.setOriginalSourceContent(originalContent);
+                }
+            }
+
+            ndfWriter.setModificationTracker(tabState.getModificationTracker());
+            markModifiedObjects(ndfWriter, tabState);
+
+            ndfWriter.write(tabState.getUnitDescriptors());
+        }
+
+        // 2) Create/refresh backup of the original (if it exists)
+        boolean hadOriginal = Files.exists(originalPath);
+        if (hadOriginal) {
+            Files.move(originalPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        // 3) Move temp into place atomically if possible
+        try {
+            Files.move(tempPath, originalPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception atomicEx) {
+            // Fallback to regular move within same directory; backup already taken
+            Files.move(tempPath, originalPath, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        // 4) Success: clear modified flag and remove backup
+        tabState.setModified(false);
+        updateTabTitle(tabState);
+        updateTitle();
+
+        if (Files.exists(backupPath)) {
+            try { Files.delete(backupPath); } catch (Exception ignore) { /* keep .bak if locked */ }
         }
     }
 
@@ -1495,6 +1585,93 @@ public class MainWindow extends JFrame implements FileLoader {
         if (currentPanel != null) {
             currentPanel.refresh();
         }
+    }
+
+    private void refreshCurrentTabWithProgress() {
+        FileTabPanel currentPanel = getCurrentTabPanel();
+        if (currentPanel == null) {
+            return;
+        }
+
+        // Create progress dialog
+        JDialog progressDialog = new JDialog(this, "Updating View", true);
+
+        JProgressBar progressBar = new JProgressBar();
+        progressBar.setIndeterminate(true);
+        progressBar.setString("Refreshing tree view...");
+        progressBar.setStringPainted(true);
+
+        JLabel statusLabel = new JLabel("Initializing...", SwingConstants.CENTER);
+
+        JPanel progressPanel = new JPanel(new BorderLayout(10, 10));
+        progressPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        progressPanel.add(statusLabel, BorderLayout.NORTH);
+        progressPanel.add(progressBar, BorderLayout.CENTER);
+
+        progressDialog.add(progressPanel);
+        progressDialog.setSize(450, 120);
+        progressDialog.setLocationRelativeTo(this);
+
+        SwingWorker<Void, String> worker = new SwingWorker<Void, String>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                // Get the current tab state
+                FileTabState tabState = currentPanel.getTabState();
+
+                publish("Scanning properties...");
+
+                // Do the heavy work in background: property scanning
+                PropertyScanner propertyScanner = null;
+                DefaultListModel<NDFValue.ObjectValue> listModel = null;
+
+                if (tabState.hasData()) {
+                    // Create property scanner in background
+                    propertyScanner = new PropertyScanner(tabState.getUnitDescriptors(), tabState.getFileType());
+                    propertyScanner.scanProperties();
+
+                    publish("Building list model...");
+
+                    // Create list model in background
+                    listModel = new DefaultListModel<>();
+                    for (NDFValue.ObjectValue unit : tabState.getUnitDescriptors()) {
+                        listModel.addElement(unit);
+                    }
+                }
+
+                publish("Updating UI...");
+
+                // Update UI on EDT with pre-processed data
+                final PropertyScanner finalScanner = propertyScanner;
+                final DefaultListModel<NDFValue.ObjectValue> finalModel = listModel;
+
+                SwingUtilities.invokeLater(() -> {
+                    if (tabState.hasData() && finalScanner != null && finalModel != null) {
+                        // Use the optimized method with pre-processed data
+                        currentPanel.updateFromTabStateWithPreprocessedData(finalScanner, finalModel);
+                    } else {
+                        // Fallback for empty tabs
+                        currentPanel.updateFromTabState();
+                    }
+                });
+
+                return null;
+            }
+
+            @Override
+            protected void process(List<String> chunks) {
+                if (!chunks.isEmpty()) {
+                    progressBar.setString(chunks.get(chunks.size() - 1));
+                }
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+            }
+        };
+
+        worker.execute();
+        progressDialog.setVisible(true);
     }
 
     /**

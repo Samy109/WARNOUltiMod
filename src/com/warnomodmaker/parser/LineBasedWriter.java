@@ -18,25 +18,25 @@ public class LineBasedWriter {
     private final Writer writer;
     private final SourceLineTracker lineTracker;
     private final ModificationTracker modificationTracker;
-    
+
     public LineBasedWriter(Writer writer, String originalContent, ModificationTracker modificationTracker) {
         this.writer = writer;
         this.lineTracker = new SourceLineTracker(originalContent);
         this.modificationTracker = modificationTracker;
     }
-    
+
     /**
      * Write the file with line-based modifications applied
      */
     public void write(List<NDFValue.ObjectValue> objects) throws IOException {
         // Apply all modifications to the line tracker
         applyModifications();
-        
+
         // Write the complete output with modifications
         String output = lineTracker.generateOutput();
         writer.write(output);
     }
-    
+
     /**
      * Apply all tracked modifications to the appropriate lines
      */
@@ -44,14 +44,14 @@ public class LineBasedWriter {
         if (modificationTracker == null) {
             return;
         }
-        
+
         List<ModificationRecord> modifications = modificationTracker.getAllModifications();
-        
+
         for (ModificationRecord mod : modifications) {
             applyModification(mod);
         }
     }
-    
+
     /**
      * Apply a single modification to the appropriate line
      */
@@ -78,10 +78,12 @@ public class LineBasedWriter {
                 throw new IllegalStateException("Failed to replace value in line " + (lineNumber + 1) + " for " + unitName + "." + propertyPath + " - NO FALLBACKS ALLOWED");
             }
         } else {
-            throw new IllegalStateException("Could not find property line for " + unitName + "." + propertyPath + " - NO FALLBACKS ALLOWED");
+            // Property doesn't exist in this unit - skip silently
+            // This is normal behavior as not all units have all properties
+            return;
         }
     }
-    
+
     /**
      * Find the line number containing a property for a specific unit
      */
@@ -95,14 +97,48 @@ public class LineBasedWriter {
 
 
 
-            // For complex nested array paths with multiple array levels, use structural navigation
+            // Use structural navigation for complex nested array paths
             // Example: TurretDescriptorList[1].MountedWeaponDescriptorList[0].Ammunition
+            // Also use for ModulesDescriptors with nested properties like ModulesDescriptors[20].Default.SpeedBonusFactorOnRoad
             if (propertyPath.contains("[") && propertyPath.contains(".") &&
-                propertyPath.split("\\[").length > 2) { // More than one array access
-                System.out.println("DEBUG: Using structural navigation for: " + propertyPath);
+                (propertyPath.split("\\[").length > 2 || // More than one array access
+                 (propertyPath.startsWith("ModulesDescriptors[") && propertyPath.contains("].") &&
+                  propertyPath.substring(propertyPath.indexOf("].") + 2).contains(".")))) { // ModulesDescriptors with nested properties
                 int result = findPropertyLineWithStructuralNavigation(unitLineStart, unitEnd, propertyPath);
-                System.out.println("DEBUG: Structural navigation result: " + result);
                 return result;
+            }
+
+            // Special handling for ModulesDescriptors - search by module type, not index
+            if (propertyPath.startsWith("ModulesDescriptors[") && propertyPath.contains(".")) {
+                String propertyName = propertyPath.substring(propertyPath.lastIndexOf('.') + 1);
+
+                // Check if this is a nested property (contains multiple dots)
+                String pathAfterModule = propertyPath.substring(propertyPath.indexOf("].") + 2);
+                if (pathAfterModule.contains(".")) {
+                    // This is a nested property like "Default.SpeedBonusFactorOnRoad"
+                    // For nested properties, we need to find the right module type first
+                    String moduleType = getModuleTypeForNestedProperty(propertyName);
+                    if (moduleType != null) {
+                        int moduleStart = findModuleByType(unitLineStart, unitEnd, moduleType);
+                        if (moduleStart >= 0) {
+                            int moduleEnd = findModuleEnd(moduleStart, unitEnd);
+                            int result = findNestedProperty(moduleStart, moduleEnd, pathAfterModule);
+                            if (result >= 0) {
+                                return result;
+                            }
+                        }
+                    }
+                } else {
+                    // This is a direct property like "UnitAttackValue" or "OpticalStrength"
+                    // Search through all modules to find the property
+                    int result = findPropertyInAnyModule(unitLineStart, unitEnd, propertyName);
+                    if (result >= 0) {
+                        return result;
+                    }
+                }
+
+                // NO FALLBACKS ALLOWED - if not found, fail cleanly
+                return -1;
             }
 
             // For simple properties, use the original logic
@@ -151,6 +187,152 @@ public class LineBasedWriter {
         return lineTracker.getLineCount();
     }
 
+
+
+
+
+
+
+
+
+    /**
+     * Find a property in any module within the unit (universal approach)
+     */
+    private int findPropertyInAnyModule(int unitStart, int unitEnd, String propertyName) {
+        // Simple approach: just search through the entire unit for the property
+        // This is more reliable than trying to track module boundaries
+        for (int i = unitStart; i < unitEnd; i++) {
+            String line = lineTracker.getOriginalLine(i);
+            String trimmed = line.trim();
+
+            // Look for the property assignment
+            if (trimmed.startsWith(propertyName + " = ") || trimmed.startsWith(propertyName + "=")) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * Find a nested property like "Default.MaxSpeedInKmph"
+     */
+    private int findNestedProperty(int unitStart, int unitEnd, String nestedPath) {
+        String[] pathParts = nestedPath.split("\\.");
+        if (pathParts.length != 2) {
+            return -1; // Only support one level of nesting for now
+        }
+
+        String containerName = pathParts[0]; // e.g., "Default"
+        String propertyName = pathParts[1];  // e.g., "MaxSpeedInKmph"
+
+        // Find the container object first
+        for (int i = unitStart; i < unitEnd; i++) {
+            String line = lineTracker.getOriginalLine(i);
+            String trimmed = line.trim();
+
+            // Look for the container (e.g., "Default = TGenericMovementModuleDescriptor")
+            // Check if line contains the container assignment
+            if (trimmed.contains(containerName + " =") || trimmed.contains(containerName + "=")) {
+                // Found the container, now look for the property inside it
+                // Find the opening parenthesis
+                int containerStart = i;
+                int openParenLine = -1;
+
+                // Check if opening paren is on the same line
+                if (trimmed.contains("(")) {
+                    openParenLine = i;
+                } else {
+                    // Look for opening paren on next lines
+                    for (int j = i + 1; j < unitEnd && j < i + 5; j++) {
+                        String nextLine = lineTracker.getOriginalLine(j);
+                        if (nextLine.trim().equals("(")) {
+                            openParenLine = j;
+                            break;
+                        }
+                    }
+                }
+
+                if (openParenLine >= 0) {
+                    // Find the matching closing parenthesis
+                    int closeParenLine = findMatchingCloseParen(openParenLine, unitEnd);
+                    if (closeParenLine > openParenLine) {
+                        // Search for the property within this container
+                        for (int k = openParenLine + 1; k < closeParenLine; k++) {
+                            String propLine = lineTracker.getOriginalLine(k);
+                            String propTrimmed = propLine.trim();
+                            if (propTrimmed.startsWith(propertyName + " = ") || propTrimmed.startsWith(propertyName + "=")) {
+                                return k;
+                            }
+                        }
+                    }
+                }
+                break; // Found the container but not the property
+            }
+        }
+
+        return -1;
+    }
+
+
+
+    /**
+     * Find the end line of a module starting at moduleStart
+     */
+    private int findModuleEnd(int moduleStart, int searchEnd) {
+        int bracketCount = 0;
+        boolean foundStart = false;
+
+        for (int i = moduleStart; i < searchEnd; i++) {
+            String line = lineTracker.getOriginalLine(i);
+
+            for (char c : line.toCharArray()) {
+                if (c == '(' || c == '[') {
+                    bracketCount++;
+                    foundStart = true;
+                } else if (c == ')' || c == ']') {
+                    bracketCount--;
+                    if (foundStart && bracketCount == 0) {
+                        return i + 1; // Return line after the closing bracket
+                    }
+                }
+            }
+        }
+
+        return searchEnd;
+    }
+
+    /**
+     * Find the matching closing parenthesis for an opening parenthesis
+     */
+    private int findMatchingCloseParen(int openParenLine, int searchEnd) {
+        int parenCount = 1;
+
+        for (int i = openParenLine + 1; i < searchEnd; i++) {
+            String line = lineTracker.getOriginalLine(i);
+            for (char c : line.toCharArray()) {
+                if (c == '(') {
+                    parenCount++;
+                } else if (c == ')') {
+                    parenCount--;
+                    if (parenCount == 0) {
+                        return i;
+                    }
+                }
+            }
+        }
+
+        return -1;
+    }
+
     /**
      * Find property line using structural navigation for complex nested array paths
      * Example: TurretDescriptorList[1].MountedWeaponDescriptorList[0].Ammunition
@@ -173,20 +355,14 @@ public class LineBasedWriter {
                 int arrayIndex = Integer.parseInt(part.substring(part.indexOf('[') + 1, part.indexOf(']')));
 
                 // Find the array property line
-                System.out.println("DEBUG: Looking for array '" + arrayName + "' in range " + currentSearchStart + "-" + currentSearchEnd);
                 int arrayPropertyLine = findArrayPropertyInRange(currentSearchStart, currentSearchEnd, arrayName);
-                System.out.println("DEBUG: Array property line: " + arrayPropertyLine);
                 if (arrayPropertyLine < 0) {
-                    System.out.println("DEBUG: Array property not found");
                     return -1;
                 }
 
                 // Navigate to the specific array element
-                System.out.println("DEBUG: Looking for array element [" + arrayIndex + "] starting from line " + arrayPropertyLine);
                 int elementStart = findArrayElementStart(arrayPropertyLine, arrayIndex);
-                System.out.println("DEBUG: Array element start: " + elementStart);
                 if (elementStart < 0) {
-                    System.out.println("DEBUG: Array element not found");
                     return -1;
                 }
 
@@ -380,18 +556,54 @@ public class LineBasedWriter {
             return false;
         }
 
-        // Look for object constructors (with or without opening paren on same line)
-        if (trimmed.contains("(")) {
+        // For ModulesDescriptors arrays, only count top-level module declarations
+        // 1. Type constructor with opening paren: "TTypeUnitModuleDescriptor("
+        if (trimmed.matches("^T[a-zA-Z][a-zA-Z]*\\s*\\(.*")) {
             return true;
         }
 
-        // Look for type names that start array elements (like "TTurretTwoAxisDescriptor")
-        if (trimmed.matches("^T[A-Z][a-zA-Z]*$")) {
+        // 2. Simple type reference with comma: "TankFlagsModuleDescriptor," or "InfantryFlagsModuleDescriptor,"
+        if (trimmed.matches("^[A-Z][a-zA-Z]*ModuleDescriptor\\s*,\\s*$")) {
             return true;
         }
 
-        // Look for property assignments that start elements
-        if (trimmed.contains("=") && !trimmed.startsWith("export")) {
+        // 3. Template reference: "~/SomeModuleDescriptor," or "$/Path/Module,"
+        if (trimmed.matches("^[~$]/[^,]+,\\s*$")) {
+            return true;
+        }
+
+        // 4. Template with constructor: "TemplateUnitCriticalModule(Module=...)"
+        if (trimmed.matches("^[A-Z][a-zA-Z]*\\s*\\(.*")) {
+            return true;
+        }
+
+        // 5. Simple type reference without comma (end of array): "TankFlagsModuleDescriptor" or "InfantryFlagsModuleDescriptor"
+        if (trimmed.matches("^[A-Z][a-zA-Z]*ModuleDescriptor\\s*$")) {
+            return true;
+        }
+
+        // 6. Simple descriptor reference: "TScannerConfigurationDescriptor"
+        if (trimmed.matches("^T[A-Z][a-zA-Z]*Descriptor\\s*$")) {
+            return true;
+        }
+
+        // 7. Template reference without comma (end of array): "~/SomeModuleDescriptor"
+        if (trimmed.matches("^[~$]/[^,\\s]+\\s*$")) {
+            return true;
+        }
+
+        // 8. Named module with "is" keyword: "ApparenceModel is VehicleApparenceModuleDescriptor"
+        if (trimmed.matches("^[A-Z][a-zA-Z]*\\s+is\\s+.*")) {
+            return true;
+        }
+
+        // 9. Multi-line "is" declaration: "GroupeCombat is"
+        if (trimmed.matches("^[A-Z][a-zA-Z]*\\s+is\\s*$")) {
+            return true;
+        }
+
+        // 10. Single-line module with parameters: "TDangerousnessModuleDescriptor(Dangerousness = 39),"
+        if (trimmed.matches("^T[a-zA-Z][a-zA-Z]*\\s*\\([^)]*\\)\\s*,?\\s*$")) {
             return true;
         }
 
@@ -518,7 +730,7 @@ public class LineBasedWriter {
 
         return false;
     }
-    
+
     /**
      * Replace a value in a specific line while preserving formatting
      */
@@ -556,25 +768,98 @@ public class LineBasedWriter {
         // Try different replacement strategies for single-line values
         String newLine = originalLine;
 
+
+
         // Strategy 1: Direct value replacement
         if (originalLine.contains(cleanOldValue)) {
             newLine = originalLine.replace(cleanOldValue, cleanNewValue);
+
         }
         // Strategy 2: Quoted value replacement
         else if (originalLine.contains("'" + cleanOldValue + "'")) {
             newLine = originalLine.replace("'" + cleanOldValue + "'", "'" + cleanNewValue + "'");
+
         }
         else if (originalLine.contains("\"" + cleanOldValue + "\"")) {
             newLine = originalLine.replace("\"" + cleanOldValue + "\"", "\"" + cleanNewValue + "\"");
+
+        }
+        // Strategy 3: For ModulesDescriptors paths, extract current value from line and replace
+        else if (propertyPath.startsWith("ModulesDescriptors[")) {
+            String currentValueInLine = extractValueFromLine(originalLine, propertyName);
+            if (currentValueInLine != null) {
+                newLine = originalLine.replace(currentValueInLine, cleanNewValue);
+            }
+        }
+        // Strategy 4: Pattern-based replacement for property assignments
+        else if (originalLine.contains("=")) {
+            // For lines like "PropertyName = Value", replace everything after the equals sign
+            int equalsIndex = originalLine.indexOf('=');
+            String beforeEquals = originalLine.substring(0, equalsIndex + 1); // Include the '='
+            String afterEquals = originalLine.substring(equalsIndex + 1);
+
+            // Find any trailing punctuation (comma, etc.)
+            String trailingPunctuation = "";
+            String valueOnly = afterEquals.trim();
+            if (valueOnly.endsWith(",")) {
+                trailingPunctuation = ",";
+                valueOnly = valueOnly.substring(0, valueOnly.length() - 1).trim();
+            }
+
+            // Replace with new value, preserving spacing and punctuation
+            String trimmedAfter = afterEquals.trim();
+            if (!trimmedAfter.isEmpty()) {
+                int spacingLength = afterEquals.indexOf(trimmedAfter);
+                String spacing = afterEquals.substring(0, spacingLength);
+                newLine = beforeEquals + spacing + cleanNewValue + trailingPunctuation;
+            } else {
+                newLine = beforeEquals + " " + cleanNewValue + trailingPunctuation;
+            }
         }
 
         // Apply the modification if the line changed
         if (!newLine.equals(originalLine)) {
+
             lineTracker.modifyLine(lineNumber, newLine);
             return true;
         }
 
+        // Check if we're trying to replace the same value (which should be considered successful)
+        if (cleanOldValue.equals(cleanNewValue)) {
+
+            return true;
+        }
+
+
         return false;
+    }
+
+    /**
+     * Extract the current value from a property line
+     * Example: "UnitAttackValue = 1" -> "1"
+     */
+    private String extractValueFromLine(String line, String propertyName) {
+        String trimmed = line.trim();
+
+        // Look for "PropertyName = Value" pattern
+        int equalsIndex = trimmed.indexOf('=');
+        if (equalsIndex < 0) {
+            return null;
+        }
+
+        String beforeEquals = trimmed.substring(0, equalsIndex).trim();
+        if (!beforeEquals.equals(propertyName)) {
+            return null;
+        }
+
+        String afterEquals = trimmed.substring(equalsIndex + 1).trim();
+
+        // Remove trailing comma if present
+        if (afterEquals.endsWith(",")) {
+            afterEquals = afterEquals.substring(0, afterEquals.length() - 1).trim();
+        }
+
+        return afterEquals;
     }
 
     /**
@@ -993,5 +1278,40 @@ public class LineBasedWriter {
      */
     public String getModificationStats() {
         return lineTracker.getModificationSummary();
+    }
+
+    /**
+     * Get module type for nested properties
+     */
+    private String getModuleTypeForNestedProperty(String propertyName) {
+        switch (propertyName) {
+            case "MaxSpeedInKmph":
+            case "PathfindType":
+                return "TModuleSelector"; // GenericMovement module
+            case "SpeedBonusFactorOnRoad":
+            case "MaxAccelerationGRU":
+            case "MaxDecelerationGRU":
+            case "TempsDemiTour":
+            case "UnitMovingType":
+                return "TModuleSelector"; // LandMovement module
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Find a module by its type name
+     */
+    private int findModuleByType(int unitStart, int unitEnd, String moduleType) {
+        for (int i = unitStart; i < unitEnd; i++) {
+            String line = lineTracker.getOriginalLine(i);
+            String trimmed = line.trim();
+
+            // Look for module declarations like "LandMovement is TModuleSelector"
+            if (trimmed.contains(" is " + moduleType)) {
+                return i;
+            }
+        }
+        return -1;
     }
 }

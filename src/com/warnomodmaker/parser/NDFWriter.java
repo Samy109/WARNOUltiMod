@@ -31,11 +31,9 @@ public class NDFWriter {
 
 
     public void setOriginalTokens(List<NDFToken> tokens) {
-        // Keep for compatibility with MainWindow, but not used in line-based approach
     }
 
     public void markObjectAsModified(ObjectValue object) {
-        // Keep for compatibility with MainWindow, but not used in line-based approach
     }
 
     public void setOriginalSourceContent(String content) {
@@ -48,9 +46,8 @@ public class NDFWriter {
 
 
     public void write(List<ObjectValue> ndfObjects) throws IOException {
-        // ONLY line-based writing - NO FALLBACKS ALLOWED
         if (originalSourceContent == null || modificationTracker == null) {
-            throw new IllegalStateException("Line-based writing requires originalSourceContent and modificationTracker - NO FALLBACKS ALLOWED");
+            throw new IllegalStateException("Line-based writing requires originalSourceContent and modificationTracker");
         }
 
         writeWithLineBasedReplacement(ndfObjects);
@@ -65,7 +62,6 @@ public class NDFWriter {
 
 
     private void writeWithLineBasedReplacement(List<ObjectValue> ndfObjects) throws IOException {
-        // NO FALLBACKS - line-based writing ONLY
         LineBasedWriter lineWriter = new LineBasedWriter(writer, originalSourceContent, modificationTracker);
         lineWriter.write(ndfObjects);
     }
@@ -163,11 +159,11 @@ public class NDFWriter {
 
 
     private void writeValueContent(NDFValue value) throws IOException {
-        writeValue(value, false); // Use formatting-aware writing
+        writeValue(value, false);
     }
 
     private void writeCleanValue(NDFValue value) throws IOException {
-        writeValue(value, true); // Use clean writing
+        writeValue(value, true);
     }
 
     private void writeValue(NDFValue value, boolean useCleanFormatting) throws IOException {
@@ -281,7 +277,6 @@ public class NDFWriter {
             return;
         }
 
-        // Use original opening bracket formatting if available
         String openingBracket = array.getOriginalOpeningBracket();
         if (openingBracket.isEmpty()) {
             openingBracket = "[";
@@ -291,23 +286,19 @@ public class NDFWriter {
         for (int i = 0; i < elements.size(); i++) {
             NDFValue element = elements.get(i);
 
-            // Use original element prefix formatting if available
             String elementPrefix = array.getOriginalElementPrefix(i);
             if (!elementPrefix.isEmpty()) {
                 writer.write(elementPrefix);
             } else if (array.isOriginallyMultiLine()) {
-                writer.write("\n  "); // Default multi-line formatting
+                writer.write("\n  ");
             }
 
-            // Write the element content
             writeValueContent(element);
 
-            // Use original element suffix formatting if available
             String elementSuffix = array.getOriginalElementSuffix(i);
             if (!elementSuffix.isEmpty()) {
                 writer.write(elementSuffix);
             } else {
-                // Add comma for all but the last element
                 if (i < elements.size() - 1) {
                     writer.write(",");
                 }
@@ -317,7 +308,6 @@ public class NDFWriter {
             }
         }
 
-        // Use original closing bracket formatting if available
         String closingBracket = array.getOriginalClosingBracket();
         if (closingBracket.isEmpty()) {
             if (array.isOriginallyMultiLine()) {
@@ -391,11 +381,9 @@ public class NDFWriter {
         for (int i = 0; i < elements.size(); i++) {
             NDFValue element = elements.get(i);
 
-            // Clean indentation for each element
             writer.write("  ");
             writeCleanValue(element);
 
-            // Add comma for all but the last element
             if (i < elements.size() - 1) {
                 writer.write(",");
             }
@@ -450,13 +438,9 @@ public class NDFWriter {
         writer.write("]");
     }
 
-    /**
-     * CLEAN RGBA WRITING - Special compact format for RGBA objects
-     */
     private void writeCleanRGBA(ObjectValue rgbaObject) throws IOException {
         writer.write("RGBA[");
 
-        // Find the array property (usually "values" or similar)
         NDFValue arrayValue = null;
         for (NDFValue value : rgbaObject.getProperties().values()) {
             if (value instanceof ArrayValue) {
@@ -473,7 +457,6 @@ public class NDFWriter {
                 NDFValue element = elements.get(i);
                 if (element instanceof NumberValue) {
                     NumberValue numberValue = (NumberValue) element;
-                    // Write as integer if it was originally an integer
                     if (numberValue.wasOriginallyInteger()) {
                         writer.write(String.valueOf(numberValue.getIntValue()));
                     } else {
@@ -492,33 +475,15 @@ public class NDFWriter {
         writer.write("]");
     }
 
-    /**
-     * CLEAN OBJECT WRITING
-     */
     private void writeCleanObject(ObjectValue object) throws IOException {
-        // Write type name
         writer.write(object.getTypeName());
-
-        // Write object content using clean method
         writeCleanObjectFromMemoryModel(object);
     }
 
-    // ===== STANDALONE UNITEDESCRIPTOR FUNCTIONALITY =====
-    // Specialized writing for UniteDescriptorOLD.ndf without affecting other files
-
-    /**
-     * Check if we're writing a UniteDescriptor file
-     */
     private boolean isUniteDescriptorFile() {
-        // Simple heuristic: always return false since we're using line-based approach
-        // The line-based writer handles all formatting correctly
         return false;
     }
 
-    /**
-     * STANDALONE UniteDescriptor ModulesDescriptors array writing
-     * Handles the unique patterns: named assignments, template refs, objects
-     */
     private void writeUniteDescriptorModulesArray(NDFValue.ArrayValue array) throws IOException {
         List<NDFValue> elements = array.getElements();
 
@@ -532,11 +497,9 @@ public class NDFWriter {
         for (int i = 0; i < elements.size(); i++) {
             NDFValue element = elements.get(i);
 
-            // Clean indentation for each element
             writer.write("    ");
             writeUniteDescriptorModuleElement(element);
 
-            // Add comma for all but the last element
             if (i < elements.size() - 1) {
                 writer.write(",");
             }
@@ -553,26 +516,22 @@ public class NDFWriter {
         if (element instanceof NDFValue.TemplateRefValue) {
             NDFValue.TemplateRefValue templateRef = (NDFValue.TemplateRefValue) element;
             if (templateRef.getInstanceName() != null) {
-                // Named assignment: "FacingInfos is ~/FacingInfosModuleDescriptor"
                 writer.write(templateRef.getInstanceName());
                 writer.write(" is ");
                 writer.write(templateRef.getPath());
             } else {
-                // Simple template ref: "~/TargetManagerModuleSelector"
                 writer.write(templateRef.getPath());
             }
         } else if (element instanceof NDFValue.ObjectValue) {
             NDFValue.ObjectValue objectValue = (NDFValue.ObjectValue) element;
             if (objectValue.getInstanceName() != null) {
-                // Named assignment: "ApparenceModel is VehicleApparenceModuleDescriptor(...)"
                 writer.write(objectValue.getInstanceName());
                 writer.write(" is ");
                 writer.write(objectValue.getTypeName());
-                writeCleanObjectFromMemoryModelInline(objectValue); // Use inline formatting for array elements
+                writeCleanObjectFromMemoryModelInline(objectValue);
             } else {
-                // Simple object: "TTagsModuleDescriptor(...)"
                 writer.write(objectValue.getTypeName());
-                writeCleanObjectFromMemoryModelInline(objectValue); // Use inline formatting for array elements
+                writeCleanObjectFromMemoryModelInline(objectValue);
             }
         } else {
             writeCleanValue(element);

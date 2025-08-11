@@ -16,6 +16,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class MassModifyDialog extends JDialog {
     private List<ObjectValue> unitDescriptors;
@@ -86,7 +89,7 @@ public class MassModifyDialog extends JDialog {
 
             progressDialog.add(progressBar);
             progressDialog.setSize(400, 100);
-            progressDialog.setLocationRelativeTo(this);
+            progressDialog.setLocationRelativeTo(getParent());
             SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
                 @Override
                 protected Void doInBackground() throws Exception {
@@ -215,6 +218,23 @@ public class MassModifyDialog extends JDialog {
 
         modificationTypeComboBox = new JComboBox<>(userTypes.toArray(new PropertyUpdater.ModificationType[0]));
         modificationTypeComboBox.addActionListener(this::modificationTypeChanged);
+
+        // Disallow math operators for non-numeric properties: when a property is selected, filter options
+        propertyComboBox.addActionListener(evt -> {
+            PropertyScanner.PropertyInfo selected = (PropertyScanner.PropertyInfo) propertyComboBox.getSelectedItem();
+            String category = (String) categoryComboBox.getSelectedItem();
+
+            // Only filter operators if we're in a category (not custom) and a property is selected
+            if (selected != null && !CATEGORY_CUSTOM.equals(category)) {
+                updateModificationOptionsForType(selected.type, false); // Don't reset selection
+            } else {
+                // For custom paths, show all operators and let the user choose
+                resetToAllOperators(false); // Don't reset selection
+            }
+        });
+        // For custom paths, don't restrict operators - let the user choose and fail gracefully if incompatible
+        // Only restrict when a specific property is selected from the dropdown
+
         formPanel.add(modificationTypeComboBox, gbc);
 
         // Value
@@ -328,6 +348,8 @@ public class MassModifyDialog extends JDialog {
             propertyPathField.setText("");
             propertyPathField.addActionListener(evt -> updateStatusLabel());
             propertyPathField.addCaretListener(evt -> updateStatusLabel());
+            // For custom paths, show all operators
+            resetToAllOperators(false); // Don't reset selection
         } else {
             propertyPathField.setEnabled(false);
             Map<String, List<PropertyScanner.PropertyInfo>> categories = propertyScanner.getCategorizedProperties();
@@ -339,9 +361,10 @@ public class MassModifyDialog extends JDialog {
             }
         }
 
-        // Select the first property if available
+        // Select the first property if available and filter operators accordingly
         if (propertyComboBox.getItemCount() > 0) {
             propertyComboBox.setSelectedIndex(0);
+            // This will trigger propertyChanged which will filter operators for the selected property
         }
 
         updateStatusLabel();
@@ -484,7 +507,7 @@ public class MassModifyDialog extends JDialog {
 
         progressDialog.add(progressBar);
         progressDialog.setSize(300, 100);
-        progressDialog.setLocationRelativeTo(this);
+        progressDialog.setLocationRelativeTo(getParent());
 
         SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
             @Override
@@ -761,8 +784,8 @@ public class MassModifyDialog extends JDialog {
                 return;
             }
 
-            // Apply the modification using PropertyUpdater (same as single updates!)
-            int modifiedCount = applyModificationToUnits(propertyPath, modificationType, value, valueText, replacementPropertyPath, filter);
+            // Apply the modification using PropertyUpdater with progress indicator
+            int modifiedCount = applyModificationToUnitsWithProgress(propertyPath, modificationType, value, valueText, replacementPropertyPath, filter);
 
             if (modifiedCount > 0) {
                 modified = true;
@@ -1034,6 +1057,138 @@ public class MassModifyDialog extends JDialog {
         return modifiedCount;
     }
 
+    private int applyModificationToUnitsWithProgress(String propertyPath, PropertyUpdater.ModificationType modificationType,
+                                                   double value, String valueText, String replacementPropertyPath, String filter) {
+        // Start with all units, then apply filters
+        List<ObjectValue> filteredUnits = new ArrayList<>(unitDescriptors);
+
+        // Apply tag filter first if enabled
+        if (tagFilterCheckBox.isSelected() && !selectedTags.isEmpty()) {
+            if (useAnyTagsMode) {
+                filteredUnits = TagExtractor.getUnitsWithTags(filteredUnits, selectedTags);
+            } else {
+                filteredUnits = TagExtractor.getUnitsWithAllTags(filteredUnits, selectedTags);
+            }
+        }
+
+        // Apply name filter if specified
+        if (filter != null) {
+            filteredUnits = filteredUnits.stream()
+                .filter(unit -> {
+                    String unitName = unit.getInstanceName();
+                    return unitName != null && unitName.toLowerCase().contains(filter);
+                })
+                .collect(Collectors.toList());
+        }
+
+        final List<ObjectValue> workingUnits = filteredUnits;
+
+        // Pre-filter to only include units that actually have the property
+        final List<ObjectValue> unitsWithProperty = new ArrayList<>();
+        for (ObjectValue unit : workingUnits) {
+            // For wildcard paths, check if the unit would be modified by the operation
+            if (propertyPath.contains("[*]")) {
+                // For wildcard paths, assume the unit has the property if it has the base structure
+                // The actual validation will happen during the update process
+                unitsWithProperty.add(unit);
+            } else {
+                // For non-wildcard paths, check if the property exists
+                NDFValue currentValue = PropertyUpdater.getPropertyValue(unit, propertyPath);
+                if (currentValue != null) {
+                    unitsWithProperty.add(unit);
+                }
+            }
+        }
+
+        final int totalUnits = unitsWithProperty.size();
+        if (totalUnits == 0) {
+            return 0;
+        }
+
+        // Create progress dialog
+        JDialog progressDialog = new JDialog(this, "Applying Mass Modification", true);
+        JProgressBar progressBar = new JProgressBar(0, totalUnits);
+        progressBar.setStringPainted(true);
+        progressBar.setString("Preparing...");
+
+        JLabel statusLabel = new JLabel("Initializing...", SwingConstants.CENTER);
+
+        JPanel progressPanel = new JPanel(new BorderLayout(10, 10));
+        progressPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        progressPanel.add(statusLabel, BorderLayout.NORTH);
+        progressPanel.add(progressBar, BorderLayout.CENTER);
+
+        progressDialog.add(progressPanel);
+        progressDialog.setSize(500, 150);
+        progressDialog.setLocationRelativeTo(getParent());
+
+        AtomicInteger modifiedCount = new AtomicInteger(0);
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+
+        SwingWorker<Integer, int[]> worker = new SwingWorker<Integer, int[]>() {
+            @Override
+            protected Integer doInBackground() throws Exception {
+                int count = 0;
+
+                for (int i = 0; i < unitsWithProperty.size() && !cancelled.get(); i++) {
+                    ObjectValue unit = unitsWithProperty.get(i);
+
+                    // Apply modification
+                    if (updatePropertyDirect(unit, propertyPath, modificationType, value, valueText, replacementPropertyPath)) {
+                        count++;
+                    }
+
+                    // Update progress with both current index and modified count
+                    publish(new int[]{i, count});
+
+                    // Small delay to prevent UI freezing
+                    if (i % 10 == 0) {
+                        Thread.sleep(1);
+                    }
+                }
+
+                return count;
+            }
+
+            @Override
+            protected void process(List<int[]> chunks) {
+                if (!chunks.isEmpty()) {
+                    int[] latest = chunks.get(chunks.size() - 1);
+                    int progress = latest[0];
+                    int currentModified = latest[1];
+
+                    progressBar.setValue(progress);
+                    progressBar.setString(String.format("Processing unit %d of %d", progress + 1, totalUnits));
+                    statusLabel.setText(String.format("Modified %d units so far...", currentModified));
+                    modifiedCount.set(currentModified);
+                }
+            }
+
+            @Override
+            protected void done() {
+                progressDialog.dispose();
+                try {
+                    modifiedCount.set(get());
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+
+        // Add cancel button
+        JButton cancelButton = new JButton("Cancel");
+        cancelButton.addActionListener(e -> {
+            cancelled.set(true);
+            worker.cancel(true);
+            progressDialog.dispose();
+        });
+        progressPanel.add(cancelButton, BorderLayout.SOUTH);
+
+        worker.execute();
+        progressDialog.setVisible(true);
+
+        return modifiedCount.get();
+    }
 
     private boolean updatePropertyDirect(ObjectValue unit, String propertyPath,
                                       PropertyUpdater.ModificationType modificationType, double value, String valueText, String replacementPropertyPath) {
@@ -1553,6 +1708,7 @@ public class MassModifyDialog extends JDialog {
             case MAP:
                 return updateMapProperty(unit, propertyPath, modificationType, value, valueText);
 
+
             case TUPLE:
                 return updateTupleProperty(unit, propertyPath, modificationType, value, valueText);
 
@@ -1561,6 +1717,154 @@ public class MassModifyDialog extends JDialog {
                 return PropertyUpdater.updateNumericProperty(unit, propertyPath, modificationType, value, modificationTracker);
         }
     }
+
+    // Infer a coarse type for editor filtering; strictly 1-1, no conversion or guessing.
+    private NDFValue.ValueType inferTypeFromPath(String path) {
+        if (path == null || path.isEmpty()) return NDFValue.ValueType.STRING; // conservative default
+        // MAP key access uses explicit .(Key) syntax; treat as MAP so we restrict to SET/REPLACE
+        if (path.contains(".(") && path.endsWith(")")) {
+            return NDFValue.ValueType.MAP;
+        }
+        return NDFValue.ValueType.STRING;
+    }
+
+
+
+
+
+    /**
+     * Update the modification type dropdown to only valid options for the selected property type.
+     * For non-numeric types, only SET and REPLACE_PROPERTY are allowed.
+     */
+    private void updateModificationOptionsForType(NDFValue.ValueType type) {
+        PropertyUpdater.ModificationType[] allTypes = PropertyUpdater.ModificationType.values();
+        java.util.List<PropertyUpdater.ModificationType> filtered = new java.util.ArrayList<>();
+
+        boolean numeric = (type == NDFValue.ValueType.NUMBER);
+        boolean array = (type == NDFValue.ValueType.ARRAY);
+        boolean map = (type == NDFValue.ValueType.MAP);
+
+        for (PropertyUpdater.ModificationType t : allTypes) {
+            if (t == PropertyUpdater.ModificationType.OBJECT_ADDED ||
+                t == PropertyUpdater.ModificationType.MODULE_ADDED ||
+                t == PropertyUpdater.ModificationType.PROPERTY_ADDED ||
+                t == PropertyUpdater.ModificationType.ARRAY_ELEMENT_ADDED) {
+                continue; // never show add operations here
+            }
+
+            if (numeric) {
+                // All numeric operators allowed
+                filtered.add(t);
+            } else if (map) {
+                // For MAP entries: allow math only if the specific entry’s value is numeric
+                // The scanner supplies types for expanded ".(Key)" entries; if type==NUMBER we will treat as numeric.
+                // Here, type==MAP indicates either the user typed a raw map path manually or we lack per-entry type;
+                // to be strict (no auto-conversion), restrict to SET/REPLACE.
+                if (t == PropertyUpdater.ModificationType.SET ||
+                    t == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+                    filtered.add(t);
+                }
+            } else if (array) {
+                // Arrays: only SET/REPLACE
+                if (t == PropertyUpdater.ModificationType.SET ||
+                    t == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+                    filtered.add(t);
+                }
+            } else {
+                // Strings, enums, refs, tuples, objects: only SET/REPLACE
+                if (t == PropertyUpdater.ModificationType.SET ||
+                    t == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+                    filtered.add(t);
+                }
+            }
+        }
+
+        modificationTypeComboBox.setModel(new DefaultComboBoxModel<>(filtered.toArray(new PropertyUpdater.ModificationType[0])));
+        modificationTypeChanged(null);
+    }
+
+    private void updateModificationOptionsForType(NDFValue.ValueType type, boolean resetSelection) {
+        PropertyUpdater.ModificationType currentSelection = (PropertyUpdater.ModificationType) modificationTypeComboBox.getSelectedItem();
+
+        PropertyUpdater.ModificationType[] allTypes = PropertyUpdater.ModificationType.values();
+        java.util.List<PropertyUpdater.ModificationType> filtered = new java.util.ArrayList<>();
+
+        boolean numeric = (type == NDFValue.ValueType.NUMBER);
+        boolean array = (type == NDFValue.ValueType.ARRAY);
+        boolean map = (type == NDFValue.ValueType.MAP);
+
+        for (PropertyUpdater.ModificationType t : allTypes) {
+            if (t == PropertyUpdater.ModificationType.OBJECT_ADDED ||
+                t == PropertyUpdater.ModificationType.MODULE_ADDED ||
+                t == PropertyUpdater.ModificationType.PROPERTY_ADDED ||
+                t == PropertyUpdater.ModificationType.ARRAY_ELEMENT_ADDED) {
+                continue; // never show add operations here
+            }
+
+            if (numeric) {
+                filtered.add(t);
+            } else if (map) {
+                if (t == PropertyUpdater.ModificationType.SET ||
+                    t == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+                    filtered.add(t);
+                }
+            } else if (array) {
+                if (t == PropertyUpdater.ModificationType.SET ||
+                    t == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+                    filtered.add(t);
+                }
+            } else {
+                if (t == PropertyUpdater.ModificationType.SET ||
+                    t == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+                    filtered.add(t);
+                }
+            }
+        }
+
+        modificationTypeComboBox.setModel(new DefaultComboBoxModel<>(filtered.toArray(new PropertyUpdater.ModificationType[0])));
+
+        // Try to preserve the current selection if it's still valid
+        if (!resetSelection && currentSelection != null && filtered.contains(currentSelection)) {
+            modificationTypeComboBox.setSelectedItem(currentSelection);
+        }
+
+        modificationTypeChanged(null);
+    }
+
+    /**
+     * Reset modification type dropdown to show all operators (for custom paths)
+     */
+    private void resetToAllOperators() {
+        resetToAllOperators(true);
+    }
+
+    private void resetToAllOperators(boolean resetSelection) {
+        PropertyUpdater.ModificationType currentSelection = (PropertyUpdater.ModificationType) modificationTypeComboBox.getSelectedItem();
+
+        PropertyUpdater.ModificationType[] allTypes = PropertyUpdater.ModificationType.values();
+        java.util.List<PropertyUpdater.ModificationType> userTypes = new java.util.ArrayList<>();
+
+        for (PropertyUpdater.ModificationType type : allTypes) {
+            // Only include modification types that make sense for user operations
+            if (type != PropertyUpdater.ModificationType.OBJECT_ADDED &&
+                type != PropertyUpdater.ModificationType.MODULE_ADDED &&
+                type != PropertyUpdater.ModificationType.PROPERTY_ADDED &&
+                type != PropertyUpdater.ModificationType.ARRAY_ELEMENT_ADDED) {
+                userTypes.add(type);
+            }
+        }
+
+        modificationTypeComboBox.setModel(new DefaultComboBoxModel<>(userTypes.toArray(new PropertyUpdater.ModificationType[0])));
+
+        // Try to preserve the current selection if it's still valid
+        if (!resetSelection && currentSelection != null && userTypes.contains(currentSelection)) {
+            modificationTypeComboBox.setSelectedItem(currentSelection);
+        }
+
+        modificationTypeChanged(null);
+    }
+
+
 
 
     private void showDebugInfo(ActionEvent e) {

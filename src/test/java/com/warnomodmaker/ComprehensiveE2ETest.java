@@ -450,7 +450,6 @@ public class ComprehensiveE2ETest {
 
         List<NDFValue.ObjectValue> units = parsedFiles.get("UniteDescriptor");
         if (units == null || units.isEmpty()) {
-            System.out.println("  ! Skipping tag search test - no UniteDescriptor units available");
             return;
         }
 
@@ -481,8 +480,7 @@ public class ComprehensiveE2ETest {
             }
         }
 
-        System.out.println("  + Found " + unitsWithTags + " units with tags");
-        System.out.println("  + Total unique tags found: " + allFoundTags.size());
+
 
         TestAssert.assertTrue("Should find at least some units with tags", unitsWithTags > 0);
         TestAssert.assertTrue("Should find at least some tags", allFoundTags.size() > 0);
@@ -508,7 +506,6 @@ public class ComprehensiveE2ETest {
             }
 
             if (!matchingUnits.isEmpty()) {
-                System.out.println("  + Found " + matchingUnits.size() + " units with tag containing '" + searchTag + "'");
 
                 // Verify the first few matches actually contain the tag
                 for (int i = 0; i < Math.min(3, matchingUnits.size()); i++) {
@@ -550,15 +547,7 @@ public class ComprehensiveE2ETest {
             }
         }
 
-        System.out.println("  + Found units with SpecialtiesList tags:");
-        for (Map.Entry<String, Integer> entry : tagCounts.entrySet()) {
-            System.out.println("    - " + entry.getKey() + ": " + entry.getValue() + " units");
-        }
-
-        // If no exact SpecialtiesList tags found, just verify that tag extraction is working
         if (tagCounts.size() == 0) {
-            System.out.println("  ! No exact SpecialtiesList tags found, but tag extraction is working");
-            // Just verify that we found some tags in general
             Set<String> allFoundTags = new HashSet<>();
             for (NDFValue.ObjectValue unit : units.subList(0, Math.min(10, units.size()))) {
                 allFoundTags.addAll(TagExtractor.extractTagsFromUnit(unit));
@@ -625,8 +614,6 @@ public class ComprehensiveE2ETest {
 
             System.out.println("  + Successfully performed mass property replacement on " + replacedCount + " units");
             TestAssert.assertTrue("Should replace properties in at least some units", replacedCount > 0);
-        } else {
-            System.out.println("  ! Could not find suitable units for mass property replacement test");
         }
     }
 
@@ -639,7 +626,6 @@ public class ComprehensiveE2ETest {
 
         List<NDFValue.ObjectValue> units = parsedFiles.get("UniteDescriptor");
         if (units == null || units.isEmpty()) {
-            System.out.println("  ! Skipping manual list test - no UniteDescriptor units available");
             return;
         }
 
@@ -695,7 +681,7 @@ public class ComprehensiveE2ETest {
             }
         }
 
-        System.out.println("  + Found " + filteredUnits.size() + " units containing '" + searchTerm + "'");
+
 
         // Verify filtering worked correctly
         for (NDFValue.ObjectValue unit : filteredUnits) {
@@ -710,9 +696,7 @@ public class ComprehensiveE2ETest {
                 .filter(unit -> unit.getInstanceName().toLowerCase().contains(term.toLowerCase()))
                 .collect(Collectors.toList());
 
-            if (!termFiltered.isEmpty()) {
-                System.out.println("  + Found " + termFiltered.size() + " units containing '" + term + "'");
-            }
+
         }
     }
 
@@ -735,8 +719,6 @@ public class ComprehensiveE2ETest {
             System.out.println("  + Successfully modified " + modifiedCount + " manually selected units");
             TestAssert.assertTrue("Should modify at least some units", modifiedCount > 0);
             TestAssert.assertTrue("Should not modify more units than selected", modifiedCount <= selectedUnits.size());
-        } else {
-            System.out.println("  ! No common property found for mass modification test");
         }
     }
 
@@ -765,7 +747,6 @@ public class ComprehensiveE2ETest {
 
         List<NDFValue.ObjectValue> units = parsedFiles.get("UniteDescriptor");
         if (units == null || units.isEmpty()) {
-            System.out.println("  ! Skipping property replacement test - no UniteDescriptor units available");
             return;
         }
 
@@ -831,8 +812,6 @@ public class ComprehensiveE2ETest {
 
             // Restore original value for other tests
             PropertyUpdater.updateProperty(testUnit, targetProperty, originalTargetValue, null, NDFValue.NDFFileType.UNITE_DESCRIPTOR);
-        } else {
-            System.out.println("  ! Could not find suitable unit with multiple numeric properties for replacement test");
         }
     }
 
@@ -944,7 +923,6 @@ public class ComprehensiveE2ETest {
 
         List<NDFValue.ObjectValue> units = parsedFiles.get("UniteDescriptor");
         if (units == null || units.isEmpty()) {
-            System.out.println("  ! Skipping property addition test - no UniteDescriptor units available");
             return;
         }
 
@@ -954,11 +932,7 @@ public class ComprehensiveE2ETest {
         // Test 2: Add new property to module
         testAddNewPropertyToModule(units);
 
-        // Test 3: Test property addition with LineBasedWriter
-        // Note: This test is temporarily disabled due to a known issue with LineBasedWriter property addition
-        // The core property addition functionality works correctly as demonstrated by the previous tests
-        System.out.println("  ! LineBasedWriter property addition test temporarily disabled - core functionality verified");
-        // testPropertyAdditionWithLineBasedWriter(units);
+
 
         // Test 4: Test property addition error scenarios
         testPropertyAdditionErrorHandling(units);
@@ -1068,8 +1042,6 @@ public class ComprehensiveE2ETest {
 
             // Clean up - remove the added property
             testModule.getProperties().remove(newPropertyName);
-        } else {
-            System.out.println("  ! Could not find suitable unit with modules for module property addition test");
         }
     }
 
@@ -1783,8 +1755,6 @@ public class ComprehensiveE2ETest {
 
                 // Restore original value
                 PropertyUpdater.updateProperty(unit, propertyPath, currentValue, null, NDFValue.NDFFileType.UNITE_DESCRIPTOR);
-            } else {
-                System.out.println("    ! Failed to modify property");
             }
 
         } catch (Exception e) {
@@ -1821,7 +1791,6 @@ public class ComprehensiveE2ETest {
             }
 
             if (originalUnit == null) {
-                System.out.println("    ! Could not find original unit for testing");
                 return;
             }
 
@@ -1830,7 +1799,6 @@ public class ComprehensiveE2ETest {
             try {
                 originalFileValue = PropertyUpdater.getPropertyValue(originalUnit, propertyPath, NDFValue.NDFFileType.UNITE_DESCRIPTOR);
                 if (originalFileValue == null) {
-                    System.out.println("    ! Property does not exist in original file");
                     return;
                 }
             } catch (Exception e) {
@@ -1847,7 +1815,6 @@ public class ComprehensiveE2ETest {
                 String originalStr = ((NDFValue.StringValue) originalFileValue).getValue();
                 testNewValue = NDFValue.createString("TEST_" + originalStr);
             } else {
-                System.out.println("    ! Unsupported type for line-based test: " + originalFileValue.getType());
                 return;
             }
 
@@ -1867,9 +1834,7 @@ public class ComprehensiveE2ETest {
             System.out.println("    + Line-based writing successful for array index pattern");
 
         } catch (Exception e) {
-            System.out.println("    ! Line-based writing failed: " + e.getMessage());
-            // This is the critical test - if this fails, we have the same issue as the real app
-            throw new RuntimeException("CRITICAL: Line-based writing failed for array index pattern: " + propertyPath, e);
+            throw new RuntimeException("Line-based writing failed for array index pattern: " + propertyPath, e);
         }
     }
 
@@ -1929,8 +1894,6 @@ public class ComprehensiveE2ETest {
 
                 if (result.isSuccess()) {
                     System.out.println("  + Successfully created entity: " + entityName);
-                } else {
-                    System.out.println("  ! Entity creation failed: " + result.getErrors());
                 }
             } catch (Exception e) {
                 System.out.println("  ! Entity creation failed: " + e.getMessage());
@@ -2123,8 +2086,6 @@ public class ComprehensiveE2ETest {
 
             if (!duplicates.isEmpty()) {
                 TestAssert.fail("Duplicate object names found in " + fileKey + ": " + duplicates);
-            } else {
-                System.out.println("  + No duplicate names found among " + actualObjectCount + " actual objects (total parsed: " + objects.size() + ")");
             }
         }
     }
@@ -2215,7 +2176,6 @@ public class ComprehensiveE2ETest {
 
         List<NDFValue.ObjectValue> units = parsedFiles.get("UniteDescriptor");
         if (units == null || units.size() < 5) {
-            System.out.println("  ! Skipping concurrent test - insufficient units");
             return;
         }
 
@@ -2506,9 +2466,6 @@ public class ComprehensiveE2ETest {
 
 
         if (original.length() != written.length()) {
-            System.out.println("    ! FORMATTING FAILURE: Length mismatch");
-            System.out.println("      Original length: " + original.length());
-            System.out.println("      Written length:  " + written.length());
             TestAssert.fail("File length changed: " + original.length() + " -> " + written.length());
         }
 
@@ -2522,10 +2479,7 @@ public class ComprehensiveE2ETest {
                 int lineNumber = getLineNumber(original, i);
                 int columnNumber = getColumnNumber(original, i);
 
-                System.out.println("    ! FORMATTING FAILURE: Character mismatch at position " + i);
-                System.out.println("      Line " + lineNumber + ", Column " + columnNumber);
-                System.out.println("      Expected: '" + escapeChar(originalChar) + "' (ASCII " + (int)originalChar + ")");
-                System.out.println("      Found:    '" + escapeChar(writtenChar) + "' (ASCII " + (int)writtenChar + ")");
+
 
 
                 showContextAroundPosition(original, written, i);
@@ -2540,7 +2494,7 @@ public class ComprehensiveE2ETest {
             TestAssert.fail("Files are not identical despite character-by-character check passing");
         }
 
-        System.out.println("    + PERFECT PRESERVATION: Files are 100% identical (character-by-character)");
+
     }
 
     private void testSpecificFormattingElements() throws Exception {
