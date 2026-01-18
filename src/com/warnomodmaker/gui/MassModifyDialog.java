@@ -174,6 +174,9 @@ public class MassModifyDialog extends JDialog {
         propertyPathField = new JTextField();
         propertyPathField.setEnabled(false);
         propertyPathField.setToolTipText("Examples: MaxPhysicalDamages, ModulesDescriptors[5].BlindageProperties.ArmorThickness");
+        // Add listeners once during initialization (not in categoryChanged to avoid accumulation)
+        propertyPathField.addActionListener(evt -> updateStatusLabel());
+        propertyPathField.addCaretListener(evt -> updateStatusLabel());
         formPanel.add(propertyPathField, gbc);
 
         // Help and Search buttons
@@ -346,8 +349,7 @@ public class MassModifyDialog extends JDialog {
         if (CATEGORY_CUSTOM.equals(category)) {
             propertyPathField.setEnabled(true);
             propertyPathField.setText("");
-            propertyPathField.addActionListener(evt -> updateStatusLabel());
-            propertyPathField.addCaretListener(evt -> updateStatusLabel());
+            // Listeners are added once during initialization - no need to add here
             // For custom paths, show all operators
             resetToAllOperators(false); // Don't reset selection
         } else {
@@ -874,188 +876,6 @@ public class MassModifyDialog extends JDialog {
         return PropertyUpdater.hasModifiableProperty(unit, propertyPath, fileType);
     }
 
-
-
-
-
-    private boolean isModifiableArray(NDFValue value, String propertyPath) {
-        if (!(value instanceof ArrayValue)) {
-            return false;
-        }
-
-        ArrayValue arrayValue = (ArrayValue) value;
-        String lowerPath = propertyPath.toLowerCase();
-
-        // Core structural arrays that should always be accessible
-        if (lowerPath.equals("modulesdescriptors")) {
-            return true;
-        }
-
-        // SpecialtiesList arrays are modifiable
-        if (lowerPath.contains("specialtieslist")) {
-            return true;
-        }
-
-        // Arrays of simple values (strings, numbers, tuples) that are modifiable
-        if (!arrayValue.getElements().isEmpty()) {
-            NDFValue firstElement = arrayValue.getElements().get(0);
-
-            // Arrays of strings are often modifiable (like tag lists)
-            if (firstElement instanceof StringValue) {
-                String str = ((StringValue) firstElement).getValue();
-                // Exclude arrays of template references or system identifiers
-                if (str.startsWith("~/") || str.startsWith("$/") ||
-                    str.startsWith("GUID:") || str.contains("Texture_")) {
-                    return false;
-                }
-                return true; // Arrays of simple strings are modifiable
-            }
-
-            // Arrays of numbers are often modifiable (like coordinate lists, value arrays)
-            if (firstElement instanceof NumberValue) {
-                return true;
-            }
-
-            // Arrays of tuples are often modifiable (like BaseHitValueModifiers)
-            if (firstElement instanceof TupleValue) {
-                return true; // Arrays of tuples (like accuracy modifiers) are modifiable
-            }
-        }
-
-        return false;
-    }
-
-
-    private boolean hasRequiredModuleType(ObjectValue unit, String propertyPath) {
-        // For non-unit descriptor files, skip module type checking
-        if (fileType != NDFFileType.UNITE_DESCRIPTOR &&
-            fileType != NDFFileType.MISSILE_DESCRIPTORS) {
-            return true; // No module restrictions for weapons, ammunition, etc.
-        }
-
-        NDFValue modulesValue = unit.getProperty("ModulesDescriptors");
-        if (!(modulesValue instanceof ArrayValue)) {
-            return true; // If no modules array, allow all properties
-        }
-
-        ArrayValue modules = (ArrayValue) modulesValue;
-        boolean hasTankFlags = false;
-        boolean hasInfantryFlags = false;
-        boolean hasHelicopterFlags = false;
-        boolean hasPlaneFlags = false;
-        boolean hasCanonFlags = false;
-
-        for (NDFValue moduleValue : modules.getElements()) {
-            if (moduleValue instanceof ObjectValue) {
-                ObjectValue module = (ObjectValue) moduleValue;
-                String typeName = module.getTypeName();
-
-                if ("TankFlagsModuleDescriptor".equals(typeName)) {
-                    hasTankFlags = true;
-                } else if ("InfantryFlagsModuleDescriptor".equals(typeName)) {
-                    hasInfantryFlags = true;
-                } else if ("HelicoFlagsModuleDescriptor".equals(typeName)) {
-                    hasHelicopterFlags = true;
-                } else if ("AirplaneFlagsModuleDescriptor".equals(typeName)) {
-                    hasPlaneFlags = true;
-                } else if ("CanonFlagsModuleDescriptor".equals(typeName)) {
-                    hasCanonFlags = true;
-                }
-            }
-        }
-
-        return isPropertyValidForUnitType(propertyPath, hasTankFlags, hasInfantryFlags, hasHelicopterFlags, hasPlaneFlags, hasCanonFlags);
-    }
-
-
-    private boolean isPropertyValidForUnitType(String propertyPath, boolean hasTankFlags,
-                                             boolean hasInfantryFlags, boolean hasHelicopterFlags, boolean hasPlaneFlags, boolean hasCanonFlags) {
-        String lowerPath = propertyPath.toLowerCase();
-
-        // ARMOR & PROTECTION - All unit types have armor (different families: blindage, infanterie, helico, avion)
-        if (lowerPath.contains("blindageproperties") || lowerPath.contains("explosivereactivearmor") ||
-            lowerPath.contains("resistance") || lowerPath.contains("armor") ||
-            lowerPath.contains("penetration") || lowerPath.contains("protection")) {
-            return true; // All unit types have armor properties with different resistance families
-        }
-
-        // AIRCRAFT FLIGHT - Only helicopters and planes
-        if (lowerPath.contains("upwardspeedinkmph") || lowerPath.contains("torquemanoeuvrability") ||
-            lowerPath.contains("cyclicmanoeuvrability") || lowerPath.contains("maxinclination") ||
-            lowerPath.contains("gfactorlimit") || lowerPath.contains("rotorarea") ||
-            lowerPath.contains("mass") || lowerPath.contains("altitude") ||
-            lowerPath.contains("agilityradiusgru") || lowerPath.contains("pitchangle") ||
-            lowerPath.contains("rollangle") || lowerPath.contains("rollspeed") ||
-            lowerPath.contains("evacangle") || lowerPath.contains("evacuationtime") ||
-            lowerPath.contains("travelduration") || lowerPath.contains("flight") ||
-            lowerPath.contains("aircraft") || lowerPath.contains("helicopter") ||
-            lowerPath.contains("helico")) {
-            return hasHelicopterFlags || hasPlaneFlags; // Only aircraft
-        }
-
-        // INFANTRY-SPECIFIC - Only infantry units
-        if (lowerPath.contains("infantry") || lowerPath.contains("soldier") ||
-            lowerPath.contains("infanterie") || lowerPath.contains("crew")) {
-            return hasInfantryFlags; // Only infantry units
-        }
-
-        // FUEL & LOGISTICS - Mainly for vehicles and aircraft (infantry usually walk)
-        if (lowerPath.contains("fuel")) {
-            return hasTankFlags || hasHelicopterFlags || hasPlaneFlags || hasCanonFlags; // Vehicles, aircraft, and artillery need fuel
-        }
-
-        // TRANSPORT & CAPACITY - Only transport vehicles and helicopters
-        if (lowerPath.contains("nbseatsavailable") || lowerPath.contains("loadradiusgru") ||
-            lowerPath.contains("transportabletagset") || lowerPath.contains("transporter")) {
-            return hasTankFlags || hasHelicopterFlags; // Vehicles and helicopters can transport
-        }
-
-        // Movement properties - all units have movement
-        if (lowerPath.contains("unitmovingtype") || lowerPath.contains("maxspeedinkmph")) {
-            return true; // All unit types have movement
-        }
-
-        return true; // Default: allow for all unit types
-    }
-
-
-
-
-
-    private int applyModificationToUnits(String propertyPath, PropertyUpdater.ModificationType modificationType,
-                                       double value, String valueText, String replacementPropertyPath, String filter) {
-        // Start with all units, then apply filters
-        List<ObjectValue> workingUnits = new ArrayList<>(unitDescriptors);
-
-        // Apply tag filter first if enabled
-        if (tagFilterCheckBox.isSelected() && !selectedTags.isEmpty()) {
-            if (useAnyTagsMode) {
-                workingUnits = TagExtractor.getUnitsWithTags(workingUnits, selectedTags);
-            } else {
-                workingUnits = TagExtractor.getUnitsWithAllTags(workingUnits, selectedTags);
-            }
-        }
-
-        int modifiedCount = 0;
-
-        // Apply the modification to each unit using direct property access
-        for (ObjectValue unit : workingUnits) {
-            // Apply name filter if specified
-            if (filter != null) {
-                String unitName = unit.getInstanceName();
-                if (unitName == null || !unitName.toLowerCase().contains(filter)) {
-                    continue; // Skip this unit
-                }
-            }
-
-            // Use direct update - same logic as counting phase
-            if (updatePropertyDirect(unit, propertyPath, modificationType, value, valueText, replacementPropertyPath)) {
-                modifiedCount++;
-            }
-        }
-
-        return modifiedCount;
-    }
 
     private int applyModificationToUnitsWithProgress(String propertyPath, PropertyUpdater.ModificationType modificationType,
                                                    double value, String valueText, String replacementPropertyPath, String filter) {

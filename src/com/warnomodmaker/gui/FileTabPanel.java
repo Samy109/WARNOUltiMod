@@ -22,6 +22,11 @@ public class FileTabPanel extends JPanel {
     private UnitBrowser objectBrowser;
     private UnitEditor objectEditor;
 
+    // Stored listener references for proper cleanup
+    private Consumer<NDFValue.ObjectValue> unitSelectionListener;
+    private Consumer<String> propertyFilterListener;
+    private PropertyChangeListener propertyChangeListener;
+
 
     public FileTabPanel(FileTabState tabState) {
         this.tabState = tabState;
@@ -58,14 +63,19 @@ public class FileTabPanel extends JPanel {
 
 
     private void setupEventHandlers() {
+        // Store listener references for proper cleanup in dispose()
+        unitSelectionListener = this::onUnitSelected;
+        propertyFilterListener = this::onPropertyFilterChanged;
+        propertyChangeListener = this::onPropertyChanged;
+
         // Listen for object selection changes
-        objectBrowser.addUnitSelectionListener(this::onUnitSelected);
+        objectBrowser.addUnitSelectionListener(unitSelectionListener);
 
         // Listen for property filter changes
-        objectBrowser.addPropertyFilterListener(this::onPropertyFilterChanged);
+        objectBrowser.addPropertyFilterListener(propertyFilterListener);
 
         // Listen for property changes in the editor
-        objectEditor.addPropertyChangeListener(this::onPropertyChanged);
+        objectEditor.addPropertyChangeListener(propertyChangeListener);
     }
 
 
@@ -252,6 +262,38 @@ public class FileTabPanel extends JPanel {
                     return;
                 }
             }
+        }
+    }
+
+    /**
+     * Dispose of resources to prevent memory leaks when the tab is closed.
+     * This cleans up listeners and child components.
+     */
+    public void dispose() {
+        // Remove listeners registered in setupEventHandlers using stored references
+        if (unitSelectionListener != null) {
+            objectBrowser.removeUnitSelectionListener(unitSelectionListener);
+            unitSelectionListener = null;
+        }
+        if (propertyFilterListener != null) {
+            objectBrowser.removePropertyFilterListener(propertyFilterListener);
+            propertyFilterListener = null;
+        }
+        if (propertyChangeListener != null) {
+            objectEditor.removePropertyChangeListener(propertyChangeListener);
+            propertyChangeListener = null;
+        }
+
+        // Clear listener lists
+        modificationListeners.clear();
+        tabStateChangeListeners.clear();
+
+        // Dispose child components
+        if (objectBrowser != null) {
+            objectBrowser.dispose();
+        }
+        if (objectEditor != null) {
+            objectEditor.dispose();
         }
     }
 }

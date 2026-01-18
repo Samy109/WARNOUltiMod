@@ -9,7 +9,7 @@ public abstract class NDFValue {
 
     
     public enum NDFFileType {
-        UNITE_DESCRIPTOR("UniteDescriptorOLD.ndf", "TEntityDescriptor", "Unit"),
+        UNITE_DESCRIPTOR("UniteDescriptor.ndf", "TEntityDescriptor", "Unit"),
         MISSILE_DESCRIPTORS("MissileDescriptors.ndf", "TEntityDescriptor", "Missile"),
         MISSILE_CARRIAGE("MissileCarriage.ndf", "TMissileCarriageConnoisseur", "Missile Carriage"),
         WEAPON_DESCRIPTOR("WeaponDescriptor.ndf", "TWeaponManagerModuleDescriptor", "Weapon"),
@@ -46,7 +46,7 @@ public abstract class NDFValue {
         UNITE_CADAVRE_DESCRIPTOR("UniteCadavreDescriptor.ndf", "TUniteCadavreDescriptor", "Unit Cadavre"),
 
         // COMPREHENSIVE DEPENDENCY SUPPORT - Critical missing file types
-        GENERATED_INFANTRY_DEPICTION("GeneratedInfantryDepiction.ndf", "TInfantryDepictionDescriptor", "Infantry Depiction"),
+        DEPICTION_INFANTRY("DepictionInfantry.ndf", "TInfantryDepictionDescriptor", "Infantry Depiction"),
         VEHICLE_DEPICTION("VehicleDepiction.ndf", "TVehicleDepictionDescriptor", "Vehicle Depiction"),
         AIRCRAFT_DEPICTION("AircraftDepiction.ndf", "TAircraftDepictionDescriptor", "Aircraft Depiction"),
         DEPICTION_DESCRIPTOR("DepictionDescriptor.ndf", "TDepictionDescriptor", "Depiction"),
@@ -100,6 +100,12 @@ public abstract class NDFValue {
                 name.equalsIgnoreCase("UniteDescriptorNEW.ndf") ||
                 name.equalsIgnoreCase("UniteDescriptor.ndf")) {
                 return UNITE_DESCRIPTOR;
+            }
+
+            // Special handling for DepictionInfantry files (both old and new formats)
+            if (name.equalsIgnoreCase("GeneratedDepictionInfantry.ndf") ||
+                name.equalsIgnoreCase("DepictionInfantry.ndf")) {
+                return DEPICTION_INFANTRY;
             }
 
             for (NDFFileType type : values()) {

@@ -238,7 +238,7 @@ public class EntityCreationDialog extends JDialog {
         if (selectedType == null || selectedType.contains("No entity patterns")) {
             descriptionArea.setText("No entity patterns discovered from the open files.\n\n" +
                 "To discover entity patterns:\n" +
-                "1. Open UniteDescriptorOLD.ndf with actual unit data\n" +
+                "1. Open UniteDescriptor.ndf with actual unit data\n" +
                 "2. Optionally open related files (Ammunition.ndf, WeaponDescriptor.ndf)\n" +
                 "3. Reopen this dialog to see discovered patterns");
 
@@ -436,7 +436,7 @@ public class EntityCreationDialog extends JDialog {
             case "EffetsSurUnite": return "Unit effects and status modifiers";
             case "SoundDescriptors": return "Audio effects and sound clips";
             case "WeaponSoundHappenings": return "Weapon sound mappings and audio events";
-            case "GeneratedInfantryDepiction": return "Infantry-specific visual models";
+            case "DepictionInfantry": return "Infantry-specific visual models";
             case "VehicleDepiction": return "Vehicle-specific visual models";
             case "InfantryAnimationDescriptor": return "Infantry movement animations";
             case "VehicleAnimationDescriptor": return "Vehicle movement animations";
@@ -452,7 +452,7 @@ public class EntityCreationDialog extends JDialog {
             case "UniteDescriptor": return "Descriptor_Unit_" + entityName;
             case "WeaponDescriptor": return "WeaponDescriptor_" + entityName;
             case "Ammunition": return "Ammunition_" + entityName;
-            case "GeneratedInfantryDepiction": return "InfantryDepiction_" + entityName;
+            case "DepictionInfantry": return "InfantryDepiction_" + entityName;
             case "EffectDescriptor": return "Effect_" + entityName;
             case "SoundDescriptor": return "Sound_" + entityName;
             default: return fileType + "_" + entityName;

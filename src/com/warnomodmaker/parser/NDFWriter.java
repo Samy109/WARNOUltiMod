@@ -30,10 +30,21 @@ public class NDFWriter {
     }
 
 
+    /**
+     * Legacy method - tokens are no longer used for writing.
+     * Line-based replacement is now used instead via setOriginalSourceContent().
+     * Kept for API compatibility with existing callers.
+     */
     public void setOriginalTokens(List<NDFToken> tokens) {
+        // Intentional no-op: line-based writing uses originalSourceContent instead
     }
 
+    /**
+     * Legacy method - object modification tracking is now handled by ModificationTracker.
+     * Kept for API compatibility with existing callers.
+     */
     public void markObjectAsModified(ObjectValue object) {
+        // Intentional no-op: modifications are tracked via ModificationTracker
     }
 
     public void setOriginalSourceContent(String content) {
@@ -125,11 +136,7 @@ public class NDFWriter {
                 writer.write("=");
             }
 
-            if ("ModulesDescriptors".equals(propertyName) && value instanceof NDFValue.ArrayValue && isUniteDescriptorFile()) {
-                writeUniteDescriptorModulesArray((NDFValue.ArrayValue) value);
-            } else {
-                writeValueWithFormatting(value);
-            }
+            writeValueWithFormatting(value);
 
             if (!propertySuffix.isEmpty()) {
                 writer.write(propertySuffix);
@@ -480,64 +487,6 @@ public class NDFWriter {
         writeCleanObjectFromMemoryModel(object);
     }
 
-    private boolean isUniteDescriptorFile() {
-        return false;
-    }
-
-    private void writeUniteDescriptorModulesArray(NDFValue.ArrayValue array) throws IOException {
-        List<NDFValue> elements = array.getElements();
-
-        if (elements.isEmpty()) {
-            writer.write("[]");
-            return;
-        }
-
-        writer.write("[\n");
-
-        for (int i = 0; i < elements.size(); i++) {
-            NDFValue element = elements.get(i);
-
-            writer.write("    ");
-            writeUniteDescriptorModuleElement(element);
-
-            if (i < elements.size() - 1) {
-                writer.write(",");
-            }
-            writer.write("\n");
-        }
-
-        writer.write("  ]");
-    }
-
-    /**
-     * Write individual module elements with UniteDescriptor-specific formatting
-     */
-    private void writeUniteDescriptorModuleElement(NDFValue element) throws IOException {
-        if (element instanceof NDFValue.TemplateRefValue) {
-            NDFValue.TemplateRefValue templateRef = (NDFValue.TemplateRefValue) element;
-            if (templateRef.getInstanceName() != null) {
-                writer.write(templateRef.getInstanceName());
-                writer.write(" is ");
-                writer.write(templateRef.getPath());
-            } else {
-                writer.write(templateRef.getPath());
-            }
-        } else if (element instanceof NDFValue.ObjectValue) {
-            NDFValue.ObjectValue objectValue = (NDFValue.ObjectValue) element;
-            if (objectValue.getInstanceName() != null) {
-                writer.write(objectValue.getInstanceName());
-                writer.write(" is ");
-                writer.write(objectValue.getTypeName());
-                writeCleanObjectFromMemoryModelInline(objectValue);
-            } else {
-                writer.write(objectValue.getTypeName());
-                writeCleanObjectFromMemoryModelInline(objectValue);
-            }
-        } else {
-            writeCleanValue(element);
-        }
-    }
-
     /**
      * Writes a number value to the output, carefully preserving float values
      * @param numberValue The NumberValue to write
@@ -588,40 +537,6 @@ public class NDFWriter {
 
         // For very large or very small numbers, use scientific notation
         return Double.toString(value);
-    }
-
-    /**
-     * Write object content inline (without newline before opening parenthesis)
-     * Used for array elements where the type name and content should be on the same line
-     */
-    private void writeCleanObjectFromMemoryModelInline(ObjectValue object) throws IOException {
-        Map<String, NDFValue> properties = object.getProperties();
-
-        if (properties.isEmpty()) {
-            writer.write("()");
-            return;
-        }
-
-        writer.write("(\n");
-
-        boolean first = true;
-        for (Map.Entry<String, NDFValue> entry : properties.entrySet()) {
-            String propertyName = entry.getKey();
-            NDFValue propertyValue = entry.getValue();
-
-            if (!first) {
-                writer.write("\n");
-            }
-            first = false;
-
-            // Write property with proper indentation for array context
-            writer.write("      "); // Extra indentation for array element properties
-            writer.write(propertyName);
-            writer.write(" = ");
-            writeCleanValue(propertyValue);
-        }
-
-        writer.write("\n    )");
     }
 
     /**

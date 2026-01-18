@@ -796,7 +796,7 @@ public class MainWindow extends JFrame implements FileLoader {
         } else {
             // For simple filenames, try the common WARNO locations
             String[] commonLocations = {
-                // FIRST: Direct in root directory (most important for files like GeneratedDepictionInfantry.ndf)
+                // FIRST: Direct in root directory (most important for files like DepictionInfantry.ndf)
                 fileName,
                 // Then try subdirectories where most files are found
                 "GameData/Generated/Gameplay/Gfx/" + fileName,
@@ -834,7 +834,7 @@ public class MainWindow extends JFrame implements FileLoader {
             case MISSILE_DESCRIPTORS: return "MissileDescriptors";
 
             // Comprehensive dependency support
-            case GENERATED_INFANTRY_DEPICTION: return "GeneratedInfantryDepiction";
+            case DEPICTION_INFANTRY: return "DepictionInfantry";
             case VEHICLE_DEPICTION: return "VehicleDepiction";
             case AIRCRAFT_DEPICTION: return "AircraftDepiction";
             case DEPICTION_DESCRIPTOR: return "DepictionDescriptor";
@@ -1739,6 +1739,12 @@ public class MainWindow extends JFrame implements FileLoader {
             integrityManager.unregisterFile(tabState.getFile().getName());
         }
 
+        // Dispose the tab panel to clean up resources and prevent memory leaks
+        Component tabComponent = tabbedPane.getComponentAt(tabIndex);
+        if (tabComponent instanceof FileTabPanel) {
+            ((FileTabPanel) tabComponent).dispose();
+        }
+
         tabStates.remove(tabIndex);
         tabbedPane.removeTabAt(tabIndex);
         if (tabStates.isEmpty()) {
@@ -1883,6 +1889,13 @@ public class MainWindow extends JFrame implements FileLoader {
         }
 
 
+        // Dispose all tab panels and unregister files
+        for (int i = 0; i < tabbedPane.getTabCount(); i++) {
+            Component tabComponent = tabbedPane.getComponentAt(i);
+            if (tabComponent instanceof FileTabPanel) {
+                ((FileTabPanel) tabComponent).dispose();
+            }
+        }
         for (FileTabState tabState : tabStates) {
             if (tabState.getFile() != null) {
                 integrityManager.unregisterFile(tabState.getFile().getName());
@@ -2037,6 +2050,11 @@ public class MainWindow extends JFrame implements FileLoader {
         // Close tabs in reverse order to maintain indices
         for (int i = tabStates.size() - 1; i >= 0; i--) {
             if (i != keepTabIndex) {
+                // Dispose the tab panel to clean up resources
+                Component tabComponent = tabbedPane.getComponentAt(i);
+                if (tabComponent instanceof FileTabPanel) {
+                    ((FileTabPanel) tabComponent).dispose();
+                }
 
                 FileTabState tabState = tabStates.get(i);
                 if (tabState.getFile() != null) {

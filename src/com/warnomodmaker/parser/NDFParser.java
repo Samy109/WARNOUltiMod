@@ -873,7 +873,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse exported objects in UniteDescriptorOLD.ndf (TEntityDescriptor objects) with ENHANCED MEMORY MODEL
+     * Parse exported objects in UniteDescriptor.ndf (TEntityDescriptor objects) with ENHANCED MEMORY MODEL
      */
     private ObjectValue parseUniteDescriptorExportedObject() throws NDFParseException {
         int exportTokenIndex = currentTokenIndex;
@@ -907,7 +907,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse object properties in UniteDescriptorOLD.ndf with ENHANCED MEMORY MODEL formatting capture
+     * Parse object properties in UniteDescriptor.ndf with ENHANCED MEMORY MODEL formatting capture
      */
     private void parseUniteDescriptorObjectProperties(ObjectValue object) throws NDFParseException {
         while (currentToken.getType() != NDFToken.TokenType.CLOSE_PAREN) {
@@ -1160,7 +1160,7 @@ public class NDFParser {
 
     /**
      * COMPLETELY STANDALONE UniteDescriptor value parsing
-     * Handles all the unique patterns in UniteDescriptorOLD.ndf without using standard parsing
+     * Handles all the unique patterns in UniteDescriptor.ndf without using standard parsing
      */
     private NDFValue parseUniteDescriptorValueStandalone() throws NDFParseException {
 
@@ -1313,7 +1313,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse objects in UniteDescriptorOLD.ndf with ENHANCED MEMORY MODEL
+     * Parse objects in UniteDescriptor.ndf with ENHANCED MEMORY MODEL
      */
     private NDFValue.ObjectValue parseUniteDescriptorObjectStandalone(String typeName, int startTokenIndex) throws NDFParseException {
         NDFValue.ObjectValue object = NDFValue.createObject(typeName);
@@ -1338,7 +1338,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse arrays in UniteDescriptorOLD.ndf with standalone logic
+     * Parse arrays in UniteDescriptor.ndf with standalone logic
      */
     private NDFValue parseUniteDescriptorArrayStandalone() throws NDFParseException {
         expect(NDFToken.TokenType.OPEN_BRACKET);
@@ -1383,7 +1383,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse tuples in UniteDescriptorOLD.ndf like (EVisionUnitType/Standard, 3500.0)
+     * Parse tuples in UniteDescriptor.ndf like (EVisionUnitType/Standard, 3500.0)
      */
     private NDFValue parseUniteDescriptorTupleStandalone() throws NDFParseException {
         expect(NDFToken.TokenType.OPEN_PAREN);
@@ -1422,7 +1422,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse MAP constructs in UniteDescriptorOLD.ndf like MAP [(key1, value1), (key2, value2)]
+     * Parse MAP constructs in UniteDescriptor.ndf like MAP [(key1, value1), (key2, value2)]
      * This creates proper MapValue objects instead of arrays to fix type mismatch errors
      */
     private NDFValue.MapValue parseUniteDescriptorMapStandalone() throws NDFParseException {
@@ -1463,7 +1463,7 @@ public class NDFParser {
     }
 
     /**
-     * Parse basic values (numbers, strings, booleans, etc.) in UniteDescriptorOLD.ndf
+     * Parse basic values (numbers, strings, booleans, etc.) in UniteDescriptor.ndf
      */
     private NDFValue parseUniteDescriptorBasicValue() throws NDFParseException {
         switch (currentToken.getType()) {

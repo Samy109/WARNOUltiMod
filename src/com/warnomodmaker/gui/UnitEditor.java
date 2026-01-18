@@ -1189,6 +1189,32 @@ public class UnitEditor extends JPanel {
         return input;
     }
 
+    /**
+     * Dispose of resources to prevent memory leaks when the editor is no longer needed.
+     * This should be called when the parent tab is closed.
+     */
+    public void dispose() {
+        // Clear property change listeners
+        if (propertyChangeSupport != null) {
+            for (java.beans.PropertyChangeListener listener : propertyChangeSupport.getPropertyChangeListeners()) {
+                propertyChangeSupport.removePropertyChangeListener(listener);
+            }
+        }
+
+        // Clear data references
+        ndfObject = null;
+        modificationTracker = null;
+
+        // Clear the tree model
+        if (propertyTree != null) {
+            propertyTree.setModel(null);
+        }
+
+        // Clear the editor panel
+        if (editorPanel != null) {
+            editorPanel.removeAll();
+        }
+    }
 
     // Using PropertyNode from EnhancedTreeCellRenderer
 }

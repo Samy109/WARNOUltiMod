@@ -4,10 +4,10 @@ import java.util.*;
 
 /**
  * Comprehensive entity creation system based on actual NDF cross-file dependency analysis.
- * 
+ *
  * DISCOVERED DEPENDENCY CHAIN:
- * UniteDescriptorOLD.ndf → WeaponDescriptor.ndf → Ammunition.ndf
- * UniteDescriptorOLD.ndf → WeaponDescriptor.ndf → AmmunitionMissiles.ndf (for missiles)
+ * UniteDescriptor.ndf → WeaponDescriptor.ndf → Ammunition.ndf
+ * UniteDescriptor.ndf → WeaponDescriptor.ndf → AmmunitionMissiles.ndf (for missiles)
  * BuildingDescriptors.ndf (standalone for buildings)
  * MissileDescriptors.ndf (for missile-specific data)
  */
@@ -75,7 +75,7 @@ public class EntityCreationManager {
         fileTypeObjectTypes.put("SmokeDescriptor", "TSmokeDescriptor");
 
         // Depiction files - confirmed in tester files (NdfDepictionList is system-generated, excluded)
-        fileTypeObjectTypes.put("GeneratedInfantryDepiction", "TInfantryDepictionDescriptor");
+        fileTypeObjectTypes.put("DepictionInfantry", "TInfantryDepictionDescriptor");
         fileTypeObjectTypes.put("GeneratedDepictionFXMissiles", "TDepictionDescriptor");
         fileTypeObjectTypes.put("GeneratedDepictionFXWeapons", "TDepictionDescriptor");
         fileTypeObjectTypes.put("GeneratedDepictionWeaponBlock", "TDepictionDescriptor");
@@ -111,8 +111,8 @@ public class EntityCreationManager {
         // Learn templates from ALL open files for on-demand creation
         learnTemplatesFromOpenFiles(openFiles);
 
-        // Only analyze entity creation if we have UniteDescriptorOLD.ndf (primary file)
-        if (!openFiles.containsKey("UniteDescriptorOLD.ndf")) {
+        // Only analyze entity creation if we have UniteDescriptor.ndf (primary file)
+        if (!openFiles.containsKey("UniteDescriptor.ndf")) {
             return;
         }
 
@@ -159,7 +159,7 @@ public class EntityCreationManager {
      * Learn from existing entities to create perfect templates with realistic placeholder values
      */
     private void learnFromExistingEntities(Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptorOLD.ndf");
+        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptor.ndf");
         Map<String, List<NDFValue.ObjectValue>> entitiesByType = new HashMap<>();
 
         // Group units by entity type
@@ -406,7 +406,7 @@ public class EntityCreationManager {
      * Discover entity blueprints based on actual cross-file dependencies
      */
     private void discoverEntityBlueprints(Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptorOLD.ndf");
+        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptor.ndf");
         Map<String, EntityTypeAnalysis> analysis = new HashMap<>();
         
         // Analyze each unit to understand entity patterns
@@ -503,8 +503,8 @@ public class EntityCreationManager {
      */
     private void analyzeFileDependencies(NDFValue.ObjectValue unit, EntityTypeAnalysis analysis,
                                        Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        // ALWAYS requires UniteDescriptorOLD.ndf - this is the primary file
-        analysis.addFileRequirement("UniteDescriptorOLD.ndf", "TEntityDescriptor");
+        // ALWAYS requires UniteDescriptor.ndf - this is the primary file
+        analysis.addFileRequirement("UniteDescriptor.ndf", "TEntityDescriptor");
 
         // Comprehensive dependency analysis
         analyzeWeaponDependencies(unit, analysis, openFiles);
@@ -568,10 +568,10 @@ public class EntityCreationManager {
         // NOTE: NdfDepictionList is a system-generated file that should not have entities added to it
         // It contains a list of depiction file paths and is managed by the game engine
 
-        // Infantry units specifically need GeneratedDepictionInfantry
+        // Infantry units specifically need DepictionInfantry
         String entityType = classifyUnit(unit);
         if ("Infantry".equals(entityType)) {
-            analysis.addFileRequirement("GeneratedDepictionInfantry.ndf", "TemplateInfantryDepictionSquad");
+            analysis.addFileRequirement("DepictionInfantry.ndf", "TemplateInfantryDepictionSquad");
         }
 
         // All units need depiction resources which are managed through NdfDepictionList
@@ -729,7 +729,7 @@ public class EntityCreationManager {
         // Depiction templates
         if (lower.contains("depiction_") || lower.contains("visual_")) {
             if (lower.contains("infantry")) {
-                return "GeneratedInfantryDepiction";
+                return "DepictionInfantry";
             }
             // NdfDepictionList is system-generated, route to appropriate depiction file
             return "DepictionDescriptor";
@@ -1298,7 +1298,7 @@ public class EntityCreationManager {
     private String generateTemplateName(String entityName, String objectType, String fileType) {
         // Follow WARNO naming patterns based on file type
         switch (fileType) {
-            case "UniteDescriptorOLD.ndf":
+            case "UniteDescriptor.ndf":
                 return entityName; // Use the entity name directly for the main unit
             case "WeaponDescriptor.ndf":
                 return "WeaponDescriptor_" + entityName;
@@ -1306,7 +1306,7 @@ public class EntityCreationManager {
                 return "Ammunition_" + entityName;
             case "AmmunitionMissiles":
                 return "AmmunitionMissiles_" + entityName;
-            case "GeneratedDepictionInfantry.ndf":
+            case "DepictionInfantry.ndf":
                 return "InfantryDepiction_" + entityName;
             case "VehicleDepiction":
                 return "VehicleDepiction_" + entityName;

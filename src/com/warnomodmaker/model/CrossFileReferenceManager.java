@@ -242,7 +242,7 @@ public class CrossFileReferenceManager {
 
         if (lower.contains("depiction_") || lower.contains("gfx_") || lower.startsWith("gfx/")) {
             if (lower.contains("infantry")) {
-                return "GeneratedInfantryDepiction";
+                return "DepictionInfantry";
             }
             return "NdfDepictionList";
         }

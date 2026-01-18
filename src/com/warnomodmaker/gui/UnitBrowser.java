@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 public class UnitBrowser extends JPanel {
     private List<ObjectValue> ndfObjects;
@@ -505,80 +506,6 @@ public class UnitBrowser extends JPanel {
     }
 
 
-    private boolean matchesPropertyValue(ObjectValue unit, String propertyPath, String valueToMatch) {
-
-        if (valueToMatch.isEmpty()) {
-            return hasProperty(unit, propertyPath);
-        }
-
-
-        NDFValue currentValue = com.warnomodmaker.model.PropertyUpdater.getPropertyValue(unit, propertyPath);
-        if (currentValue == null) {
-            return false;
-        }
-
-
-        String valueStr;
-        if (currentValue instanceof NDFValue.StringValue) {
-
-            String rawValue = ((NDFValue.StringValue) currentValue).getValue();
-
-            while ((rawValue.startsWith("'") && rawValue.endsWith("'")) ||
-                   (rawValue.startsWith("\"") && rawValue.endsWith("\""))) {
-                rawValue = rawValue.substring(1, rawValue.length() - 1);
-            }
-            valueStr = rawValue.toLowerCase();
-        } else if (currentValue instanceof NDFValue.BooleanValue) {
-            valueStr = Boolean.toString(((NDFValue.BooleanValue) currentValue).getValue()).toLowerCase();
-        } else {
-            valueStr = currentValue.toString().toLowerCase();
-        }
-        if (valueToMatch.startsWith(">")) {
-            try {
-                double threshold = Double.parseDouble(valueToMatch.substring(1).trim());
-                double value = Double.parseDouble(valueStr);
-                return value > threshold;
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        } else if (valueToMatch.startsWith("<")) {
-            try {
-                double threshold = Double.parseDouble(valueToMatch.substring(1).trim());
-                double value = Double.parseDouble(valueStr);
-                return value < threshold;
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        } else if (valueToMatch.startsWith(">=")) {
-            try {
-                double threshold = Double.parseDouble(valueToMatch.substring(2).trim());
-                double value = Double.parseDouble(valueStr);
-                return value >= threshold;
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        } else if (valueToMatch.startsWith("<=")) {
-            try {
-                double threshold = Double.parseDouble(valueToMatch.substring(2).trim());
-                double value = Double.parseDouble(valueStr);
-                return value <= threshold;
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        } else if (valueToMatch.startsWith("=")) {
-            try {
-                double threshold = Double.parseDouble(valueToMatch.substring(1).trim());
-                double value = Double.parseDouble(valueStr);
-                return value == threshold;
-            } catch (NumberFormatException e) {
-                return valueStr.equals(valueToMatch.substring(1).trim().toLowerCase());
-            }
-        } else {
-            return valueStr.contains(valueToMatch);
-        }
-    }
-
-
     private void notifySelectionListeners(ObjectValue selectedUnit) {
         for (Consumer<ObjectValue> listener : selectionListeners) {
             listener.accept(selectedUnit);
@@ -588,21 +515,6 @@ public class UnitBrowser extends JPanel {
     private void notifyPropertyFilterListeners(String filter) {
         for (Consumer<String> listener : propertyFilterListeners) {
             listener.accept(filter);
-        }
-    }
-
-
-    private static class UnitListCellRenderer extends DefaultListCellRenderer {
-        @Override
-        public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-            Component component = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-
-            if (value instanceof ObjectValue) {
-                ObjectValue unit = (ObjectValue) value;
-                setText(unit.getInstanceName());
-            }
-
-            return component;
         }
     }
 
@@ -781,7 +693,12 @@ public class UnitBrowser extends JPanel {
 
 
 
-    private void filterByTagCategory(String searchText, String category) {
+    /**
+     * Generic filter method that performs background filtering with a predicate.
+     * Reduces code duplication across filterByTagCategory, filterByUnitRole, and filterBySpecialties.
+     */
+    private void filterWithPredicate(String searchText, Predicate<ObjectValue> matcher,
+                                     String searchingMessage, String resultMessage, String errorMessage) {
         // Cancel any existing search
         if (currentSearchWorker != null && !currentSearchWorker.isDone()) {
             currentSearchWorker.cancel(true);
@@ -792,25 +709,21 @@ public class UnitBrowser extends JPanel {
             return;
         }
 
-        statusLabel.setText("Searching by " + category.toLowerCase() + " tags...");
+        statusLabel.setText(searchingMessage);
 
-        // Use SwingWorker to perform the search in a background thread
         currentSearchWorker = new SwingWorker<List<ObjectValue>, Void>() {
             @Override
             protected List<ObjectValue> doInBackground() throws Exception {
                 List<ObjectValue> results = new ArrayList<>();
-
                 for (ObjectValue unit : ndfObjects) {
                     try {
-                        if (matchesTagCategory(unit, searchText, category)) {
+                        if (matcher.test(unit)) {
                             results.add(unit);
                         }
                     } catch (Exception e) {
                         // Skip units that cause errors
-                        continue;
                     }
                 }
-
                 return results;
             }
 
@@ -823,21 +736,16 @@ public class UnitBrowser extends JPanel {
                     for (ObjectValue unit : filteredObjects) {
                         newModel.addElement(unit);
                     }
-
-                    // Replace the entire model at once
                     objectList.setModel(newModel);
                     listModel = newModel;
                     String objectTypeName = getObjectTypeNameForDisplay(currentFileType);
-                    statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found with " + category.toLowerCase() + " tag containing '" + searchText + "'");
-
-                    // Select the first object if available
+                    statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " " + resultMessage);
                     if (!filteredObjects.isEmpty()) {
                         objectList.setSelectedIndex(0);
                     }
                 } catch (InterruptedException | ExecutionException e) {
-                    statusLabel.setText("Error searching by " + category.toLowerCase() + " tags: " + e.getMessage());
+                    statusLabel.setText(errorMessage + e.getMessage());
                 } finally {
-                    // Re-enable the search field and restore focus
                     searchField.setEnabled(true);
                     searchField.requestFocusInWindow();
                 }
@@ -847,14 +755,17 @@ public class UnitBrowser extends JPanel {
         currentSearchWorker.execute();
     }
 
+    private void filterByTagCategory(String searchText, String category) {
+        filterWithPredicate(searchText,
+            unit -> matchesTagCategory(unit, searchText, category),
+            "Searching by " + category.toLowerCase() + " tags...",
+            "found with " + category.toLowerCase() + " tag containing '" + searchText + "'",
+            "Error searching by " + category.toLowerCase() + " tags: ");
+    }
+
     private boolean matchesTagCategory(ObjectValue unit, String searchText, String category) {
-        // Get all tags from the unit
         java.util.Set<String> unitTags = TagExtractor.extractTagsFromUnit(unit);
-
-        // Get the categorized tags for this category
         java.util.Set<String> categoryTags = getCategoryTags(unitTags, category);
-
-        // Check if any tag in this category contains the search text
         return categoryTags.stream().anyMatch(tag ->
             tag.toLowerCase().contains(searchText.toLowerCase()));
     }
@@ -870,7 +781,6 @@ public class UnitBrowser extends JPanel {
             case "Special Abilities":
                 return TagExtractor.categorizeSpecialTags(allTags);
             case "Other":
-                // For "Other", we need to get all tags that don't belong to other categories
                 java.util.Set<String> otherTags = new java.util.HashSet<>(allTags);
                 otherTags.removeAll(TagExtractor.categorizeUnitTypeTags(allTags));
                 otherTags.removeAll(TagExtractor.categorizeWeaponTags(allTags));
@@ -883,140 +793,26 @@ public class UnitBrowser extends JPanel {
     }
 
     private void filterByUnitRole(String searchText) {
-        // Cancel any existing search
-        if (currentSearchWorker != null && !currentSearchWorker.isDone()) {
-            currentSearchWorker.cancel(true);
-        }
-
-        if (searchText.isEmpty()) {
-            resetToAllUnits();
-            return;
-        }
-
-        statusLabel.setText("Searching by unit role...");
-
-        // Use SwingWorker to perform the search in a background thread
-        currentSearchWorker = new SwingWorker<List<ObjectValue>, Void>() {
-            @Override
-            protected List<ObjectValue> doInBackground() throws Exception {
-                List<ObjectValue> results = new ArrayList<>();
-
-                for (ObjectValue unit : ndfObjects) {
-                    try {
-                        String unitRole = TagExtractor.extractUnitRole(unit);
-                        if (unitRole != null && unitRole.toLowerCase().contains(searchText.toLowerCase())) {
-                            results.add(unit);
-                        }
-                    } catch (Exception e) {
-                        // Skip units that cause errors
-                        continue;
-                    }
-                }
-
-                return results;
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    List<ObjectValue> results = get();
-                    filteredObjects = results;
-                    DefaultListModel<ObjectValue> newModel = new DefaultListModel<>();
-                    for (ObjectValue unit : filteredObjects) {
-                        newModel.addElement(unit);
-                    }
-
-                    // Replace the entire model at once
-                    objectList.setModel(newModel);
-                    listModel = newModel;
-                    String objectTypeName = getObjectTypeNameForDisplay(currentFileType);
-                    statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found with unit role containing '" + searchText + "'");
-
-                    // Select the first object if available
-                    if (!filteredObjects.isEmpty()) {
-                        objectList.setSelectedIndex(0);
-                    }
-                } catch (InterruptedException | ExecutionException e) {
-                    statusLabel.setText("Error searching by unit role: " + e.getMessage());
-                } finally {
-                    // Re-enable the search field and restore focus
-                    searchField.setEnabled(true);
-                    searchField.requestFocusInWindow();
-                }
-            }
-        };
-
-        currentSearchWorker.execute();
+        filterWithPredicate(searchText,
+            unit -> {
+                String unitRole = TagExtractor.extractUnitRole(unit);
+                return unitRole != null && unitRole.toLowerCase().contains(searchText.toLowerCase());
+            },
+            "Searching by unit role...",
+            "found with unit role containing '" + searchText + "'",
+            "Error searching by unit role: ");
     }
 
     private void filterBySpecialties(String searchText) {
-        // Cancel any existing search
-        if (currentSearchWorker != null && !currentSearchWorker.isDone()) {
-            currentSearchWorker.cancel(true);
-        }
-
-        if (searchText.isEmpty()) {
-            resetToAllUnits();
-            return;
-        }
-
-        statusLabel.setText("Searching by specialties...");
-
-        // Use SwingWorker to perform the search in a background thread
-        currentSearchWorker = new SwingWorker<List<ObjectValue>, Void>() {
-            @Override
-            protected List<ObjectValue> doInBackground() throws Exception {
-                List<ObjectValue> results = new ArrayList<>();
-
-                for (ObjectValue unit : ndfObjects) {
-                    try {
-                        Set<String> specialties = TagExtractor.extractSpecialtiesList(unit);
-                        boolean matches = specialties.stream().anyMatch(specialty ->
-                            specialty.toLowerCase().contains(searchText.toLowerCase()));
-
-                        if (matches) {
-                            results.add(unit);
-                        }
-                    } catch (Exception e) {
-                        // Skip units that cause errors
-                        continue;
-                    }
-                }
-
-                return results;
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    List<ObjectValue> results = get();
-                    filteredObjects = results;
-                    DefaultListModel<ObjectValue> newModel = new DefaultListModel<>();
-                    for (ObjectValue unit : filteredObjects) {
-                        newModel.addElement(unit);
-                    }
-
-                    // Replace the entire model at once
-                    objectList.setModel(newModel);
-                    listModel = newModel;
-                    String objectTypeName = getObjectTypeNameForDisplay(currentFileType);
-                    statusLabel.setText(filteredObjects.size() + " " + objectTypeName + " found with specialty containing '" + searchText + "'");
-
-                    // Select the first object if available
-                    if (!filteredObjects.isEmpty()) {
-                        objectList.setSelectedIndex(0);
-                    }
-                } catch (InterruptedException | ExecutionException e) {
-                    statusLabel.setText("Error searching by specialties: " + e.getMessage());
-                } finally {
-                    // Re-enable the search field and restore focus
-                    searchField.setEnabled(true);
-                    searchField.requestFocusInWindow();
-                }
-            }
-        };
-
-        currentSearchWorker.execute();
+        filterWithPredicate(searchText,
+            unit -> {
+                Set<String> specialties = TagExtractor.extractSpecialtiesList(unit);
+                return specialties.stream().anyMatch(specialty ->
+                    specialty.toLowerCase().contains(searchText.toLowerCase()));
+            },
+            "Searching by specialties...",
+            "found with specialty containing '" + searchText + "'",
+            "Error searching by specialties: ");
     }
 
     private String getObjectTypeNameForDisplay(NDFFileType fileType) {
@@ -1024,5 +820,47 @@ public class UnitBrowser extends JPanel {
             return fileType.getDisplayName().toLowerCase() + "s";
         }
         return "objects";
+    }
+
+    /**
+     * Dispose of resources to prevent memory leaks when the browser is no longer needed.
+     * This should be called when the parent tab is closed.
+     */
+    public void dispose() {
+        // Stop the search timer
+        if (searchTimer != null) {
+            searchTimer.stop();
+        }
+
+        // Cancel any running search worker
+        if (currentSearchWorker != null && !currentSearchWorker.isDone()) {
+            currentSearchWorker.cancel(true);
+        }
+
+        // Clear listeners to prevent memory leaks
+        selectionListeners.clear();
+        propertyFilterListeners.clear();
+
+        // Clear data references
+        if (ndfObjects != null) {
+            ndfObjects = null;
+        }
+        if (filteredObjects != null) {
+            filteredObjects = null;
+        }
+        if (originalObjects != null) {
+            originalObjects = null;
+        }
+
+        // Clear the list model
+        if (listModel != null) {
+            listModel.clear();
+        }
+
+        // Clear modification tracker reference
+        modificationTracker = null;
+        if (cellRenderer != null) {
+            cellRenderer.setModificationTracker(null);
+        }
     }
 }

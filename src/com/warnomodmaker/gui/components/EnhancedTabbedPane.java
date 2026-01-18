@@ -59,6 +59,12 @@ public class EnhancedTabbedPane extends JTabbedPane {
         super.removeTabAt(index);
     }
 
+    @Override
+    public void removeAll() {
+        tabStateMap.clear();
+        super.removeAll();
+    }
+
     private JPanel createTabComponent(String title, FileTabState tabState, int index) {
         JPanel tabPanel = new JPanel(new BorderLayout());
         tabPanel.setOpaque(false);
