@@ -81,7 +81,8 @@ WARNO Mod Maker is a comprehensive Java Swing application designed for advanced 
 
 ## 📋 Requirements
 
-- **Java 11 or higher** (Java 17+ recommended for optimal performance)
+- **Java 17 or higher** for building and running the application
+- **Java 17+ recommended** for the best editor performance on large files
 - **Windows OS** (primary support, Linux/Mac may work but untested)
 - **2GB RAM minimum** (4GB recommended for large files and multiple tabs)
 - **1GB disk space** for application and temporary files
@@ -96,6 +97,9 @@ WARNO Mod Maker is a comprehensive Java Swing application designed for advanced 
 git clone https://github.com/your-repo/warno-mod-maker.git
 cd warno-mod-maker
 
+# Optional: point the build at a specific JDK
+set CUSTOM_JAVA_HOME=C:\Program Files\Java\jdk-17
+
 # Build and run
 build.bat
 ```
@@ -103,7 +107,7 @@ build.bat
 ### Manual Build
 ```bash
 # Compile
-javac -cp "lib/*" -d build src/com/warnomodmaker/**/*.java
+javac --release 17 -cp "lib/*" -d build src/com/warnomodmaker/**/*.java
 
 # Create JAR
 jar -cfe WarnoModMaker.jar com.warnomodmaker.WarnoModMaker -C build .
@@ -115,6 +119,15 @@ java -jar WarnoModMaker.jar
 ### For Large Files (Recommended)
 ```bash
 java -Xmx8g -jar WarnoModMaker.jar
+```
+
+### Build Overrides
+```bash
+# Use a newer bytecode target when needed
+set BUILD_JAVA_RELEASE=21
+
+# Or point directly at a specific installed JDK
+set CUSTOM_JAVA_HOME=C:\Program Files\Java\jdk-21
 ```
 
 ---

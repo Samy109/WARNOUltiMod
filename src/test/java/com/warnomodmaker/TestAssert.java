@@ -1,4 +1,4 @@
-package test.java.com.warnomodmaker;
+package com.warnomodmaker;
 
 import java.util.*;
 
