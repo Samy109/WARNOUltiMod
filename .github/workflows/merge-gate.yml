@@ -1,0 +1,118 @@
+name: Merge Gate
+
+on:
+  pull_request_target:
+    branches: [master]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+jobs:
+  merge-gate:
+    name: Soft approval gate
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Evaluate merge gate
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const requiredApprover = "Samy109";
+            const requiredLabel = "codex-approved";
+            let pr = context.payload.pull_request;
+
+            if (!pr) {
+              const prs = await github.paginate(github.rest.pulls.list, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: "open",
+                base: "master",
+                head: `${context.repo.owner}:Test`,
+                per_page: 100
+              });
+              pr = prs[0];
+            }
+
+            if (!pr) {
+              core.info("No open Test -> master pull request found.");
+              core.setOutput("should_merge", "false");
+              return;
+            }
+
+            if (pr.base.ref !== "master" || pr.head.ref !== "Test" || pr.head.repo.full_name !== context.payload.repository.full_name) {
+              core.info("Pull request is outside the Test -> master merge gate scope.");
+              core.setOutput("should_merge", "false");
+              return;
+            }
+
+            const labels = pr.labels.map((label) => label.name);
+            const hasCodexApproval = labels.includes(requiredLabel);
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100
+            });
+
+            const latestReviews = new Map();
+            for (const review of reviews) {
+              latestReviews.set(review.user.login, review.state);
+            }
+
+            const hasRequiredApproval = latestReviews.get(requiredApprover) === "APPROVED";
+
+            const checkRuns = await github.paginate(github.rest.checks.listForRef, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pr.head.sha,
+              per_page: 100
+            });
+
+            const relevantChecks = checkRuns.filter((run) => run.name !== "Soft approval gate");
+            const hasChecks = relevantChecks.length > 0;
+            const unfinished = relevantChecks.filter((run) => run.status !== "completed");
+            const failed = relevantChecks.filter((run) => !["success", "skipped", "neutral"].includes(run.conclusion));
+
+            core.info(`required approver (${requiredApprover}): ${hasRequiredApproval}`);
+            core.info(`required label (${requiredLabel}): ${hasCodexApproval}`);
+            core.info(`completed checks: ${hasChecks && unfinished.length === 0 && failed.length === 0}`);
+
+            const shouldMerge = hasRequiredApproval && hasCodexApproval && hasChecks && unfinished.length === 0 && failed.length === 0;
+            core.setOutput("should_merge", shouldMerge ? "true" : "false");
+
+      - name: Merge approved PR
+        if: steps.gate.outputs.should_merge == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let pr = context.payload.pull_request;
+            if (!pr) {
+              const prs = await github.paginate(github.rest.pulls.list, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: "open",
+                base: "master",
+                head: `${context.repo.owner}:Test`,
+                per_page: 100
+              });
+              pr = prs[0];
+            }
+            await github.rest.pulls.merge({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              merge_method: "squash"
+            });

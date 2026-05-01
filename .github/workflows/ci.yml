@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [Test]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app-build:
+    name: App build
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build WARNO Mod Maker
+        shell: cmd
+        run: build.bat
+
+      - name: Upload fat jar
+        uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: warno-mod-maker-fat-jar
+          path: WarnoModMaker-fat.jar
+          if-no-files-found: error
+
+  test-harness:
+    name: Test harness sub-project
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Compile test harness
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path test-build | Out-Null
+          Get-ChildItem -Path src\com,src\test\java -Recurse -Filter *.java |
+            ForEach-Object { '"' + $_.FullName + '"' } |
+            Set-Content -Path sources-ci.txt
+          javac -d test-build --release 17 -cp "lib\flatlaf-3.6.jar;src" "@sources-ci.txt"
+
+      - name: Run console E2E tests when fixtures are present
+        shell: pwsh
+        run: |
+          if (Test-Path -LiteralPath "tester files") {
+            java -Djava.awt.headless=true -cp "test-build;lib\flatlaf-3.6.jar" com.warnomodmaker.ComprehensiveE2ETest --console
+          } else {
+            Write-Host "No 'tester files' fixture directory found; test harness compile completed."
+          }
