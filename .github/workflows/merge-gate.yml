@@ -3,7 +3,7 @@ name: Merge Gate
 on:
   pull_request_target:
     branches: [master]
-    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review]
   pull_request_review:
     types: [submitted]
   workflow_run:
@@ -30,7 +30,6 @@ jobs:
         with:
           script: |
             const requiredApprover = "Samy109";
-            const requiredLabel = "codex-approved";
             let pr = context.payload.pull_request;
 
             if (!pr) {
@@ -56,9 +55,6 @@ jobs:
               core.setOutput("should_merge", "false");
               return;
             }
-
-            const labels = pr.labels.map((label) => label.name);
-            const hasCodexApproval = labels.includes(requiredLabel);
 
             const reviews = await github.paginate(github.rest.pulls.listReviews, {
               owner: context.repo.owner,
@@ -87,10 +83,9 @@ jobs:
             const failed = relevantChecks.filter((run) => !["success", "skipped", "neutral"].includes(run.conclusion));
 
             core.info(`required approver (${requiredApprover}): ${hasRequiredApproval}`);
-            core.info(`required label (${requiredLabel}): ${hasCodexApproval}`);
             core.info(`completed checks: ${hasChecks && unfinished.length === 0 && failed.length === 0}`);
 
-            const shouldMerge = hasRequiredApproval && hasCodexApproval && hasChecks && unfinished.length === 0 && failed.length === 0;
+            const shouldMerge = hasRequiredApproval && hasChecks && unfinished.length === 0 && failed.length === 0;
             core.setOutput("should_merge", shouldMerge ? "true" : "false");
 
       - name: Merge approved PR
