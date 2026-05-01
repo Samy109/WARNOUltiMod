@@ -3,8 +3,14 @@ name: CI
 on:
   push:
     branches: [Test]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   pull_request:
     branches: [master]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   workflow_dispatch:
 
 permissions:
@@ -33,17 +39,9 @@ jobs:
         shell: cmd
         run: build.bat
 
-      - name: Upload fat jar
-        uses: actions/upload-artifact@v4
-        if: github.event_name == 'push'
-        with:
-          name: warno-mod-maker-fat-jar
-          path: WarnoModMaker-fat.jar
-          if-no-files-found: error
-
   test-harness:
     name: Test harness sub-project
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
@@ -56,20 +54,17 @@ jobs:
           java-version: "17"
 
       - name: Compile test harness
-        shell: pwsh
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force -Path test-build | Out-Null
-          $root = (Get-Location).Path
-          Get-ChildItem -Path src\com,src\test\java -Recurse -Filter *.java |
-            ForEach-Object { $_.FullName.Substring($root.Length + 1).Replace('\', '/') } |
-            Set-Content -Path sources-ci.txt
-          javac -d test-build --release 17 -cp "lib\flatlaf-3.6.jar;src" "@sources-ci.txt"
+          mkdir -p test-build
+          find src/com src/test/java -name "*.java" > sources-ci.txt
+          javac -d test-build --release 17 -cp "lib/flatlaf-3.6.jar:src" @sources-ci.txt
 
       - name: Run console E2E tests when fixtures are present
-        shell: pwsh
+        shell: bash
         run: |
-          if (Test-Path -LiteralPath "tester files") {
-            java -Djava.awt.headless=true -cp "test-build;lib\flatlaf-3.6.jar" com.warnomodmaker.ComprehensiveE2ETest --console
-          } else {
-            Write-Host "No 'tester files' fixture directory found; test harness compile completed."
-          }
+          if [ -d "tester files" ]; then
+            java -Djava.awt.headless=true -cp "test-build:lib/flatlaf-3.6.jar" com.warnomodmaker.ComprehensiveE2ETest --console
+          else
+            echo "No 'tester files' fixture directory found; test harness compile completed."
+          fi
