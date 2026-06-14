@@ -120,3 +120,4 @@ echo   "%JAVA_CMD%" -jar "%OUTPUT_JAR%"
 echo.
 echo Build complete!
 endlocal
+rem Trigger CI workflow run
