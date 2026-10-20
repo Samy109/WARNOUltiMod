@@ -119,7 +119,7 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
             case RAW_EXPRESSION:
                 return "[R]";
             case NULL:
-                return "[∅]";
+                return "[\u2205]";
             case MAP:
                 return ICON_MAP;
             case TUPLE:

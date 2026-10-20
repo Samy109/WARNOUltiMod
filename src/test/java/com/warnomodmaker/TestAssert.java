@@ -43,7 +43,7 @@ public class TestAssert {
         assertionCount++;
         if (Math.abs(expected - actual) > delta) {
             throw new AssertionError("ASSERTION FAILED: " + message +
-                "\n  Expected: " + expected + " (±" + delta + ")" +
+                "\n  Expected: " + expected + " (\u00B1" + delta + ")" +
                 "\n  Actual:   " + actual +
                 "\n  Difference: " + Math.abs(expected - actual));
         }

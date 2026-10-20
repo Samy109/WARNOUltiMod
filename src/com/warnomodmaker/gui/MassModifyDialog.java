@@ -1688,7 +1688,7 @@ public class MassModifyDialog extends JDialog {
                 // All numeric operators allowed
                 filtered.add(t);
             } else if (map) {
-                // For MAP entries: allow math only if the specific entry’s value is numeric
+                // For MAP entries: allow math only if the specific entry's value is numeric
                 // The scanner supplies types for expanded ".(Key)" entries; if type==NUMBER we will treat as numeric.
                 // Here, type==MAP indicates either the user typed a raw map path manually or we lack per-entry type;
                 // to be strict (no auto-conversion), restrict to SET/REPLACE.

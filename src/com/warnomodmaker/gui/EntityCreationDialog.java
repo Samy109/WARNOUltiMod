@@ -331,13 +331,13 @@ public class EntityCreationDialog extends JDialog {
         Color statusColor;
 
         if (fileOpen) {
-            statusText = "✓ Available";
+            statusText = "\u2713 Available";
             statusColor = new Color(80, 200, 120); // Brighter green for dark background
         } else if (isRequired) {
-            statusText = "✗ Not Open";
+            statusText = "\u2717 Not Open";
             statusColor = new Color(255, 100, 100); // Brighter red for dark background
         } else {
-            statusText = "○ Not Open";
+            statusText = "\u25CB Not Open";
             statusColor = new Color(160, 160, 160); // Lighter gray for dark background
         }
 
@@ -383,11 +383,11 @@ public class EntityCreationDialog extends JDialog {
                 if (openFiles.containsKey(req.getFileType())) {
                     String templateName = generatePreviewTemplateName(entityName, req.getFileType());
                     String description = getFileDescription(req.getFileType());
-                    preview.append("  ✓ ").append(req.getFileType()).append(".ndf\n");
-                    preview.append("    → Object: ").append(templateName).append("\n");
-                    preview.append("    → Purpose: ").append(description).append("\n\n");
+                    preview.append("  \u2713 ").append(req.getFileType()).append(".ndf\n");
+                    preview.append("    \u2192 Object: ").append(templateName).append("\n");
+                    preview.append("    \u2192 Purpose: ").append(description).append("\n\n");
                 } else {
-                    preview.append("  ✗ ").append(req.getFileType()).append(".ndf (NOT OPEN - Required!)\n\n");
+                    preview.append("  \u2717 ").append(req.getFileType()).append(".ndf (NOT OPEN - Required!)\n\n");
                 }
             }
         }
@@ -402,9 +402,9 @@ public class EntityCreationDialog extends JDialog {
             for (EntityCreationManager.FileRequirement req : availableOptional) {
                 String templateName = generatePreviewTemplateName(entityName, req.getFileType());
                 String description = getFileDescription(req.getFileType());
-                preview.append("  ✓ ").append(req.getFileType()).append(".ndf\n");
-                preview.append("    → Object: ").append(templateName).append("\n");
-                preview.append("    → Purpose: ").append(description).append("\n\n");
+                preview.append("  \u2713 ").append(req.getFileType()).append(".ndf\n");
+                preview.append("    \u2192 Object: ").append(templateName).append("\n");
+                preview.append("    \u2192 Purpose: ").append(description).append("\n\n");
             }
         }
 
@@ -417,7 +417,7 @@ public class EntityCreationDialog extends JDialog {
             preview.append("OPTIONAL FILES - Not open (will skip):\n");
             for (EntityCreationManager.FileRequirement req : missingOptional) {
                 String description = getFileDescription(req.getFileType());
-                preview.append("  ○ ").append(req.getFileType()).append(".ndf - ").append(description).append("\n");
+                preview.append("  \u25CB ").append(req.getFileType()).append(".ndf - ").append(description).append("\n");
             }
         }
 
@@ -479,7 +479,7 @@ public class EntityCreationDialog extends JDialog {
         }
 
         if (availableRequired == requiredFiles.size()) {
-            String statusText = "✓ All required files are open";
+            String statusText = "\u2713 All required files are open";
             if (availableOptional > 0) {
                 statusText += " (+" + availableOptional + " optional)";
             }
@@ -488,7 +488,7 @@ public class EntityCreationDialog extends JDialog {
             createButton.setEnabled(true);
         } else {
             int missingRequired = requiredFiles.size() - availableRequired;
-            statusLabel.setText("⚠ " + missingRequired + " required files not open");
+            statusLabel.setText("\u26A0 " + missingRequired + " required files not open");
             statusLabel.setForeground(Color.RED);
             createButton.setEnabled(false);
         }
@@ -545,20 +545,20 @@ public class EntityCreationDialog extends JDialog {
             StringBuilder errorMessage = new StringBuilder();
             errorMessage.append("Entity creation validation failed:\n\n");
             for (String issue : validationResult.getIssues()) {
-                errorMessage.append("• ").append(issue).append("\n");
+                errorMessage.append("  \u2022 ").append(issue).append("\n");
             }
 
             if (!validationResult.getWarnings().isEmpty()) {
                 errorMessage.append("\nWarnings:\n");
                 for (String warning : validationResult.getWarnings()) {
-                    errorMessage.append("• ").append(warning).append("\n");
+                    errorMessage.append("  \u2022 ").append(warning).append("\n");
                 }
             }
 
             JOptionPane.showMessageDialog(this, errorMessage.toString(),
                 "Entity Creation Validation Failed", JOptionPane.ERROR_MESSAGE);
 
-            statusLabel.setText("✗ Validation failed");
+            statusLabel.setText("\u2717 Validation failed");
             statusLabel.setForeground(Color.RED);
             createButton.setEnabled(true);
             return;
@@ -572,7 +572,7 @@ public class EntityCreationDialog extends JDialog {
             entityType, entityName, new HashMap<>(), openFiles, trackers);
 
         if (result.isSuccess()) {
-            statusLabel.setText("✓ Entity created successfully!");
+            statusLabel.setText("\u2713 Entity created successfully!");
             statusLabel.setForeground(new Color(40, 167, 69));
             entityCreated = true;
 
@@ -584,7 +584,7 @@ public class EntityCreationDialog extends JDialog {
             timer.setRepeats(false);
             timer.start();
         } else {
-            statusLabel.setText("✗ Entity creation failed");
+            statusLabel.setText("\u2717 Entity creation failed");
             statusLabel.setForeground(new Color(220, 53, 69));
             createButton.setEnabled(true);
 
@@ -601,7 +601,7 @@ public class EntityCreationDialog extends JDialog {
         message.append("Created objects:\n");
 
         for (Map.Entry<String, String> entry : result.getCreatedObjects().entrySet()) {
-            message.append("• ").append(entry.getKey()).append(".ndf: ").append(entry.getValue()).append("\n");
+            message.append("  \u2022 ").append(entry.getKey()).append(".ndf: ").append(entry.getValue()).append("\n");
         }
 
         JOptionPane.showMessageDialog(this, message.toString(), "Entity Created", JOptionPane.INFORMATION_MESSAGE);
@@ -613,7 +613,7 @@ public class EntityCreationDialog extends JDialog {
         message.append("Errors:\n");
 
         for (String error : result.getErrors()) {
-            message.append("• ").append(error).append("\n");
+            message.append("  \u2022 ").append(error).append("\n");
         }
 
         JOptionPane.showMessageDialog(this, message.toString(), "Creation Failed", JOptionPane.ERROR_MESSAGE);

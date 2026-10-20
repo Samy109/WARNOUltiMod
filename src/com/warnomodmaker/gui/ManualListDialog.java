@@ -72,7 +72,7 @@ public class ManualListDialog extends JDialog {
         gbc.insets = new Insets(5, 5, 5, 5);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        JButton addButton = new JButton("Add →");
+        JButton addButton = new JButton("Add >");
         addButton.addActionListener(this::addSelectedUnits);
         gbc.gridy = 0;
         buttonPanel.add(addButton, gbc);

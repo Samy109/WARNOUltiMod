@@ -84,7 +84,7 @@ public class PropertyUpdater {
         // Current value in the in-memory model
         NDFValue currentValue = getPropertyValue(ndfObject, propertyPath);
 
-        // ── EARLY EXIT : nothing really changes ───────────────────────────
+        // -- EARLY EXIT : nothing really changes ---------------------------
         if (isEffectivelyEqual(currentValue, newValue)) {
             return false;
         }

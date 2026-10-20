@@ -6,8 +6,8 @@ import java.util.*;
  * Comprehensive entity creation system based on actual NDF cross-file dependency analysis.
  *
  * DISCOVERED DEPENDENCY CHAIN:
- * UniteDescriptor.ndf → WeaponDescriptor.ndf → Ammunition.ndf
- * UniteDescriptor.ndf → WeaponDescriptor.ndf → AmmunitionMissiles.ndf (for missiles)
+ * UniteDescriptor.ndf -> WeaponDescriptor.ndf -> Ammunition.ndf
+ * UniteDescriptor.ndf -> WeaponDescriptor.ndf -> AmmunitionMissiles.ndf (for missiles)
  * BuildingDescriptors.ndf (standalone for buildings)
  * MissileDescriptors.ndf (for missile-specific data)
  */
@@ -1726,7 +1726,7 @@ public class EntityCreationManager {
 
         public String getDisplayName() {
             String displayName = templateName != null ? templateName : "Pending creation";
-            return fileType + " → " + displayName;
+            return fileType + " \u2192 " + displayName;
         }
     }
     

@@ -81,7 +81,7 @@ if exist "%BUILD_DIR%" rmdir /S /Q "%BUILD_DIR%"
 mkdir "%BUILD_DIR%"
 
 echo Compiling Java files with --release %BUILD_JAVA_RELEASE%...
-"%JAVAC_CMD%" -d "%BUILD_DIR%" --release %BUILD_JAVA_RELEASE% -cp "%FLATLAF_JAR%;src" src/com/warnomodmaker/*.java src/com/warnomodmaker/model/*.java src/com/warnomodmaker/parser/*.java src/com/warnomodmaker/util/*.java src/com/warnomodmaker/gui/*.java src/com/warnomodmaker/gui/theme/*.java src/com/warnomodmaker/gui/components/*.java src/com/warnomodmaker/gui/renderers/*.java
+"%JAVAC_CMD%" -d "%BUILD_DIR%" -encoding UTF-8 --release %BUILD_JAVA_RELEASE% -cp "%FLATLAF_JAR%;src" src/com/warnomodmaker/*.java src/com/warnomodmaker/model/*.java src/com/warnomodmaker/parser/*.java src/com/warnomodmaker/util/*.java src/com/warnomodmaker/gui/*.java src/com/warnomodmaker/gui/theme/*.java src/com/warnomodmaker/gui/components/*.java src/com/warnomodmaker/gui/renderers/*.java
 if %ERRORLEVEL% neq 0 (
     echo Compilation failed!
     exit /b %ERRORLEVEL%

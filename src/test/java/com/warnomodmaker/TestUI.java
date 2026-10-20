@@ -192,11 +192,11 @@ public class TestUI extends JFrame implements TestRunner.TestProgressListener {
         String message = "WARNO Mod Maker E2E Test Suite\n\n" +
                         "A comprehensive testing framework for the WARNO Mod Maker application.\n" +
                         "This tool validates all core functionality including:\n" +
-                        "• File parsing and writing\n" +
-                        "• Model integrity\n" +
-                        "• Modification operations\n" +
-                        "• New features\n" +
-                        "• Stress testing\n\n" +
+                        "  \u2022 File parsing and writing\n" +
+                        "  \u2022 Model integrity\n" +
+                        "  \u2022 Modification operations\n" +
+                        "  \u2022 New features\n" +
+                        "  \u2022 Stress testing\n\n" +
                         "Built with enhanced UI for better test visibility and debugging.";
 
         JOptionPane.showMessageDialog(this, message, "About E2E Test Suite", JOptionPane.INFORMATION_MESSAGE);

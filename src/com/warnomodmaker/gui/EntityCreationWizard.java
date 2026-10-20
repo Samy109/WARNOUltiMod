@@ -372,7 +372,7 @@ public class EntityCreationWizard extends JDialog {
         message.append("The following files are required for ").append(selectedEntityType).append(" entities:\n\n");
 
         for (String fileName : requiredFiles) {
-            message.append("• ").append(fileName).append("\n");
+            message.append("  \u2022 ").append(fileName).append("\n");
         }
 
         message.append("\nWould you like to automatically load these files?");
@@ -511,23 +511,23 @@ public class EntityCreationWizard extends JDialog {
 
             results.append("\nEntity Creation Results:\n");
             if (creationResult.isSuccess()) {
-                results.append("✓ Entity created successfully!\n\n");
+                results.append("\u2713 Entity created successfully!\n\n");
 
                 results.append("Files that were modified:\n");
                 for (Map.Entry<String, String> entry : creationResult.getCreatedObjects().entrySet()) {
-                    results.append("  ✓ ").append(entry.getKey()).append(" → ").append(entry.getValue()).append("\n");
+                    results.append("  \u2713 ").append(entry.getKey()).append(" \u2192 ").append(entry.getValue()).append("\n");
                 }
 
                 if (creationResult.hasPendingCreations()) {
                     results.append("\nFiles that need to be created/loaded:\n");
                     for (EntityCreationManager.PendingFileCreation pending : creationResult.getPendingCreations()) {
-                        results.append("  ⚠ ").append(pending.getDisplayName()).append("\n");
+                        results.append("  \u26A0 ").append(pending.getDisplayName()).append("\n");
                     }
                 }
 
                 entityCreated = true;
             } else {
-                results.append("✗ Entity creation failed\n");
+                results.append("\u2717 Entity creation failed\n");
                 results.append("Errors:\n");
                 for (String error : creationResult.getErrors()) {
                     results.append("  - ").append(error).append("\n");
@@ -539,7 +539,7 @@ public class EntityCreationWizard extends JDialog {
             }
 
         } catch (Exception e) {
-            results.append("\n✗ Entity creation failed with exception:\n");
+            results.append("\n\u2717 Entity creation failed with exception:\n");
             results.append("  ").append(e.getMessage()).append("\n");
             entityCreated = false;
         }

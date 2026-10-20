@@ -234,7 +234,7 @@ public class AdditiveOperationsDialog extends JDialog {
 
             // Add validation panel
             JPanel validationPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-            JLabel validationLabel = new JLabel("✓ Template loaded successfully");
+            JLabel validationLabel = new JLabel("\u2713 Template loaded successfully");
             validationLabel.setForeground(new Color(0, 120, 0));
             validationPanel.add(validationLabel);
             add(validationPanel, BorderLayout.SOUTH);
@@ -377,9 +377,9 @@ public class AdditiveOperationsDialog extends JDialog {
 
                 // For ModulesDescriptors, show more meaningful names
                 if (arrayPath.contains("ModulesDescriptors")) {
-                    return arrayPath + " → " + cleanTypeName + " Module";
+                    return arrayPath + " \u2192 " + cleanTypeName + " Module";
                 } else {
-                    return arrayPath + " → " + cleanTypeName + " [" + index + "]";
+                    return arrayPath + " \u2192 " + cleanTypeName + " [" + index + "]";
                 }
             }
 
@@ -389,9 +389,9 @@ public class AdditiveOperationsDialog extends JDialog {
 
         private String extractPathFromDisplayName(String displayName) {
             // Extract the actual path from display names
-            if (displayName.contains(" → ")) {
-                // For array elements like "ModulesDescriptors → Damage Module"
-                String[] parts = displayName.split(" → ");
+            if (displayName.contains(" \u2192 ")) {
+                // For array elements like "ModulesDescriptors -> Damage Module"
+                String[] parts = displayName.split(" \u2192 ");
                 String basePath = parts[0];
 
                 // If it contains module info, we need to find the actual index
