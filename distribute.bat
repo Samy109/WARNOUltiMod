@@ -82,10 +82,10 @@ copy WarnoModMaker.jar temp_input\
     --main-class com.warnomodmaker.WarnoModMaker ^
     --type app-image ^
     --dest . ^
-    --app-version 1.0 ^
+    --app-version 2.0.0 ^
     --vendor "WARNO Mod Maker" ^
     --description "WARNO Mod Maker - NDF File Editor for WARNO Game Modifications" ^
-    --copyright "2025" ^
+    --copyright "2026" ^
     --java-options "-Xmx4g"
 
 if %ERRORLEVEL% neq 0 (

@@ -169,18 +169,21 @@ public class AdditiveOperationManager {
     public boolean addModuleToObject(NDFValue.ObjectValue targetObject, String moduleType,
                                    Map<String, Object> moduleProperties, ModificationTracker tracker) {
         try {
-            // Get the ModulesDescriptors array
+            // Get the ModulesDescriptors array, initializing if missing
             NDFValue modulesValue = targetObject.getProperty("ModulesDescriptors");
-            if (!(modulesValue instanceof NDFValue.ArrayValue)) {
-                return false;
+            NDFValue.ArrayValue modulesArray;
+            if (modulesValue instanceof NDFValue.ArrayValue) {
+                modulesArray = (NDFValue.ArrayValue) modulesValue;
+            } else {
+                modulesArray = new NDFValue.ArrayValue();
+                targetObject.setProperty("ModulesDescriptors", modulesArray);
+                targetObject.setPropertyComma("ModulesDescriptors", true);
             }
 
-            NDFValue.ArrayValue modulesArray = (NDFValue.ArrayValue) modulesValue;
-
-            // Create new module from template
+            // Create new module from template or fallback
             NDFValue.ObjectValue newModule = templateManager.getModuleTemplate(moduleType);
             if (newModule == null) {
-                return false;
+                newModule = new NDFValue.ObjectValue(moduleType);
             }
 
             // Clone and customize module

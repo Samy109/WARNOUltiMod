@@ -64,17 +64,21 @@ public class PropertyScanner {
         discoveredProperties.clear();
         categorizedProperties.clear();
 
-        // Track property occurrences
+        // Track property occurrences and unit occurrences in a single pass
         Map<String, Integer> propertyOccurrences = new HashMap<>();
         Map<String, NDFValue.ValueType> propertyTypes = new HashMap<>();
-        for (ObjectValue unit : unitDescriptors) {
-            scanObject(unit, "", propertyOccurrences, propertyTypes);
+        Map<String, Set<Integer>> propertyUnitIndices = new HashMap<>();
+
+        for (int u = 0; u < unitDescriptors.size(); u++) {
+            ObjectValue unit = unitDescriptors.get(u);
+            scanObject(unit, "", propertyOccurrences, propertyTypes, u, propertyUnitIndices);
         }
 
         // Normalize paths to group similar properties (e.g., array elements)
         Map<String, Integer> normalizedOccurrences = new HashMap<>();
         Map<String, NDFValue.ValueType> normalizedTypes = new HashMap<>();
         Map<String, String> normalizedToOriginal = new HashMap<>();
+        Map<String, Set<Integer>> normalizedUnitIndices = new HashMap<>();
 
         for (Map.Entry<String, Integer> entry : propertyOccurrences.entrySet()) {
             String originalPath = entry.getKey();
@@ -87,6 +91,11 @@ public class PropertyScanner {
             // Accumulate counts for normalized paths
             normalizedOccurrences.put(normalizedPath,
                 normalizedOccurrences.getOrDefault(normalizedPath, 0) + count);
+
+            Set<Integer> unitsForPath = propertyUnitIndices.get(originalPath);
+            if (unitsForPath != null) {
+                normalizedUnitIndices.computeIfAbsent(normalizedPath, k -> new HashSet<>()).addAll(unitsForPath);
+            }
 
             // For normalized paths, keep the type consistent (prefer NUMBER over other types for math operations)
             NDFValue.ValueType existingType = normalizedTypes.get(normalizedPath);
@@ -106,8 +115,9 @@ public class PropertyScanner {
             // For mass updates, always use the normalized wildcard path
             String originalPath = normalizedPath;
 
-            // Calculate ACCURATE unit count using direct property checking
-            int actualUnitCount = countUnitsWithProperty(originalPath);
+            // Direct O(1) unit count from pre-indexed set - eliminates the O(U x P) traversal loop
+            Set<Integer> matchingUnits = normalizedUnitIndices.get(normalizedPath);
+            int actualUnitCount = matchingUnits != null ? matchingUnits.size() : 0;
 
             // Include all properties that are editable, regardless of unit count
             if (actualUnitCount > 0 && isEditableType(type)) {
@@ -143,6 +153,12 @@ public class PropertyScanner {
 
     private void scanObject(ObjectValue object, String basePath,
                            Map<String, Integer> occurrences, Map<String, NDFValue.ValueType> types) {
+        scanObject(object, basePath, occurrences, types, -1, null);
+    }
+
+    private void scanObject(ObjectValue object, String basePath,
+                           Map<String, Integer> occurrences, Map<String, NDFValue.ValueType> types,
+                           int unitIndex, Map<String, Set<Integer>> propertyUnitIndices) {
         if (object == null) return;
 
         for (Map.Entry<String, NDFValue> entry : object.getProperties().entrySet()) {
@@ -154,20 +170,23 @@ public class PropertyScanner {
                 // Record this property
                 occurrences.put(fullPath, occurrences.getOrDefault(fullPath, 0) + 1);
                 types.put(fullPath, value.getType());
+                if (propertyUnitIndices != null && unitIndex >= 0) {
+                    propertyUnitIndices.computeIfAbsent(fullPath, k -> new HashSet<>()).add(unitIndex);
+                }
 
                 // Recursively scan nested objects
                 if (value instanceof ObjectValue) {
-                    scanObject((ObjectValue) value, fullPath, occurrences, types);
+                    scanObject((ObjectValue) value, fullPath, occurrences, types, unitIndex, propertyUnitIndices);
                 } else if (value instanceof ArrayValue) {
                     // Special handling for ModulesDescriptors array - use type-based paths
                     if ("ModulesDescriptors".equals(propertyName)) {
-                        scanModulesDescriptors((ArrayValue) value, occurrences, types);
+                        scanModulesDescriptors((ArrayValue) value, occurrences, types, unitIndex, propertyUnitIndices);
                     } else {
                         ArrayValue arrayValue = (ArrayValue) value;
                         for (int i = 0; i < arrayValue.getElements().size(); i++) {
                             NDFValue element = arrayValue.getElements().get(i);
                             if (element instanceof ObjectValue) {
-                                scanObject((ObjectValue) element, fullPath + "[" + i + "]", occurrences, types);
+                                scanObject((ObjectValue) element, fullPath + "[" + i + "]", occurrences, types, unitIndex, propertyUnitIndices);
                             }
                         }
                     }
@@ -180,6 +199,9 @@ public class PropertyScanner {
                         // Record occurrence and the type of the VALUE for operator filtering
                         occurrences.put(mapEntryPath, occurrences.getOrDefault(mapEntryPath, 0) + 1);
                         types.put(mapEntryPath, entryKV.getValue().getType());
+                        if (propertyUnitIndices != null && unitIndex >= 0) {
+                            propertyUnitIndices.computeIfAbsent(mapEntryPath, k -> new HashSet<>()).add(unitIndex);
+                        }
                     }
                 }
             }
@@ -189,6 +211,12 @@ public class PropertyScanner {
 
     private void scanModulesDescriptors(ArrayValue modulesArray,
                                       Map<String, Integer> occurrences, Map<String, NDFValue.ValueType> types) {
+        scanModulesDescriptors(modulesArray, occurrences, types, -1, null);
+    }
+
+    private void scanModulesDescriptors(ArrayValue modulesArray,
+                                      Map<String, Integer> occurrences, Map<String, NDFValue.ValueType> types,
+                                      int unitIndex, Map<String, Set<Integer>> propertyUnitIndices) {
         for (NDFValue element : modulesArray.getElements()) {
             if (element instanceof ObjectValue) {
                 ObjectValue module = (ObjectValue) element;
@@ -199,7 +227,7 @@ public class PropertyScanner {
                     // Scan the Default sub-object if it exists
                     NDFValue defaultValue = module.getProperty("Default");
                     if (defaultValue instanceof ObjectValue) {
-                        scanObject((ObjectValue) defaultValue, "ModulesDescriptors[*].Default", occurrences, types);
+                        scanObject((ObjectValue) defaultValue, "ModulesDescriptors[*].Default", occurrences, types, unitIndex, propertyUnitIndices);
                     }
                     // Also scan other properties of the module selector itself
                     for (Map.Entry<String, NDFValue> entry : module.getProperties().entrySet()) {
@@ -210,11 +238,14 @@ public class PropertyScanner {
                             String fullPath = "ModulesDescriptors[*]." + propertyName;
                             occurrences.put(fullPath, occurrences.getOrDefault(fullPath, 0) + 1);
                             types.put(fullPath, value.getType());
+                            if (propertyUnitIndices != null && unitIndex >= 0) {
+                                propertyUnitIndices.computeIfAbsent(fullPath, k -> new HashSet<>()).add(unitIndex);
+                            }
                         }
                     }
                 } else {
                     // New structure: Direct module descriptor (e.g., TGenericMovementModuleDescriptor)
-                    scanObject(module, "ModulesDescriptors[*]", occurrences, types);
+                    scanObject(module, "ModulesDescriptors[*]", occurrences, types, unitIndex, propertyUnitIndices);
                 }
             }
         }

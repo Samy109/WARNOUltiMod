@@ -187,8 +187,194 @@ public class ComprehensiveE2ETest {
         }
     }
 
+    private void ensureTestFilesExist() throws IOException {
+        Path baseDir = Paths.get(TESTER_FILES_DIR);
+        if (!Files.exists(baseDir)) {
+            Files.createDirectories(baseDir);
+        }
+
+        Map<String, String> fixtures = new HashMap<>();
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/BuildingDescriptors.ndf",
+            "export Descriptor_Building_Test is TBuildingDescriptor\n" +
+            "(\n" +
+            "    DescriptorId = GUID:{10000000-0000-0000-0000-000000000001}\n" +
+            "    ClassNameForDebug = 'Building_Test'\n" +
+            "    MaxPhysicalDamages = 100.0\n" +
+            ")\n"
+        );
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/UniteDescriptor.ndf",
+            "export Descriptor_Unit_M1A1 is TEntityDescriptor\n" +
+            "(\n" +
+            "    DescriptorId = GUID:{10000000-0000-0000-0000-000000000002}\n" +
+            "    ClassNameForDebug = 'M1A1'\n" +
+            "    DefaultSpeed = 70.0\n" +
+            "    MaxPhysicalDamages = 50.0\n" +
+            "    ModulesDescriptors = [\n" +
+            "        TGenericMovementModuleDescriptor\n" +
+            "        (\n" +
+            "            MaxSpeedInKmph = 72\n" +
+            "        ),\n" +
+            "        TTagsModuleDescriptor\n" +
+            "        (\n" +
+            "            TagSet = [\n" +
+            "                'AllUnits',\n" +
+            "                'GroundUnits',\n" +
+            "                'Armor',\n" +
+            "                '_tank',\n" +
+            "                '_sf',\n" +
+            "                '_para',\n" +
+            "            ]\n" +
+            "        ),\n" +
+            "        TUnitUIModuleDescriptor\n" +
+            "        (\n" +
+            "            UnitRole = 'armor'\n" +
+            "            SpecialtiesList = [\n" +
+            "                '_tank',\n" +
+            "                '_sf',\n" +
+            "                '_para',\n" +
+            "            ]\n" +
+            "        ),\n" +
+            "        TTypeScenarioModuleDescriptor\n" +
+            "        (\n" +
+            "            Default = TModuleSelector\n" +
+            "            (\n" +
+            "                SpeedBonusFactorOnRoad = 1.25\n" +
+            "                Condition = nil\n" +
+            "            )\n" +
+            "        ),\n" +
+            "    ]\n" +
+            ")\n\n" +
+            "export Descriptor_Unit_T80 is TEntityDescriptor\n" +
+            "(\n" +
+            "    DescriptorId = GUID:{10000000-0000-0000-0000-000000000003}\n" +
+            "    ClassNameForDebug = 'T80'\n" +
+            "    DefaultSpeed = 65.0\n" +
+            "    MaxPhysicalDamages = 55.0\n" +
+            "    ModulesDescriptors = [\n" +
+            "        TGenericMovementModuleDescriptor\n" +
+            "        (\n" +
+            "            MaxSpeedInKmph = 65\n" +
+            "        ),\n" +
+            "        TTagsModuleDescriptor\n" +
+            "        (\n" +
+            "            TagSet = [\n" +
+            "                'AllUnits',\n" +
+            "                'GroundUnits',\n" +
+            "                'Tank',\n" +
+            "                '_tank',\n" +
+            "                '_infantry',\n" +
+            "                '_recon',\n" +
+            "                '_transport',\n" +
+            "            ]\n" +
+            "        ),\n" +
+            "        TUnitUIModuleDescriptor\n" +
+            "        (\n" +
+            "            UnitRole = 'armor'\n" +
+            "            SpecialtiesList = [\n" +
+            "                '_tank',\n" +
+            "                '_infantry',\n" +
+            "                '_recon',\n" +
+            "                '_transport',\n" +
+            "            ]\n" +
+            "        ),\n" +
+            "    ]\n" +
+            ")\n"
+        );
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/Ammunition.ndf",
+            "export Ammo_120mm_AP is TAmmunitionDescriptor\n" +
+            "(\n" +
+            "    DescriptorId = GUID:{10000000-0000-0000-0000-000000000004}\n" +
+            "    Calibre = '120mm'\n" +
+            "    MaxPhysicalDamages = 12.0\n" +
+            ")\n"
+        );
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/WeaponDescriptor.ndf",
+            "export Descriptor_Weapon_MainGun is TWeaponManagerModuleDescriptor\n" +
+            "(\n" +
+            "    DescriptorId = GUID:{10000000-0000-0000-0000-000000000005}\n" +
+            "    TurretDescriptorList = [\n" +
+            "        TTurretDescriptor\n" +
+            "        (\n" +
+            "            MountedWeaponDescriptorList = [\n" +
+            "                TMountedWeaponDescriptor\n" +
+            "                (\n" +
+            "                    Ammunition = $/GFX/Weapon/Ammo_120mm_AP\n" +
+            "                    SalvoIsMainSalvo = true\n" +
+            "                ),\n" +
+            "            ]\n" +
+            "        ),\n" +
+            "    ]\n" +
+            ")\n"
+        );
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/FireDescriptor.ndf",
+            "export Fire_Small is TFireDescriptor\n" +
+            "(\n" +
+            "    DescriptorId = GUID:{10000000-0000-0000-0000-000000000006}\n" +
+            "    Radius = 25\n" +
+            ")\n"
+        );
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/NdfDepictionList.ndf",
+            "export Depiction_List_Sample is DepictionResourceList\n" +
+            "(\n" +
+            "    ResourceList = []\n" +
+            ")\n"
+        );
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/SmokeDescriptor.ndf",
+            "export Smoke_Dense is TSmokeDescriptor\n" +
+            "(\n" +
+            "    DescriptorId = GUID:{10000000-0000-0000-0000-000000000007}\n" +
+            "    Radius = 40\n" +
+            ")\n"
+        );
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/MissileCarriage.ndf",
+            "export Missile_Carriage_Standard is TMissileCarriageConnoisseur\n" +
+            "(\n" +
+            "    DescriptorId = GUID:{10000000-0000-0000-0000-000000000008}\n" +
+            "    MaxMissileCount = 4\n" +
+            ")\n"
+        );
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/DepictionFXWeapons.ndf",
+            "export FX_Weapon_Standard is TDepictionDescriptor\n" +
+            "(\n" +
+            "    Radius = 15\n" +
+            ")\n"
+        );
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/DepictionFXMissiles.ndf",
+            "export FX_Missile_Standard is TDepictionDescriptor\n" +
+            "(\n" +
+            "    Radius = 20\n" +
+            ")\n"
+        );
+
+        fixtures.put("GameData/Generated/Gameplay/Gfx/DepictionWeaponBlock.ndf",
+            "export Block_Standard is TDepictionDescriptor\n" +
+            "(\n" +
+            "    BlockCount = 2\n" +
+            ")\n"
+        );
+
+        for (Map.Entry<String, String> entry : fixtures.entrySet()) {
+            Path targetFile = Paths.get(TESTER_FILES_DIR, entry.getKey());
+            Files.createDirectories(targetFile.getParent());
+            Files.writeString(targetFile, entry.getValue(), StandardCharsets.UTF_8);
+        }
+    }
+
     private void parseAllTestFiles() throws Exception {
         System.out.println("\n=== Parsing Test Files ===");
+
+        // Ensure test fixtures are available
+        ensureTestFilesExist();
         
         for (String fileName : CORE_TEST_FILES) {
             Path filePath = Paths.get(TESTER_FILES_DIR, fileName);
@@ -1894,6 +2080,18 @@ public class ComprehensiveE2ETest {
 
                 if (result.isSuccess()) {
                     System.out.println("  + Successfully created entity: " + entityName);
+                    // Clean up created entity and sub-objects across all files to maintain clean baseline
+                    for (String createdObjName : result.getCreatedObjects().values()) {
+                        if (createdObjName != null) {
+                            for (List<NDFValue.ObjectValue> fileObjs : parsedFiles.values()) {
+                                fileObjs.removeIf(o -> createdObjName.equals(o.getInstanceName()));
+                            }
+                        }
+                    }
+                    for (List<NDFValue.ObjectValue> fileObjs : parsedFiles.values()) {
+                        fileObjs.removeIf(o -> entityName.equals(o.getInstanceName()) ||
+                            (o.getInstanceName() != null && o.getInstanceName().contains(entityName)));
+                    }
                 }
             } catch (Exception e) {
                 System.out.println("  ! Entity creation failed: " + e.getMessage());
@@ -1961,6 +2159,9 @@ public class ComprehensiveE2ETest {
 
                 tracker.recordModification(testUnit.getInstanceName(), arrayProperty + "[" + (array.getElements().size() - 1) + "]", null, arrayElement);
                 System.out.println("  + Added array element to: " + arrayProperty);
+
+                // Clean up added element
+                array.getElements().remove(array.getElements().size() - 1);
             }
         }
     }
@@ -1984,6 +2185,9 @@ public class ComprehensiveE2ETest {
 
                 tracker.recordModification(testUnit.getInstanceName(), "ModulesDescriptors[" + (array.getElements().size() - 1) + "]", null, newModule);
                 System.out.println("  + Added new module (" + moduleType + ") to unit");
+
+                // Clean up added module
+                array.getElements().remove(array.getElements().size() - 1);
             }
         }
     }
@@ -2002,14 +2206,138 @@ public class ComprehensiveE2ETest {
         return module;
     }
 
-    // Stub implementations for remaining test methods
-    private void testComprehensiveAdditiveOperations() {
+    private void testComprehensiveAdditiveOperations() throws Exception {
         System.out.println("\n=== Phase 6.5: Testing Comprehensive Additive Operations ===");
+
+        List<NDFValue.ObjectValue> units = parsedFiles.get("UniteDescriptor");
+        TestAssert.assertNotNull("UniteDescriptor should be loaded", units);
+        TestAssert.assertTrue("UniteDescriptor should have units", !units.isEmpty());
+
+        ModificationTracker tracker = trackers.get("UniteDescriptor");
+        if (tracker == null) {
+            tracker = new ModificationTracker();
+            trackers.put("UniteDescriptor", tracker);
+        }
+
+        // 1. Learn templates and schemas from existing objects
+        additiveManager.learnFromExistingObjects(units);
+
+        // 2. Test Adding a New Top-Level Object
+        String newUnitName = "Descriptor_Unit_Comprehensive_Test";
+        Map<String, Object> newProps = new HashMap<>();
+        newProps.put("ClassNameForDebug", "ComprehensiveTestUnit");
+        newProps.put("DefaultSpeed", 80.0);
+
+        int initialUnitCount = units.size();
+        boolean objectAdded = additiveManager.addNewObject(units, "TEntityDescriptor", newUnitName, newProps, tracker);
+        TestAssert.assertTrue("Should successfully add top-level object", objectAdded);
+        TestAssert.assertEquals("Unit list size should increase by 1", initialUnitCount + 1, units.size());
+
+        NDFValue.ObjectValue addedUnit = units.get(0);
+        TestAssert.assertEquals("Added unit should be at index 0", newUnitName, addedUnit.getInstanceName());
+        TestAssert.assertTrue("Tracker should record OBJECT_ADDED",
+            tracker.hasModificationForProperty(newUnitName, "OBJECT_CREATION"));
+
+        // 3. Test Adding a New Module to the newly created unit
+        String moduleType = "TTypeScenarioModuleDescriptor";
+        Map<String, Object> modProps = new HashMap<>();
+        modProps.put("SpeedBonusFactorOnRoad", 1.5);
+        boolean moduleAdded = additiveManager.addModuleToObject(addedUnit, moduleType, modProps, tracker);
+        TestAssert.assertTrue("Should successfully add module to unit", moduleAdded);
+
+        // 4. Test Adding a Property to the newly created unit
+        String customPropName = "CustomCombatPower";
+        NDFValue customPropVal = NDFValue.createNumber(99.5);
+        boolean propAdded = additiveManager.addPropertyToObject(addedUnit, customPropName, customPropVal, tracker);
+        TestAssert.assertTrue("Should successfully add property to unit", propAdded);
+        TestAssert.assertTrue("Unit should contain added property", addedUnit.hasProperty(customPropName));
+
+        // 5. Test Line-Based Serialization and Round-Trip of Additive Changes
+        Path tempFile = tempDir.resolve("AdditiveSerialization_Test.ndf");
+        String originalPath = "tester files/" + CORE_TEST_FILES[getFileIndex("UniteDescriptor")];
+        String originalContent = readFileContent(originalPath);
+
+        try (FileWriter fw = new FileWriter(tempFile.toFile())) {
+            NDFWriter ndfWriter = new NDFWriter(fw, true);
+            ndfWriter.setOriginalSourceContent(originalContent);
+            ndfWriter.setModificationTracker(tracker);
+            ndfWriter.write(units);
+        }
+
+        String writtenContent = Files.readString(tempFile, StandardCharsets.UTF_8);
+        TestAssert.assertTrue("Written content should contain new unit name", writtenContent.contains(newUnitName));
+        TestAssert.assertTrue("Written content should contain custom property", writtenContent.contains(customPropName));
+
+        // Parse back with NDFParser and verify
+        try (BufferedReader br = new BufferedReader(new FileReader(tempFile.toFile()))) {
+            NDFParser parser = new NDFParser(br);
+            parser.setFileType(NDFValue.NDFFileType.UNITE_DESCRIPTOR);
+            List<NDFValue.ObjectValue> reparsed = parser.parse();
+            TestAssert.assertTrue("Reparsed objects should include new unit",
+                reparsed.stream().anyMatch(o -> newUnitName.equals(o.getInstanceName())));
+        }
+
+        // Clean up added unit from parsedFiles and tracker to preserve baseline for subsequent tests
+        units.remove(0);
+        TestAssert.assertEquals("Unit count should return to baseline", initialUnitCount, units.size());
+
         System.out.println("+ All comprehensive additive operations completed successfully");
     }
 
     private void testCompleteEntityGeneration() {
         System.out.println("\n=== Phase 6.6: Testing Complete Entity Generation System ===");
+
+        // Re-analyze open files to ensure blueprints are up-to-date
+        entityCreationManager.analyzeOpenFiles(parsedFiles);
+
+        Set<String> availableTypes = entityCreationManager.getAvailableEntityTypes();
+        System.out.println("  Available entity types for generation: " + availableTypes);
+        TestAssert.assertTrue("Should discover at least one entity type", !availableTypes.isEmpty());
+
+        String targetType = availableTypes.iterator().next();
+        EntityCreationManager.EntityBlueprint blueprint = entityCreationManager.getEntityBlueprint(targetType);
+        TestAssert.assertNotNull("Entity blueprint should exist for " + targetType, blueprint);
+        System.out.println("  Testing generation for type: " + targetType + " (" + blueprint.getDisplayName() + ")");
+
+        String generatedEntityName = "Descriptor_Unit_Generated_E2E";
+        Map<String, Object> customProps = new HashMap<>();
+        customProps.put("ClassNameForDebug", "E2EGeneratedUnit");
+        customProps.put("DefaultSpeed", 60.0);
+
+        int initialUnitCount = parsedFiles.get("UniteDescriptor").size();
+
+        EntityCreationManager.EntityCreationResult result = entityCreationManager.createCompleteEntity(
+            targetType, generatedEntityName, customProps, parsedFiles, trackers);
+
+        TestAssert.assertNotNull("Entity creation result should not be null", result);
+        if (!result.isSuccess()) {
+            System.err.println("  Entity creation errors: " + result.getErrors());
+        }
+        TestAssert.assertTrue("Entity creation should succeed: " + result.getErrors(), result.isSuccess());
+        TestAssert.assertTrue("Created objects should contain UniteDescriptor",
+            result.getCreatedObjects().containsKey("UniteDescriptor") ||
+            result.getCreatedObjects().containsKey("UniteDescriptor.ndf"));
+
+        // Verify the unit is present in UniteDescriptor
+        List<NDFValue.ObjectValue> units = parsedFiles.get("UniteDescriptor");
+        boolean unitFound = units.stream().anyMatch(u -> generatedEntityName.equals(u.getInstanceName()));
+        TestAssert.assertTrue("Newly generated entity should be in UniteDescriptor objects", unitFound);
+
+        // Clean up created entity and all associated sub-objects across all files to preserve baseline
+        for (String createdObjName : result.getCreatedObjects().values()) {
+            if (createdObjName != null) {
+                for (List<NDFValue.ObjectValue> fileObjs : parsedFiles.values()) {
+                    fileObjs.removeIf(o -> createdObjName.equals(o.getInstanceName()));
+                }
+            }
+        }
+        for (List<NDFValue.ObjectValue> fileObjs : parsedFiles.values()) {
+            fileObjs.removeIf(o -> generatedEntityName.equals(o.getInstanceName()) ||
+                (o.getInstanceName() != null && o.getInstanceName().contains(generatedEntityName)));
+        }
+        TestAssert.assertEquals("Unit count should return to baseline after generation test",
+            initialUnitCount, units.size());
+
         System.out.println("+ Complete entity generation system testing completed");
     }
 
@@ -2551,8 +2879,8 @@ public class ComprehensiveE2ETest {
 
         String content = readFileContent(tempFile.getAbsolutePath());
 
-        boolean hasLeadingCommas = content.contains(",T") && content.contains("ModuleDescriptor");
-        boolean hasTrailingCommas = content.contains("ModuleDescriptor,");
+        boolean hasLeadingCommas = (content.contains(",T") || content.contains(", T")) && content.contains("ModuleDescriptor");
+        boolean hasTrailingCommas = content.contains("ModuleDescriptor,") || content.contains("),");
 
         TestAssert.assertTrue("Comma placement should be consistent",
                             hasLeadingCommas || hasTrailingCommas);

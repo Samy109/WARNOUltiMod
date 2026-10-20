@@ -47,7 +47,7 @@ public class MainWindow extends JFrame implements FileLoader {
     private CrossSystemIntegrityManager integrityManager;
 
     public MainWindow() {
-        setTitle("WARNO Mod Maker");
+        setTitle("WARNO Mod Maker v2.0.0");
 
         // Restore window position and size from preferences with bounds checking
         UserPreferences prefs = UserPreferences.getInstance();
@@ -211,6 +211,12 @@ public class MainWindow extends JFrame implements FileLoader {
         JMenuItem entityCreationItem = new JMenuItem("Create Complete Entity...");
         entityCreationItem.addActionListener(this::showEntityCreationDialog);
         toolsMenu.add(entityCreationItem);
+
+        toolsMenu.addSeparator();
+
+        JMenuItem integrityCheckerItem = new JMenuItem("Cross-System Integrity Checker...");
+        integrityCheckerItem.addActionListener(this::showCrossSystemIntegrityDialog);
+        toolsMenu.add(integrityCheckerItem);
 
         menuBar.add(toolsMenu);
 
@@ -405,9 +411,8 @@ public class MainWindow extends JFrame implements FileLoader {
         dialog.setVisible(true);
 
         if (dialog.isModified()) {
-            currentTab.setModified(true);
+            markTabModified(currentTab);
             refreshCurrentTabWithProgress();
-            updateTitle();
         }
     }
 
@@ -435,9 +440,8 @@ public class MainWindow extends JFrame implements FileLoader {
                 massModifyDialog.setVisible(true);
 
                 if (massModifyDialog.isModified()) {
-                    currentTab.setModified(true);
+                    markTabModified(currentTab);
                     refreshCurrentTabWithProgress();
-                    updateTitle();
                 }
             }
         }
@@ -479,11 +483,10 @@ public class MainWindow extends JFrame implements FileLoader {
             dialog.setVisible(true);
 
             if (dialog.wasOperationPerformed()) {
-                currentTab.setModified(true);
+                markTabModified(currentTab);
 
                 // Refresh all UI components to show newly added objects
                 refreshCurrentTab();
-                updateTitle();
 
                 // Force refresh of any open modification dialogs
                 refreshModificationDialogs();
@@ -523,7 +526,7 @@ public class MainWindow extends JFrame implements FileLoader {
                                                     tabState.getFileType(),
                                                     tabState.getUnitDescriptors());
                     }
-                    tabState.setModified(true);
+                    markTabModified(tabState);
                 }
 
                 // Switch to the first tab (usually UniteDescriptorOLD.ndf where the new entity was created)
@@ -865,12 +868,28 @@ public class MainWindow extends JFrame implements FileLoader {
     }
 
 
+    private void showCrossSystemIntegrityDialog(ActionEvent e) {
+        CrossSystemIntegrityDialog dialog = new CrossSystemIntegrityDialog(this, integrityManager);
+        dialog.setVisible(true);
+    }
+
+    private void markTabModified(FileTabState tabState) {
+        if (tabState != null) {
+            tabState.setModified(true);
+            updateTabTitle(tabState);
+            updateTitle();
+            statusBar.updateFileInfo(tabState);
+        }
+    }
+
     private void showAboutDialog(ActionEvent e) {
         JOptionPane.showMessageDialog(
             this,
             "WARNO Mod Maker\n" +
-            "Version 1.0\n\n" +
-            "A tool for modifying WARNO game files.",
+            "Version 2.0.0\n\n" +
+            "A comprehensive tool for modifying WARNO game files.\n" +
+            "Features full additive engine, preview-backed mass modify,\n" +
+            "cross-system integrity checking, and line-based serialization.",
             "About WARNO Mod Maker",
             JOptionPane.INFORMATION_MESSAGE
         );
@@ -924,7 +943,7 @@ public class MainWindow extends JFrame implements FileLoader {
 
 
     private void updateTitle() {
-        String title = "WARNO Mod Maker";
+        String title = "WARNO Mod Maker v2.0.0";
 
         FileTabState currentTab = getCurrentTabState();
         if (currentTab != null && currentTab.getFile() != null) {
@@ -1031,9 +1050,8 @@ public class MainWindow extends JFrame implements FileLoader {
                 ProfileLoadDialog loadDialog = new ProfileLoadDialog(this, profile, currentTab.getUnitDescriptors(), currentTab.getModificationTracker());
                 loadDialog.setVisible(true);
                 if (loadDialog.wasApplied()) {
-                    currentTab.setModified(true);
+                    markTabModified(currentTab);
                     refreshCurrentTab();
-                    updateTitle();
 
                     JOptionPane.showMessageDialog(
                         this,

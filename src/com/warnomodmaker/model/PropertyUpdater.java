@@ -7,14 +7,32 @@ import java.util.Map;
 
 public class PropertyUpdater {
 
-    private static NDFValue.NDFFileType currentFileType = NDFValue.NDFFileType.UNKNOWN;
+    private static volatile NDFValue.NDFFileType currentFileType = NDFValue.NDFFileType.UNKNOWN;
+    private static final ThreadLocal<NDFValue.NDFFileType> threadLocalFileType = ThreadLocal.withInitial(() -> NDFValue.NDFFileType.UNKNOWN);
 
     public static void setFileType(NDFValue.NDFFileType fileType) {
-        currentFileType = fileType;
+        currentFileType = fileType != null ? fileType : NDFValue.NDFFileType.UNKNOWN;
+        threadLocalFileType.set(currentFileType);
     }
 
     public static NDFValue.NDFFileType getFileType() {
+        NDFValue.NDFFileType tl = threadLocalFileType.get();
+        if (tl != null && tl != NDFValue.NDFFileType.UNKNOWN) {
+            return tl;
+        }
         return currentFileType;
+    }
+
+    public static NDFValue.NDFFileType inferFileType(ObjectValue ndfObject) {
+        if (ndfObject == null) return NDFValue.NDFFileType.UNKNOWN;
+        String typeName = ndfObject.getTypeName();
+        if ("TWeaponManagerModuleDescriptor".equals(typeName)) return NDFValue.NDFFileType.WEAPON_DESCRIPTOR;
+        if ("TAmmunitionDescriptor".equals(typeName)) return NDFValue.NDFFileType.AMMUNITION;
+        if ("TBuildingDescriptor".equals(typeName) || "TBuildingCadavreDescriptor".equals(typeName)) return NDFValue.NDFFileType.BUILDING_DESCRIPTORS;
+        if ("TEntityDescriptor".equals(typeName)) {
+            if (ndfObject.hasProperty("ModulesDescriptors")) return NDFValue.NDFFileType.UNITE_DESCRIPTOR;
+        }
+        return NDFValue.NDFFileType.UNKNOWN;
     }
 
     public enum ModificationType {
@@ -51,7 +69,11 @@ public class PropertyUpdater {
 
 
     public static boolean updateProperty(ObjectValue ndfObject, String propertyPath, NDFValue newValue, ModificationTracker tracker) {
-        return updateProperty(ndfObject, propertyPath, newValue, tracker, currentFileType);
+        NDFValue.NDFFileType ft = getFileType();
+        if (ft == NDFValue.NDFFileType.UNKNOWN && ndfObject != null) {
+            ft = inferFileType(ndfObject);
+        }
+        return updateProperty(ndfObject, propertyPath, newValue, tracker, ft);
     }
 
     public static boolean updateProperty(ObjectValue ndfObject, String propertyPath, NDFValue newValue, ModificationTracker tracker, NDFValue.NDFFileType fileType) {
@@ -596,7 +618,11 @@ public class PropertyUpdater {
         }
 
         // Use file-type-aware navigation
-        return getPropertyValueWithFileType(ndfObject, propertyPath, currentFileType);
+        NDFValue.NDFFileType ft = getFileType();
+        if (ft == NDFValue.NDFFileType.UNKNOWN) {
+            ft = inferFileType(ndfObject);
+        }
+        return getPropertyValueWithFileType(ndfObject, propertyPath, ft);
     }
 
     public static NDFValue getPropertyValue(ObjectValue ndfObject, String propertyPath, NDFValue.NDFFileType fileType) {

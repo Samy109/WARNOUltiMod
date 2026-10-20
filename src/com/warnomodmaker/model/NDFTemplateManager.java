@@ -119,6 +119,8 @@ public class NDFTemplateManager {
                 return ((NDFValue.ResourceRefValue) value).getPath();
             case GUID:
                 return "PLACEHOLDER_GUID";
+            case ARRAY:
+                return new NDFValue.ArrayValue();
             default:
                 return null;
         }
@@ -210,6 +212,10 @@ public class NDFTemplateManager {
             return NDFValue.createNumber(((Number) defaultValue).doubleValue());
         } else if (defaultValue instanceof Boolean) {
             return NDFValue.createBoolean((Boolean) defaultValue);
+        }
+
+        if (defaultValue instanceof NDFValue.ArrayValue) {
+            return ((NDFValue.ArrayValue) defaultValue).copy();
         }
 
         return NDFValue.createString(defaultValue.toString());

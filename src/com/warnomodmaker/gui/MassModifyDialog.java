@@ -43,6 +43,8 @@ public class MassModifyDialog extends JDialog {
     // Tag filtering state
     private Set<String> selectedTags;
     private boolean useAnyTagsMode;
+    private javax.swing.Timer statusDebounceTimer;
+    private JButton previewButton;
     private JButton applyButton;
     private JButton cancelButton;
     private JButton searchButton;
@@ -174,9 +176,15 @@ public class MassModifyDialog extends JDialog {
         propertyPathField = new JTextField();
         propertyPathField.setEnabled(false);
         propertyPathField.setToolTipText("Examples: MaxPhysicalDamages, ModulesDescriptors[5].BlindageProperties.ArmorThickness");
-        // Add listeners once during initialization (not in categoryChanged to avoid accumulation)
+        // Debounce status updates to prevent EDT lockup on typing
+        statusDebounceTimer = new javax.swing.Timer(300, evt -> updateStatusLabel());
+        statusDebounceTimer.setRepeats(false);
         propertyPathField.addActionListener(evt -> updateStatusLabel());
-        propertyPathField.addCaretListener(evt -> updateStatusLabel());
+        propertyPathField.addCaretListener(evt -> {
+            if (statusDebounceTimer != null) {
+                statusDebounceTimer.restart();
+            }
+        });
         formPanel.add(propertyPathField, gbc);
 
         // Help and Search buttons
@@ -321,6 +329,10 @@ public class MassModifyDialog extends JDialog {
         JButton debugButton = new JButton("Debug Info");
         debugButton.addActionListener(this::showDebugInfo);
         buttonPanel.add(debugButton);
+
+        previewButton = new JButton("Preview Changes...");
+        previewButton.addActionListener(this::showPreviewDialog);
+        buttonPanel.add(previewButton);
 
         applyButton = new JButton("Apply Changes");
         applyButton.addActionListener(this::applyModification);
@@ -690,6 +702,106 @@ public class MassModifyDialog extends JDialog {
         }
     }
 
+    private void showPreviewDialog(ActionEvent e) {
+        String propertyPath = propertyPathField.getText().trim();
+        if (propertyPath.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please select or enter a property path.", "Preview", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        PropertyUpdater.ModificationType modificationType =
+            (PropertyUpdater.ModificationType) modificationTypeComboBox.getSelectedItem();
+        String valueText = valueField.getText().trim();
+        String replacementPropertyPath = replacementPropertyField.getText().trim();
+
+        if (modificationType == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+            if (replacementPropertyPath.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Please enter a replacement property path.", "Preview", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+        } else {
+            if (valueText.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Please enter a value.", "Preview", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+        }
+
+        double numValue = 0.0;
+        try {
+            numValue = Double.parseDouble(valueText);
+        } catch (Exception ignore) {}
+
+        String filter = null;
+        if (filterUnitsCheckBox.isSelected() && !filterField.getText().trim().isEmpty()) {
+            filter = filterField.getText().trim().toLowerCase();
+        }
+
+        List<ObjectValue> filteredUnits = new ArrayList<>(unitDescriptors);
+        if (tagFilterCheckBox.isSelected() && !selectedTags.isEmpty()) {
+            if (useAnyTagsMode) {
+                filteredUnits = TagExtractor.getUnitsWithTags(filteredUnits, selectedTags);
+            } else {
+                filteredUnits = TagExtractor.getUnitsWithAllTags(filteredUnits, selectedTags);
+            }
+        }
+        if (filter != null) {
+            final String f = filter;
+            filteredUnits = filteredUnits.stream()
+                .filter(u -> u.getInstanceName() != null && u.getInstanceName().toLowerCase().contains(f))
+                .collect(Collectors.toList());
+        }
+
+        List<MassModifyPreviewDialog.ChangeItem> previewItems = new ArrayList<>();
+        for (ObjectValue unit : filteredUnits) {
+            if (!hasPropertyDirect(unit, propertyPath)) {
+                continue;
+            }
+            NDFValue currentVal = PropertyUpdater.getPropertyValue(unit, propertyPath, fileType);
+            String currentStr = currentVal != null ? currentVal.toString() : "(none)";
+            String newStr = valueText;
+            if (modificationType == PropertyUpdater.ModificationType.REPLACE_PROPERTY) {
+                newStr = "Replaced by: " + replacementPropertyPath;
+            } else if (currentVal instanceof NDFValue.NumberValue && modificationType != PropertyUpdater.ModificationType.SET) {
+                double curDbl = ((NDFValue.NumberValue) currentVal).getValue();
+                double calc = calculateNewValue(curDbl, modificationType, numValue);
+                newStr = String.valueOf(calc);
+            }
+            previewItems.add(new MassModifyPreviewDialog.ChangeItem(unit, unit.getInstanceName(), propertyPath, currentStr, newStr));
+        }
+
+        if (previewItems.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No units match the property path and filters.", "No Changes to Preview", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        String opDesc = modificationType.getDisplayName() + (modificationType == PropertyUpdater.ModificationType.REPLACE_PROPERTY ? " " + replacementPropertyPath : " " + valueText);
+        MassModifyPreviewDialog previewDlg = new MassModifyPreviewDialog(this, propertyPath, opDesc, previewItems);
+        previewDlg.setVisible(true);
+
+        if (previewDlg.isConfirmed()) {
+            List<MassModifyPreviewDialog.ChangeItem> selected = previewDlg.getSelectedItems();
+            if (selected.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "No units were selected for modification.", "Notice", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            int count = 0;
+            for (MassModifyPreviewDialog.ChangeItem item : selected) {
+                boolean ok = updatePropertyDirect(item.getUnit(), propertyPath, modificationType, numValue, valueText, replacementPropertyPath);
+                if (ok) {
+                    count++;
+                }
+            }
+
+            if (count > 0) {
+                modified = true;
+                JOptionPane.showMessageDialog(this, "Successfully modified " + count + " selected units.", "Success", JOptionPane.INFORMATION_MESSAGE);
+                valueField.setText("");
+                replacementPropertyField.setText("");
+                updateStatusLabel();
+            }
+        }
+    }
 
     private void applyModification(ActionEvent e) {
         String propertyPath = propertyPathField.getText().trim();

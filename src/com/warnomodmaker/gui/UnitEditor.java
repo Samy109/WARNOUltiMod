@@ -84,8 +84,43 @@ public class UnitEditor extends JPanel {
             }
         });
 
+        JPanel leftPanel = new JPanel(new BorderLayout(0, 4));
+        leftPanel.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
+
+        JPanel filterPanel = new JPanel(new BorderLayout(4, 0));
+        filterPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
+        JLabel filterLabel = new JLabel("Filter:");
+        JTextField filterField = new JTextField();
+        filterField.putClientProperty("JTextField.placeholderText", "Filter properties (e.g. Armor, Speed)...");
+        filterField.setToolTipText("Filter properties in the tree view");
+
+        JButton clearFilterBtn = new JButton("X");
+        clearFilterBtn.setToolTipText("Clear filter");
+        clearFilterBtn.setMargin(new Insets(1, 6, 1, 6));
+        clearFilterBtn.addActionListener(e -> {
+            filterField.setText("");
+            setPropertyFilter(null);
+        });
+
+        filterField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private void update() {
+                String text = filterField.getText().trim();
+                setPropertyFilter(text.isEmpty() ? null : text);
+            }
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { update(); }
+        });
+
+        filterPanel.add(filterLabel, BorderLayout.WEST);
+        filterPanel.add(filterField, BorderLayout.CENTER);
+        filterPanel.add(clearFilterBtn, BorderLayout.EAST);
+
         JScrollPane treeScrollPane = new JScrollPane(propertyTree);
-        splitPane.setLeftComponent(treeScrollPane);
+        leftPanel.add(filterPanel, BorderLayout.NORTH);
+        leftPanel.add(treeScrollPane, BorderLayout.CENTER);
+
+        splitPane.setLeftComponent(leftPanel);
 
         splitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
             if (propertyTree != null) {
@@ -331,8 +366,13 @@ public class UnitEditor extends JPanel {
 
         treeModel.reload();
 
-        // Expand the root node
+        // Expand the root node or all nodes if filtered
         propertyTree.expandPath(new TreePath(rootNode.getPath()));
+        if (propertyFilter != null && !propertyFilter.isEmpty()) {
+            for (int i = 0; i < propertyTree.getRowCount(); i++) {
+                propertyTree.expandRow(i);
+            }
+        }
     }
 
 

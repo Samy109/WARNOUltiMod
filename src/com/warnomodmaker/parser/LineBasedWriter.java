@@ -8,7 +8,10 @@ import com.warnomodmaker.model.PropertyUpdater;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * LINE-BASED ARCHITECTURE: Simple and reliable writer that replaces only modified lines
@@ -18,6 +21,7 @@ public class LineBasedWriter {
     private final Writer writer;
     private final SourceLineTracker lineTracker;
     private final ModificationTracker modificationTracker;
+    private List<NDFValue.ObjectValue> objects;
 
     public LineBasedWriter(Writer writer, String originalContent, ModificationTracker modificationTracker) {
         this.writer = writer;
@@ -29,8 +33,13 @@ public class LineBasedWriter {
      * Write the file with line-based modifications applied
      */
     public void write(List<NDFValue.ObjectValue> objects) throws IOException {
+        this.objects = objects;
+
         // Apply all modifications to the line tracker
         applyModifications();
+
+        // Ensure all newly created or existing objects from memory model are present in the output
+        ensureAllObjectsPresent(objects);
 
         // Write the complete output with modifications
         String output = lineTracker.generateOutput();
@@ -60,10 +69,29 @@ public class LineBasedWriter {
         String propertyPath = mod.getPropertyPath();
         String oldValue = mod.getOldValue();
         String newValue = mod.getNewValue();
+        PropertyUpdater.ModificationType modType = mod.getModificationType();
+
+        // Handle full object additions
+        if (modType == PropertyUpdater.ModificationType.OBJECT_ADDED) {
+            applyObjectAdded(mod);
+            return;
+        }
+
+        // Handle module additions to ModulesDescriptors
+        if (modType == PropertyUpdater.ModificationType.MODULE_ADDED) {
+            applyModuleAdded(mod);
+            return;
+        }
+
+        // Handle array element additions
+        if (modType == PropertyUpdater.ModificationType.ARRAY_ELEMENT_ADDED) {
+            applyArrayElementAdded(mod);
+            return;
+        }
 
         // Handle property additions differently
-        if (mod.getModificationType() == PropertyUpdater.ModificationType.PROPERTY_ADDED) {
-            boolean success = addPropertyLine(unitName, propertyPath, newValue);
+        if (modType == PropertyUpdater.ModificationType.PROPERTY_ADDED) {
+            boolean success = addPropertyLine(unitName, propertyPath, newValue, mod.getNewValueType());
             if (!success) {
                 throw new IllegalStateException("Failed to add property line for " + unitName + "." + propertyPath + " - NO FALLBACKS ALLOWED");
             }
@@ -765,55 +793,57 @@ public class LineBasedWriter {
         String cleanOldValue = cleanValue(oldValue);
         String cleanNewValue = cleanValue(newValue);
 
-        // Try different replacement strategies for single-line values
         String newLine = originalLine;
 
-
-
-        // Strategy 1: Direct value replacement
-        if (originalLine.contains(cleanOldValue)) {
-            newLine = originalLine.replace(cleanOldValue, cleanNewValue);
-
-        }
-        // Strategy 2: Quoted value replacement
-        else if (originalLine.contains("'" + cleanOldValue + "'")) {
-            newLine = originalLine.replace("'" + cleanOldValue + "'", "'" + cleanNewValue + "'");
-
-        }
-        else if (originalLine.contains("\"" + cleanOldValue + "\"")) {
-            newLine = originalLine.replace("\"" + cleanOldValue + "\"", "\"" + cleanNewValue + "\"");
-
-        }
-        // Strategy 3: For ModulesDescriptors paths, extract current value from line and replace
-        else if (propertyPath.startsWith("ModulesDescriptors[")) {
-            String currentValueInLine = extractValueFromLine(originalLine, propertyName);
-            if (currentValueInLine != null) {
-                newLine = originalLine.replace(currentValueInLine, cleanNewValue);
-            }
-        }
-        // Strategy 4: Pattern-based replacement for property assignments
-        else if (originalLine.contains("=")) {
-            // For lines like "PropertyName = Value", replace everything after the equals sign
-            int equalsIndex = originalLine.indexOf('=');
+        // If line is a property assignment with '=', restrict value replacement to AFTER the '='
+        // to prevent corrupting property identifiers (e.g. UnitAttackValue1 = 1)
+        int equalsIndex = originalLine.indexOf('=');
+        if (equalsIndex >= 0) {
             String beforeEquals = originalLine.substring(0, equalsIndex + 1); // Include the '='
             String afterEquals = originalLine.substring(equalsIndex + 1);
 
-            // Find any trailing punctuation (comma, etc.)
-            String trailingPunctuation = "";
-            String valueOnly = afterEquals.trim();
-            if (valueOnly.endsWith(",")) {
-                trailingPunctuation = ",";
-                valueOnly = valueOnly.substring(0, valueOnly.length() - 1).trim();
+            String modifiedAfter = null;
+            if (afterEquals.contains("'" + cleanOldValue + "'")) {
+                modifiedAfter = afterEquals.replace("'" + cleanOldValue + "'", "'" + cleanNewValue + "'");
+            } else if (afterEquals.contains("\"" + cleanOldValue + "\"")) {
+                modifiedAfter = afterEquals.replace("\"" + cleanOldValue + "\"", "\"" + cleanNewValue + "\"");
+            } else if (propertyPath.startsWith("ModulesDescriptors[")) {
+                String currentValueInLine = extractValueFromLine(originalLine, propertyName);
+                if (currentValueInLine != null) {
+                    modifiedAfter = afterEquals.replace(currentValueInLine, cleanNewValue);
+                }
+            } else if (afterEquals.contains(cleanOldValue)) {
+                modifiedAfter = afterEquals.replace(cleanOldValue, cleanNewValue);
             }
 
-            // Replace with new value, preserving spacing and punctuation
-            String trimmedAfter = afterEquals.trim();
-            if (!trimmedAfter.isEmpty()) {
-                int spacingLength = afterEquals.indexOf(trimmedAfter);
-                String spacing = afterEquals.substring(0, spacingLength);
-                newLine = beforeEquals + spacing + cleanNewValue + trailingPunctuation;
-            } else {
-                newLine = beforeEquals + " " + cleanNewValue + trailingPunctuation;
+            if (modifiedAfter == null) {
+                // Strategy 4: Pattern-based replacement for property assignments
+                String trailingPunctuation = "";
+                String valueOnly = afterEquals.trim();
+                if (valueOnly.endsWith(",")) {
+                    trailingPunctuation = ",";
+                    valueOnly = valueOnly.substring(0, valueOnly.length() - 1).trim();
+                }
+
+                String trimmedAfter = afterEquals.trim();
+                if (!trimmedAfter.isEmpty()) {
+                    int spacingLength = afterEquals.indexOf(trimmedAfter);
+                    String spacing = afterEquals.substring(0, spacingLength);
+                    modifiedAfter = spacing + cleanNewValue + trailingPunctuation;
+                } else {
+                    modifiedAfter = " " + cleanNewValue + trailingPunctuation;
+                }
+            }
+
+            newLine = beforeEquals + modifiedAfter;
+        } else {
+            // Non-equals line fallback
+            if (originalLine.contains("'" + cleanOldValue + "'")) {
+                newLine = originalLine.replace("'" + cleanOldValue + "'", "'" + cleanNewValue + "'");
+            } else if (originalLine.contains("\"" + cleanOldValue + "\"")) {
+                newLine = originalLine.replace("\"" + cleanOldValue + "\"", "\"" + cleanNewValue + "\"");
+            } else if (originalLine.contains(cleanOldValue)) {
+                newLine = originalLine.replace(cleanOldValue, cleanNewValue);
             }
         }
 
@@ -915,23 +945,34 @@ public class LineBasedWriter {
     }
 
     /**
-     * Add a new property line to a unit
+     * Add a new property line to a unit (defaults to STRING type)
      */
     private boolean addPropertyLine(String unitName, String propertyPath, String newValue) {
+        return addPropertyLine(unitName, propertyPath, newValue, "STRING");
+    }
+
+    /**
+     * Add a new property line to a unit with explicit type formatting
+     */
+    private boolean addPropertyLine(String unitName, String propertyPath, String newValue, String valueType) {
         // Find the unit definition
         int unitLineStart = findUnitDefinitionLine(unitName);
         if (unitLineStart < 0) {
+            // Newly created object in memory will have this property serialized directly with the object
+            if (findObjectByName(unitName) != null) {
+                return true;
+            }
             return false;
         }
 
-        // Find the best insertion point within the unit
+        // Find the best insertion point within the unit (supporting nested paths)
         int insertionPoint = findPropertyInsertionPoint(unitLineStart, propertyPath);
         if (insertionPoint < 0) {
             return false;
         }
 
-        // Create the new property line with proper formatting
-        String newPropertyLine = createPropertyLine(propertyPath, newValue, insertionPoint);
+        // Create the new property line with proper formatting and quote preservation
+        String newPropertyLine = createPropertyLine(propertyPath, newValue, insertionPoint, valueType);
 
         // Insert the new line
         lineTracker.insertLine(insertionPoint, newPropertyLine);
@@ -944,6 +985,29 @@ public class LineBasedWriter {
      */
     private int findPropertyInsertionPoint(int unitLineStart, String propertyPath) {
         int unitEnd = findUnitDefinitionEnd(unitLineStart);
+
+        // Nested property support for ModulesDescriptors[...].prop or Default.prop
+        if (propertyPath.contains(".")) {
+            String[] parts = propertyPath.split("\\.");
+            if (parts[0].startsWith("ModulesDescriptors")) {
+                String subProp = parts[parts.length - 1];
+                String moduleType = getModuleTypeForNestedProperty(subProp);
+                if (moduleType != null) {
+                    int moduleStart = findModuleByType(unitLineStart, unitEnd, moduleType);
+                    if (moduleStart >= 0) {
+                        int moduleEnd = findModuleEnd(moduleStart, unitEnd);
+                        int lastInModule = moduleStart;
+                        for (int i = moduleStart + 1; i < moduleEnd - 1; i++) {
+                            String l = lineTracker.getOriginalLine(i).trim();
+                            if (l.contains("=") && !l.startsWith("//")) {
+                                lastInModule = i;
+                            }
+                        }
+                        return lastInModule + 1;
+                    }
+                }
+            }
+        }
 
         // For simple properties, insert before the closing parenthesis/brace
         // Look for the last property line before the closing
@@ -969,20 +1033,54 @@ public class LineBasedWriter {
     }
 
     /**
-     * Create a properly formatted property line
+     * Create a properly formatted property line with quote preservation
      */
     private String createPropertyLine(String propertyPath, String newValue, int insertionPoint) {
+        return createPropertyLine(propertyPath, newValue, insertionPoint, "STRING");
+    }
+
+    private String createPropertyLine(String propertyPath, String newValue, int insertionPoint, String valueType) {
         // Get the indentation from the surrounding lines
         String indentation = getIndentationFromContext(insertionPoint);
 
         // Extract the property name from the path
         String propertyName = extractFinalPropertyName(propertyPath);
 
-        // Clean the value
-        String cleanValue = cleanValue(newValue);
+        // Format value preserving quotes and types
+        String formattedValue = formatValueForStorage(newValue, valueType);
 
         // Create the property line with proper formatting
-        return indentation + propertyName + " = " + cleanValue + ",";
+        return indentation + propertyName + " = " + formattedValue + ",";
+    }
+
+    /**
+     * Format a string value for NDF line output, preserving quotes and types
+     */
+    public static String formatValueForStorage(String val, String type) {
+        if (val == null) {
+            return "nil";
+        }
+        String cleaned = val.trim();
+        if (cleaned.startsWith("SQ:")) {
+            return "'" + cleaned.substring(3) + "'";
+        }
+        if (cleaned.startsWith("DQ:")) {
+            return "\"" + cleaned.substring(3) + "\"";
+        }
+        if ("STRING".equalsIgnoreCase(type)) {
+            if ((cleaned.startsWith("'") && cleaned.endsWith("'")) ||
+                (cleaned.startsWith("\"") && cleaned.endsWith("\""))) {
+                return cleaned;
+            }
+            return "'" + cleaned + "'";
+        }
+        if ("GUID".equalsIgnoreCase(type)) {
+            if (!cleaned.startsWith("GUID:")) {
+                return "GUID:{" + cleaned + "}";
+            }
+            return cleaned;
+        }
+        return cleaned;
     }
 
     /**
@@ -1313,5 +1411,439 @@ public class LineBasedWriter {
             }
         }
         return -1;
+    }
+
+    /**
+     * Find an object in the memory model by its instance name
+     */
+    private NDFValue.ObjectValue findObjectByName(String name) {
+        if (name == null || objects == null) {
+            return null;
+        }
+        for (NDFValue.ObjectValue obj : objects) {
+            if (obj != null && name.equals(obj.getInstanceName())) {
+                return obj;
+            }
+        }
+        return null;
+    }
+
+    private final Set<String> insertedObjectNames = new HashSet<>();
+
+    /**
+     * Apply an OBJECT_ADDED modification record
+     */
+    private void applyObjectAdded(ModificationRecord mod) {
+        String unitName = mod.getUnitName();
+        NDFValue.ObjectValue obj = findObjectByName(unitName);
+        if (obj == null) {
+            return;
+        }
+        // If already present in lineTracker or already inserted, do not re-add
+        if (findUnitDefinitionLine(unitName) >= 0 || insertedObjectNames.contains(unitName)) {
+            return;
+        }
+        String serialized = serializeTopLevelObject(obj);
+        int insertPos = lineTracker.getLineCount();
+        lineTracker.insertLine(insertPos, "\n" + serialized);
+        insertedObjectNames.add(unitName);
+    }
+
+    /**
+     * Ensure all objects present in memory model exist in source lines
+     */
+    private void ensureAllObjectsPresent(List<NDFValue.ObjectValue> memoryObjects) {
+        if (memoryObjects == null) {
+            return;
+        }
+        for (NDFValue.ObjectValue obj : memoryObjects) {
+            if (obj == null || obj.getInstanceName() == null) {
+                continue;
+            }
+            String name = obj.getInstanceName();
+            if (findUnitDefinitionLine(name) < 0 && !insertedObjectNames.contains(name)) {
+                String serialized = serializeTopLevelObject(obj);
+                int insertPos = lineTracker.getLineCount();
+                lineTracker.insertLine(insertPos, "\n" + serialized);
+                insertedObjectNames.add(name);
+            }
+        }
+    }
+
+    /**
+     * Apply a MODULE_ADDED modification record
+     */
+    private void applyModuleAdded(ModificationRecord mod) {
+        String unitName = mod.getUnitName();
+        NDFValue.ObjectValue unit = findObjectByName(unitName);
+
+        int unitStart = findUnitDefinitionLine(unitName);
+        if (unitStart < 0) {
+            return;
+        }
+        int unitEnd = findUnitDefinitionEnd(unitStart);
+
+        // Find the module in the unit's ModulesDescriptors in memory
+        NDFValue.ObjectValue moduleObj = null;
+        if (unit != null) {
+            NDFValue modulesVal = unit.getProperty("ModulesDescriptors");
+            if (modulesVal instanceof NDFValue.ArrayValue) {
+                NDFValue.ArrayValue arr = (NDFValue.ArrayValue) modulesVal;
+                int index = parseIndexFromPath(mod.getPropertyPath());
+                if (index >= 0 && index < arr.getElements().size()) {
+                    NDFValue elem = arr.getElements().get(index);
+                    if (elem instanceof NDFValue.ObjectValue) {
+                        moduleObj = (NDFValue.ObjectValue) elem;
+                    }
+                } else if (!arr.getElements().isEmpty()) {
+                    NDFValue lastElem = arr.getElements().get(arr.getElements().size() - 1);
+                    if (lastElem instanceof NDFValue.ObjectValue) {
+                        moduleObj = (NDFValue.ObjectValue) lastElem;
+                    }
+                }
+            }
+        }
+
+        if (moduleObj == null) {
+            return;
+        }
+
+        // Find ModulesDescriptors declaration line
+        int modulesStartLine = -1;
+        for (int i = unitStart; i < unitEnd; i++) {
+            String line = lineTracker.getOriginalLine(i);
+            if (line.contains("ModulesDescriptors") && line.contains("=")) {
+                modulesStartLine = i;
+                break;
+            }
+        }
+
+        if (modulesStartLine < 0) {
+            return;
+        }
+
+        int modulesCloseBracketLine = findArrayEnd(modulesStartLine);
+        if (modulesCloseBracketLine < 0) {
+            return;
+        }
+
+        ensurePreviousLineHasComma(modulesStartLine, modulesCloseBracketLine);
+
+        String serializedModule = serializeModuleForArray(moduleObj, 2);
+        lineTracker.insertLine(modulesCloseBracketLine, serializedModule);
+    }
+
+    /**
+     * Apply an ARRAY_ELEMENT_ADDED modification record
+     */
+    private void applyArrayElementAdded(ModificationRecord mod) {
+        String unitName = mod.getUnitName();
+        int unitStart = findUnitDefinitionLine(unitName);
+        if (unitStart < 0) return;
+        int unitEnd = findUnitDefinitionEnd(unitStart);
+
+        String propertyPath = mod.getPropertyPath();
+        String arrayName = extractArrayBaseName(propertyPath);
+        int arrayStart = -1;
+        for (int i = unitStart; i < unitEnd; i++) {
+            String line = lineTracker.getOriginalLine(i);
+            if (containsProperty(line, arrayName) && line.contains("[")) {
+                arrayStart = i;
+                break;
+            }
+        }
+        if (arrayStart < 0) return;
+
+        int closeBracketLine = findArrayEnd(arrayStart);
+        if (closeBracketLine < 0) return;
+
+        String indent = getIndentationFromContext(closeBracketLine);
+        if (!indent.endsWith("    ")) {
+            indent = indent + "    ";
+        }
+
+        // Check if single-line array
+        if (arrayStart == closeBracketLine) {
+            String line = lineTracker.getCurrentLine(arrayStart);
+            int closingBracketPos = line.lastIndexOf(']');
+            if (closingBracketPos >= 0) {
+                String beforeBracket = line.substring(0, closingBracketPos).trim();
+                String afterBracket = line.substring(closingBracketPos);
+                String formattedVal = formatValueForStorage(mod.getNewValue(), mod.getNewValueType());
+                String separator = beforeBracket.endsWith("[") ? "" : ", ";
+                String newLine = beforeBracket + separator + formattedVal + afterBracket;
+                lineTracker.modifyLine(arrayStart, newLine);
+            }
+            return;
+        }
+
+        // Multi-line array
+        ensurePreviousLineHasComma(arrayStart, closeBracketLine);
+        String formattedVal = formatValueForStorage(mod.getNewValue(), mod.getNewValueType());
+        String insertedLine = indent + formattedVal + ",";
+        lineTracker.insertLine(closeBracketLine, insertedLine);
+    }
+
+    /**
+     * Find the closing bracket ']' matching the opening bracket '[' starting from arrayStartLine
+     */
+    private int findArrayEnd(int arrayStartLine) {
+        int bracketDepth = 0;
+        boolean foundOpenBracket = false;
+
+        for (int i = arrayStartLine; i < lineTracker.getLineCount(); i++) {
+            String line = lineTracker.getOriginalLine(i);
+            for (char c : line.toCharArray()) {
+                if (c == '[') {
+                    bracketDepth++;
+                    foundOpenBracket = true;
+                } else if (c == ']') {
+                    bracketDepth--;
+                }
+            }
+            if (foundOpenBracket && bracketDepth == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Ensure the last non-empty line before a closing bracket has a trailing comma
+     */
+    private void ensurePreviousLineHasComma(int startLine, int closeBracketLine) {
+        for (int i = closeBracketLine - 1; i >= startLine; i--) {
+            String line = lineTracker.getCurrentLine(i);
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("//")) {
+                continue;
+            }
+            if (trimmed.endsWith("[") || trimmed.endsWith(",")) {
+                break;
+            }
+            lineTracker.modifyLine(i, line + ",");
+            break;
+        }
+    }
+
+    /**
+     * Parse array index from path like "ModulesDescriptors[5]"
+     */
+    private int parseIndexFromPath(String path) {
+        if (path == null) return -1;
+        int open = path.lastIndexOf('[');
+        int close = path.lastIndexOf(']');
+        if (open >= 0 && close > open) {
+            try {
+                return Integer.parseInt(path.substring(open + 1, close).trim());
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Extract base array property name from path
+     */
+    private String extractArrayBaseName(String propertyPath) {
+        if (propertyPath == null) return "";
+        String lastPart = propertyPath;
+        if (lastPart.contains(".")) {
+            lastPart = lastPart.substring(lastPart.lastIndexOf('.') + 1);
+        }
+        if (lastPart.contains("[")) {
+            lastPart = lastPart.substring(0, lastPart.indexOf('['));
+        }
+        return lastPart;
+    }
+
+    /**
+     * Serialize a top-level ObjectValue to NDF syntax
+     */
+    public static String serializeTopLevelObject(NDFValue.ObjectValue obj) {
+        StringBuilder sb = new StringBuilder();
+        if (obj.isExported()) {
+            sb.append("export ");
+        }
+        sb.append(obj.getInstanceName()).append(" is ").append(obj.getTypeName()).append("\n");
+        sb.append("(\n");
+        for (Map.Entry<String, NDFValue> entry : obj.getProperties().entrySet()) {
+            String propName = entry.getKey();
+            NDFValue val = entry.getValue();
+            sb.append("    ").append(propName).append(" = ");
+            sb.append(serializeValue(val, 1));
+            if (obj.hasCommaAfter(propName)) {
+                sb.append(",");
+            }
+            sb.append("\n");
+        }
+        sb.append(")\n");
+        return sb.toString();
+    }
+
+    /**
+     * Serialize a module object with appropriate indentation for insertion into an array
+     */
+    private String serializeModuleForArray(NDFValue.ObjectValue moduleObj, int indentLevel) {
+        String indent = "    ".repeat(indentLevel);
+        String subIndent = "    ".repeat(indentLevel + 1);
+        StringBuilder sb = new StringBuilder();
+        sb.append(indent).append(moduleObj.getTypeName()).append("\n");
+        sb.append(indent).append("(\n");
+        for (Map.Entry<String, NDFValue> entry : moduleObj.getProperties().entrySet()) {
+            String propName = entry.getKey();
+            NDFValue val = entry.getValue();
+            sb.append(subIndent).append(propName).append(" = ");
+            sb.append(serializeValue(val, indentLevel + 1));
+            if (moduleObj.hasCommaAfter(propName)) {
+                sb.append(",");
+            }
+            sb.append("\n");
+        }
+        sb.append(indent).append("),");
+        return sb.toString();
+    }
+
+    /**
+     * Serialize an NDFValue recursively with indentation
+     */
+    public static String serializeValue(NDFValue val, int indentLevel) {
+        if (val == null) {
+            return "nil";
+        }
+        String indent = "    ".repeat(indentLevel);
+        String subIndent = "    ".repeat(indentLevel + 1);
+
+        switch (val.getType()) {
+            case STRING: {
+                NDFValue.StringValue sv = (NDFValue.StringValue) val;
+                if (sv.useDoubleQuotes()) {
+                    return "\"" + sv.getValue() + "\"";
+                } else {
+                    return "'" + sv.getValue() + "'";
+                }
+            }
+            case NUMBER: {
+                NDFValue.NumberValue nv = (NDFValue.NumberValue) val;
+                if (nv.getOriginalFormat() != null) {
+                    return nv.getOriginalFormat();
+                }
+                if (nv.wasOriginallyInteger()) {
+                    return String.valueOf(nv.getIntValue());
+                } else {
+                    double d = nv.getValue();
+                    if (d == (long) d) {
+                        return String.format(java.util.Locale.US, "%.1f", d);
+                    }
+                    return String.valueOf(d);
+                }
+            }
+            case BOOLEAN: {
+                return val.toString();
+            }
+            case GUID: {
+                NDFValue.GUIDValue gv = (NDFValue.GUIDValue) val;
+                String guid = gv.getGUID();
+                if (!guid.startsWith("GUID:")) {
+                    return "GUID:{" + guid + "}";
+                }
+                return guid;
+            }
+            case ENUM: {
+                return val.toString();
+            }
+            case RESOURCE_REF: {
+                NDFValue.ResourceRefValue rv = (NDFValue.ResourceRefValue) val;
+                return rv.getPath();
+            }
+            case TEMPLATE_REF: {
+                NDFValue.TemplateRefValue tr = (NDFValue.TemplateRefValue) val;
+                if (tr.getInstanceName() != null && !tr.getInstanceName().trim().isEmpty()) {
+                    return tr.getInstanceName() + " is " + tr.getPath();
+                }
+                return tr.getPath();
+            }
+            case RAW_EXPRESSION: {
+                NDFValue.RawExpressionValue rev = (NDFValue.RawExpressionValue) val;
+                return rev.getExpression();
+            }
+            case ARRAY: {
+                NDFValue.ArrayValue av = (NDFValue.ArrayValue) val;
+                List<NDFValue> elements = av.getElements();
+                if (elements.isEmpty()) {
+                    return "[]";
+                }
+                StringBuilder sb = new StringBuilder("[\n");
+                for (int i = 0; i < elements.size(); i++) {
+                    NDFValue elem = elements.get(i);
+                    sb.append(subIndent).append(serializeValue(elem, indentLevel + 1));
+                    if (i < elements.size() - 1 || av.hasCommaAfter(i)) {
+                        sb.append(",");
+                    }
+                    sb.append("\n");
+                }
+                sb.append(indent).append("]");
+                return sb.toString();
+            }
+            case TUPLE: {
+                NDFValue.TupleValue tv = (NDFValue.TupleValue) val;
+                List<NDFValue> elements = tv.getElements();
+                if (elements.isEmpty()) {
+                    return "()";
+                }
+                StringBuilder sb = new StringBuilder("(");
+                for (int i = 0; i < elements.size(); i++) {
+                    sb.append(serializeValue(elements.get(i), indentLevel));
+                    if (i < elements.size() - 1) {
+                        sb.append(", ");
+                    }
+                }
+                sb.append(")");
+                return sb.toString();
+            }
+            case MAP: {
+                NDFValue.MapValue mv = (NDFValue.MapValue) val;
+                List<Map.Entry<NDFValue, NDFValue>> entries = mv.getEntries();
+                if (entries.isEmpty()) {
+                    return "MAP []";
+                }
+                StringBuilder sb = new StringBuilder("MAP [\n");
+                for (int i = 0; i < entries.size(); i++) {
+                    Map.Entry<NDFValue, NDFValue> entry = entries.get(i);
+                    sb.append(subIndent).append("(")
+                      .append(serializeValue(entry.getKey(), indentLevel + 1)).append(", ")
+                      .append(serializeValue(entry.getValue(), indentLevel + 1)).append(")");
+                    if (i < entries.size() - 1) {
+                        sb.append(",");
+                    }
+                    sb.append("\n");
+                }
+                sb.append(indent).append("]");
+                return sb.toString();
+            }
+            case OBJECT: {
+                NDFValue.ObjectValue ov = (NDFValue.ObjectValue) val;
+                StringBuilder sb = new StringBuilder();
+                sb.append(ov.getTypeName()).append("\n");
+                sb.append(indent).append("(\n");
+                for (Map.Entry<String, NDFValue> entry : ov.getProperties().entrySet()) {
+                    String propName = entry.getKey();
+                    NDFValue propVal = entry.getValue();
+                    sb.append(subIndent).append(propName).append(" = ");
+                    sb.append(serializeValue(propVal, indentLevel + 1));
+                    if (ov.hasCommaAfter(propName)) {
+                        sb.append(",");
+                    }
+                    sb.append("\n");
+                }
+                sb.append(indent).append(")");
+                return sb.toString();
+            }
+            case NULL:
+                return "nil";
+            default:
+                return val.toString();
+        }
     }
 }

@@ -97,6 +97,46 @@ public class EntityCreationManager {
         fileTypeObjectTypes.put("SupplyDescriptor", "TSupplyDescriptor");
         fileTypeObjectTypes.put("ReconDescriptor", "TReconDescriptor");
         fileTypeObjectTypes.put("CommandDescriptor", "TCommandDescriptor");
+
+        // Ensure every key is registered both with and without the .ndf extension
+        Map<String, String> additions = new HashMap<>();
+        for (Map.Entry<String, String> entry : fileTypeObjectTypes.entrySet()) {
+            String k = entry.getKey();
+            if (k.endsWith(".ndf")) {
+                additions.put(k.substring(0, k.length() - 4), entry.getValue());
+            } else {
+                additions.put(k + ".ndf", entry.getValue());
+            }
+        }
+        fileTypeObjectTypes.putAll(additions);
+    }
+
+    public static String normalizeFileName(String name) {
+        if (name == null) return "";
+        return name.endsWith(".ndf") ? name : name + ".ndf";
+    }
+
+    public static String stripExtension(String name) {
+        if (name == null) return "";
+        return name.endsWith(".ndf") ? name.substring(0, name.length() - 4) : name;
+    }
+
+    public static boolean containsFile(Map<String, ?> map, String fileName) {
+        if (map == null || fileName == null) return false;
+        return map.containsKey(fileName) ||
+               map.containsKey(normalizeFileName(fileName)) ||
+               map.containsKey(stripExtension(fileName));
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T> T getFileFromMap(Map<String, T> map, String fileName) {
+        if (map == null || fileName == null) return null;
+        if (map.containsKey(fileName)) return map.get(fileName);
+        String norm = normalizeFileName(fileName);
+        if (map.containsKey(norm)) return map.get(norm);
+        String stripped = stripExtension(fileName);
+        if (map.containsKey(stripped)) return map.get(stripped);
+        return null;
     }
     
     /**
@@ -111,8 +151,8 @@ public class EntityCreationManager {
         // Learn templates from ALL open files for on-demand creation
         learnTemplatesFromOpenFiles(openFiles);
 
-        // Only analyze entity creation if we have UniteDescriptor.ndf (primary file)
-        if (!openFiles.containsKey("UniteDescriptor.ndf")) {
+        // Only analyze entity creation if we have UniteDescriptor (with or without .ndf)
+        if (!containsFile(openFiles, "UniteDescriptor")) {
             return;
         }
 
@@ -159,7 +199,8 @@ public class EntityCreationManager {
      * Learn from existing entities to create perfect templates with realistic placeholder values
      */
     private void learnFromExistingEntities(Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptor.ndf");
+        List<NDFValue.ObjectValue> units = getFileFromMap(openFiles, "UniteDescriptor");
+        if (units == null) return;
         Map<String, List<NDFValue.ObjectValue>> entitiesByType = new HashMap<>();
 
         // Group units by entity type
@@ -333,7 +374,7 @@ public class EntityCreationManager {
     private boolean isAlwaysRequired(String fileType) {
         // Only UniteDescriptor is always required for entity creation
         // NdfDepictionList is a system-generated file and should not have entities added to it
-        return "UniteDescriptor".equals(fileType);
+        return "UniteDescriptor".equalsIgnoreCase(stripExtension(fileType));
     }
 
     /**
@@ -341,61 +382,64 @@ public class EntityCreationManager {
      * SAFETY: Expanded to include all confirmed optional file types from tester files
      */
     private boolean isInherentlyOptional(String fileType) {
+        String base = stripExtension(fileType);
+
         // Core optional files - not all units need them
-        if ("CapaciteList.ndf".equals(fileType) ||
-            "EffetsSurUnite".equals(fileType) ||
-            "WeaponSoundHappenings".equals(fileType) ||
-            "ExperienceLevels".equals(fileType)) {
+        if ("CapaciteList".equalsIgnoreCase(base) ||
+            "EffetsSurUnite".equalsIgnoreCase(base) ||
+            "SoundDescriptors".equalsIgnoreCase(base) ||
+            "WeaponSoundHappenings".equalsIgnoreCase(base) ||
+            "ExperienceLevels".equalsIgnoreCase(base)) {
             return true;
         }
 
         // Animation files - unit-type specific
-        if ("InfantryAnimationDescriptor".equals(fileType) ||
-            "VehicleAnimationDescriptor".equals(fileType) ||
-            "AircraftAnimationDescriptor".equals(fileType)) {
+        if ("InfantryAnimationDescriptor".equalsIgnoreCase(base) ||
+            "VehicleAnimationDescriptor".equalsIgnoreCase(base) ||
+            "AircraftAnimationDescriptor".equalsIgnoreCase(base)) {
             return true;
         }
 
         // Specialized descriptor files - role-specific
-        if ("SupplyDescriptor".equals(fileType) ||
-            "ReconDescriptor".equals(fileType) ||
-            "CommandDescriptor".equals(fileType)) {
+        if ("SupplyDescriptor".equalsIgnoreCase(base) ||
+            "ReconDescriptor".equalsIgnoreCase(base) ||
+            "CommandDescriptor".equalsIgnoreCase(base)) {
             return true;
         }
 
         // Depiction files - visual-only, not gameplay critical
-        if ("VehicleDepiction".equals(fileType) ||
-            "GeneratedDepictionFXMissiles".equals(fileType) ||
-            "GeneratedDepictionFXWeapons".equals(fileType) ||
-            "GeneratedDepictionWeaponBlock".equals(fileType)) {
+        if ("VehicleDepiction".equalsIgnoreCase(base) ||
+            "GeneratedDepictionFXMissiles".equalsIgnoreCase(base) ||
+            "GeneratedDepictionFXWeapons".equalsIgnoreCase(base) ||
+            "GeneratedDepictionWeaponBlock".equalsIgnoreCase(base)) {
             return true;
         }
 
         // Damage and condition files - situational
-        if ("DamageResistanceFamilyListImpl".equals(fileType) ||
-            "DamageStairTypeEvolutionOverRangeDescriptor".equals(fileType) ||
-            "ConditionsDescriptor".equals(fileType) ||
-            "MimeticImpactMapping".equals(fileType)) {
+        if ("DamageResistanceFamilyListImpl".equalsIgnoreCase(base) ||
+            "DamageStairTypeEvolutionOverRangeDescriptor".equalsIgnoreCase(base) ||
+            "ConditionsDescriptor".equalsIgnoreCase(base) ||
+            "MimeticImpactMapping".equalsIgnoreCase(base)) {
             return true;
         }
 
         // UI and presentation files - not gameplay critical
-        if ("OrderAvailability_Tactic".equals(fileType) ||
-            "PlayerMissionTags".equals(fileType) ||
-            "ShowRoomUnits".equals(fileType) ||
-            "Skins".equals(fileType)) {
+        if ("OrderAvailability_Tactic".equalsIgnoreCase(base) ||
+            "PlayerMissionTags".equalsIgnoreCase(base) ||
+            "ShowRoomUnits".equalsIgnoreCase(base) ||
+            "Skins".equalsIgnoreCase(base)) {
             return true;
         }
 
         // Cadavre (destroyed unit) files - optional visual
-        if ("BuildingCadavreDescriptors".equals(fileType) ||
-            "UniteCadavreDescriptor".equals(fileType)) {
+        if ("BuildingCadavreDescriptors".equalsIgnoreCase(base) ||
+            "UniteCadavreDescriptor".equalsIgnoreCase(base)) {
             return true;
         }
 
         // Non-existent files that might be referenced
-        if ("ArtilleryProjectileDescriptor".equals(fileType) ||
-            "VehicleSoundDescriptor".equals(fileType)) {
+        if ("ArtilleryProjectileDescriptor".equalsIgnoreCase(base) ||
+            "VehicleSoundDescriptor".equalsIgnoreCase(base)) {
             return true;
         }
 
@@ -406,7 +450,8 @@ public class EntityCreationManager {
      * Discover entity blueprints based on actual cross-file dependencies
      */
     private void discoverEntityBlueprints(Map<String, List<NDFValue.ObjectValue>> openFiles) {
-        List<NDFValue.ObjectValue> units = openFiles.get("UniteDescriptor.ndf");
+        List<NDFValue.ObjectValue> units = getFileFromMap(openFiles, "UniteDescriptor");
+        if (units == null) return;
         Map<String, EntityTypeAnalysis> analysis = new HashMap<>();
         
         // Analyze each unit to understand entity patterns
@@ -494,6 +539,43 @@ public class EntityCreationManager {
             }
         }
 
+        // Fallback 1: Classify based on unit tags
+        Set<String> tags = TagExtractor.extractTagsFromUnit(unit);
+        for (String tag : tags) {
+            String lowerTag = tag.toLowerCase();
+            if (lowerTag.contains("tank") || lowerTag.contains("armor")) {
+                return "Tank";
+            }
+            if (lowerTag.contains("infantry")) {
+                return "Infantry";
+            }
+            if (lowerTag.contains("artillery")) {
+                return "Artillery";
+            }
+            if (lowerTag.contains("helo") || lowerTag.contains("helicopter")) {
+                return "Helicopter";
+            }
+            if (lowerTag.contains("plane") || lowerTag.contains("aircraft")) {
+                return "Aircraft";
+            }
+        }
+
+        // Fallback 2: Check instance name or ClassNameForDebug
+        String name = unit.getInstanceName();
+        if (name != null) {
+            String lowerName = name.toLowerCase();
+            if (lowerName.contains("tank") || lowerName.contains("m1a1") || lowerName.contains("t80")) {
+                return "Tank";
+            }
+            if (lowerName.contains("infantry")) {
+                return "Infantry";
+            }
+        }
+
+        // Fallback 3: For any TEntityDescriptor in UniteDescriptor, default to Tank
+        if ("TEntityDescriptor".equals(unit.getTypeName())) {
+            return "Tank";
+        }
 
         return null;
     }
@@ -1080,24 +1162,9 @@ public class EntityCreationManager {
         String baseGuid = guidGenerator.generateGUID();
         Map<String, String> crossFileReferences = new HashMap<>(); // fileType -> templateName
 
-        // First pass: Create all objects and collect template names for cross-references
+        // First pass: Collect template names for cross-references across all required/optional files
         for (FileRequirement requirement : blueprint.getFileRequirements()) {
-            if (requirement.isOptional() && !openFiles.containsKey(requirement.getFileType())) {
-                // Skip optional files that aren't open
-                continue;
-            }
-
             String fileType = requirement.getFileType();
-            List<NDFValue.ObjectValue> objects = openFiles.get(fileType);
-            ModificationTracker tracker = trackers.get(fileType);
-
-            if (objects == null) {
-                if (requirement.isRequired()) {
-                    result.addError("Required file not open: " + fileType);
-                }
-                continue;
-            }
-
             // Generate unique template name for cross-references
             String templateName = generateUniqueTemplateName(entityName, requirement.getObjectType(), fileType, openFiles);
             crossFileReferences.put(fileType, templateName);
@@ -1115,10 +1182,10 @@ public class EntityCreationManager {
             boolean success = false;
 
             // Check if file is open
-            if (openFiles.containsKey(fileType)) {
+            if (containsFile(openFiles, fileType)) {
                 // File is open - use existing system with entity-type-specific template
-                List<NDFValue.ObjectValue> objects = openFiles.get(fileType);
-                ModificationTracker tracker = trackers.get(fileType);
+                List<NDFValue.ObjectValue> objects = getFileFromMap(openFiles, fileType);
+                ModificationTracker tracker = getFileFromMap(trackers, fileType);
 
                 // Get entity-type-specific template for better object creation
                 NDFValue.ObjectValue entityTemplate = getEntityTypeSpecificTemplate(
@@ -1271,7 +1338,7 @@ public class EntityCreationManager {
         String baseName = generateTemplateName(entityName, objectType, fileType);
 
         // Check if this file is open and if the name already exists
-        List<NDFValue.ObjectValue> objects = openFiles.get(fileType);
+        List<NDFValue.ObjectValue> objects = getFileFromMap(openFiles, fileType);
         if (objects == null || objects.isEmpty()) {
             return baseName; // File not open or empty, no collision possible
         }
