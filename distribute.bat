@@ -10,9 +10,9 @@ rem CUSTOM_BUILD_JAVA: Java for compilation (should match build.bat)
 rem CUSTOM_JPACKAGE_JAVA: Java for jpackage (needs Java 14+ with jpackage)
 rem Examples:
 rem   set CUSTOM_BUILD_JAVA=%USERPROFILE%\.jdks\openjdk-24.0.1
-rem   set CUSTOM_JPACKAGE_JAVA=%USERPROFILE%\.jdks\openjdk-24.0.1
+rem   set CUSTOM_JPACKAGE_JAVA=E:\Backup\jdk-17.0.2
 set CUSTOM_BUILD_JAVA=
-set CUSTOM_JPACKAGE_JAVA=%USERPROFILE%\.jdks\openjdk-24.0.1
+set CUSTOM_JPACKAGE_JAVA=E:\Backup\jdk-17.0.2
 
 rem Step 1: Clean previous builds
 echo Cleaning previous builds...
