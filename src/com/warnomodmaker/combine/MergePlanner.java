@@ -293,6 +293,7 @@ public final class MergePlanner {
         for (int i = 0; i < contributors.size(); i++) payloadSizes.put(contributors.get(i).name, files.get(i).size());
         List<List<MergeDecision>> conflicts = new ArrayList<>(Collections.nCopies(paths.size(), null));
 
+        DepictionSources depictions = new DepictionSources();
         List<MergeDecision> decisions = Parallel.map(paths.size(), Parallel.half(), index -> {
             token.check();
             String path = paths.get(index);
@@ -307,7 +308,7 @@ public final class MergePlanner {
                 debug.add(debugInfo.get(i).get(path));
             }
             MergeDecision decision = decide(path, providerInputs, providerFiles, debug, payloadSizes, vanilla, sourceBaseline,
-                mergeDirectory, conflicts, index, token);
+                mergeDirectory, conflicts, index, token, depictions);
             // A database taken whole from one mod ships its pools in WARNO's order too (see NdfPoolOrder).
             if (NdfLayout.isDatabase(path) && decision.kind != DecisionKind.MERGED && decision.sourcePath != null) {
                 Path source = null;
@@ -323,6 +324,7 @@ public final class MergePlanner {
             return decision;
         });
 
+        depictions.resolve(decisions, files, mergeDirectory, token);
         List<TreeMap<String, Path>> tags = new ArrayList<>();
         for (CompiledInput input : contributors) {
             TreeMap<String, Path> map = IgnoreCase.map();
@@ -340,7 +342,7 @@ public final class MergePlanner {
         List<String> notes = new ArrayList<>();
         if (provisional)
             notes.add("Provisional preview: editable SDK input will be compiled by WARNO during the build; the final report will reflect the exact compiled files.");
-        long merged = ordered.stream().filter(d -> d.kind == DecisionKind.MERGED && !d.relativePath.toLowerCase().endsWith(".txt")).count();
+        long merged = ordered.stream().filter(d -> d.kind == DecisionKind.MERGED && NdfLayout.isDatabase(d.relativePath)).count();
         if (merged > 0)
             notes.add(String.format("%,d database(s) were changed by several mods and are delta merged against vanilla; %,d value conflict(s) resolved by priority (%s).",
                 merged, valueConflicts.size(), inputs.stream().map(i -> i.name).collect(Collectors.joining(" > "))));
@@ -393,7 +395,7 @@ public final class MergePlanner {
 
     private static MergeDecision decide(String path, List<CompiledInput> inputs, List<Path> files, List<Path> debugInfo,
                                         Map<String, Integer> payloadSizes, VanillaDatabases vanilla, SourceBaseline sourceBaseline,
-                                        Path mergeDirectory, List<List<MergeDecision>> conflicts, int conflictSlot, Cancel token) {
+                                        Path mergeDirectory, List<List<MergeDecision>> conflicts, int conflictSlot, Cancel token, DepictionSources depictions) {
         CompiledInput primary = inputs.get(0);
         Path primaryFile = files.get(0);
         if (inputs.size() == 1)
@@ -451,7 +453,9 @@ public final class MergePlanner {
                     "Only " + inputs.get(only).name + " changes this database; the others ship it unchanged from vanilla.", files.get(only), false, true);
             }
             Path output = null;
-            if (mergeDirectory != null) output = writeDatabase(result.database, mergeDirectory, path);
+            NdfDatabase merged = path.equalsIgnoreCase("Gen\\NDF\\DepictionResource\\Cluster.txn")
+                ? depictions.collect(result.database) : result.database;
+            if (mergeDirectory != null) output = writeDatabase(merged, mergeDirectory, path);
             List<MergeDecision> found = new ArrayList<>();
             for (NdfMerger.Conflict c : result.conflicts) {
                 found.add(new MergeDecision(path + " › " + c.path, DecisionKind.VALUE_CONFLICT, c.winner, !c.overridden.isEmpty()
