@@ -300,36 +300,48 @@ public final class CombineService {
             }
         }, done -> report.report(65 + 20 * done / Math.max(1, total), String.format("Installing files · %,d of %,d", done, total)));
         log.accept("  Deployed verified payload to Mods\\" + request.outputName + " and Saved Games\\...\\mod\\" + request.outputName + ".");
-        if (plan.decisions.stream().anyMatch(d -> d.kind == DecisionKind.MERGED && NdfLayout.isTransactionDatabase(d.relativePath))) {
+        if (plan.decisions.stream().anyMatch(d -> NdfLayout.isTransactionDatabase(d.relativePath))) {
             report.report(85, "Validating combined databases with WARNO");
             log.accept("  Loading the installed combination through WARNO's headless SDK...");
-            boolean mergedDepictions = plan.decisions.stream().anyMatch(d -> d.kind == DecisionKind.MERGED
-                && d.relativePath.equalsIgnoreCase("Gen\\NDF\\DepictionResource\\Cluster.txn"));
             List<Path> depictionFiles = List.of(source.resolve("Gen/NDF/GFX/DepictionResources.txn"),
                 source.resolve("Gen/NDF/GFX/DepictionResources.dbg"), source.resolve("Gen/NDF/GFX/DepictionResources.txn.tag"));
-            if (mergedDepictions) {
-                // A source hash restamp cannot recompute ConfigHash, which covers the cluster's ordered file list.
-                // Remove the staged copies here so only a successful SDK generation can supply these artifacts.
+            boolean rebuildDepictions = depictionsNeedRebuild(plan);
+            if (rebuildDepictions) {
+                // DepictionResources' ConfigHash covers the depiction cluster's ordered file list, which a source hash
+                // restamp cannot recompute. Unless one mod supplies both unmerged, only WARNO can produce a matching database.
+                log.accept("  The depiction cluster and DepictionResources don't come from one mod; WARNO will rebuild DepictionResources.");
                 for (Path file : depictionFiles) {
                     try { Files.deleteIfExists(file); }
                     catch (IOException ex) { throw new UncheckedIOException(ex); }
                 }
             }
-            loadCombinedTransactions(request, source, log, token);
-            if (mergedDepictions) {
+            List<String> firstPass = new ArrayList<>();
+            loadCombinedTransactions(request, source, line -> {
+                log.accept(line);
+                String database = regeneratedDatabase(line);
+                if (database != null) firstPass.add(database);
+            }, token);
+            if (rebuildDepictions) {
                 for (Path file : depictionFiles) {
                     if (!Files.isRegularFile(file) || file.toFile().length() == 0)
-                        throw new CombineException("WARNO did not regenerate " + file.getFileName() + " for the merged depiction cluster.");
+                        throw new CombineException("WARNO did not regenerate " + file.getFileName() + " for the combined depiction cluster.");
                 }
-                log.accept("  Checking that WARNO can reuse the generated depiction database on a second load...");
-                var regenerated = new java.util.concurrent.atomic.AtomicBoolean();
-                loadCombinedTransactions(request, source, line -> {
-                    log.accept(line);
-                    if (line.toLowerCase(java.util.Locale.ROOT).contains("generating: 'zz:/ndf/gfx/depictionresources.txn'"))
-                        regenerated.set(true);
-                }, token);
-                if (regenerated.get()) throw new CombineException("WARNO still requests regeneration of DepictionResources.txn on a second load.");
             }
+            if (!firstPass.isEmpty())
+                log.accept(String.format("  WARNO rebuilt %,d database(s) from the combined sources: %s", firstPass.size(), String.join(", ", firstPass)));
+            // The game refuses to start ("No writable component found") while any database reads as stale,
+            // so a second load has to reuse every database exactly as it will ship.
+            log.accept("  Checking that WARNO reuses every combined database on a second load...");
+            List<String> secondPass = new ArrayList<>();
+            loadCombinedTransactions(request, source, line -> {
+                log.accept(line);
+                String database = regeneratedDatabase(line);
+                if (database != null) secondPass.add(database);
+            }, token);
+            if (!secondPass.isEmpty())
+                throw new CombineException("WARNO still treats these combined databases as out of date, so the game would refuse to load the mod: "
+                    + String.join(", ", secondPass) + ".");
+            log.accept("  WARNO loaded every combined database without rebuilding anything.");
             for (Path generated : FileOps.files(source.resolve("Gen/NDF"))) {
                 Path installed = runtime.resolve(source.relativize(generated));
                 if (!Files.isRegularFile(installed) || !FileOps.sameContent(generated, installed, token)) {
@@ -349,6 +361,31 @@ public final class CombineService {
         log.accept(String.format("[STEP 6/7] Wrote and verified Config.ini manifest (%,d NDF database fingerprints, DeckFormatVersion %s, Tags: %s).",
             configSection.size(), saved.get("Properties", "DeckFormatVersion"), saved.get("Properties", "TagList")));
         FileOps.deleteTree(staging);
+    }
+
+    private static final java.util.regex.Pattern GENERATING =
+        java.util.regex.Pattern.compile("Generating:\\s*'(ZZ:/NDF/[^']+)'", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** The database a WARNO log line says it is rebuilding, or null. */
+    static String regeneratedDatabase(String line) {
+        var match = GENERATING.matcher(line);
+        return match.find() ? match.group(1) : null;
+    }
+
+    /**
+     * False only when neither file ships, or one mod supplies both the depiction cluster and DepictionResources unmerged:
+     * the only case where the shipped DepictionResources tag still matches the combined cluster.
+     */
+    static boolean depictionsNeedRebuild(MergePreview plan) {
+        MergeDecision cluster = null, resources = null;
+        for (MergeDecision decision : plan.decisions) {
+            if (decision.relativePath.equalsIgnoreCase("Gen\\NDF\\DepictionResource\\Cluster.txn")) cluster = decision;
+            else if (decision.relativePath.equalsIgnoreCase("Gen\\NDF\\GFX\\DepictionResources.txn")) resources = decision;
+        }
+        if (cluster == null && resources == null) return false;
+        if (cluster == null || resources == null) return true;
+        if (cluster.kind == DecisionKind.MERGED || resources.kind == DecisionKind.MERGED) return true;
+        return !cluster.winner.equals(resources.winner);
     }
 
     private void loadCombinedTransactions(CombineRequest request, Path source, Consumer<String> log, Cancel token) {

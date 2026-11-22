@@ -28,13 +28,36 @@ public final class WarnoLocator {
 
     /** The WARNO installation found in the Steam libraries, or null. */
     public WarnoPaths locate() {
-        for (Path steamRoot : steamRoots()) {
-            for (Path library : libraries(steamRoot)) {
-                Path warnoRoot = library.resolve("steamapps").resolve("common").resolve("WARNO");
-                if (Files.isDirectory(warnoRoot)) return paths(warnoRoot, library);
+        Set<Path> libraries = new LinkedHashSet<>();
+        for (Path steamRoot : steamRoots()) libraries.addAll(libraries(steamRoot));
+        libraries.addAll(driveLibraries());
+        // A leftover WARNO folder (Steam keeps one after moving the game to another library) is not an install:
+        // the library whose app manifest lists WARNO wins, then any library holding a real WARNO.exe.
+        Path fallback = null;
+        for (Path library : libraries) {
+            Path warnoRoot = library.resolve("steamapps").resolve("common").resolve("WARNO");
+            if (!isInstall(warnoRoot)) continue;
+            if (Files.isRegularFile(library.resolve("steamapps").resolve("appmanifest_1611600.acf"))) return paths(warnoRoot, library);
+            if (fallback == null) fallback = library;
+        }
+        return fallback == null ? null : paths(fallback.resolve("steamapps").resolve("common").resolve("WARNO"), fallback);
+    }
+
+    private static boolean isInstall(Path warnoRoot) {
+        return Files.isRegularFile(warnoRoot.resolve("WARNO.exe")) && Files.isRegularFile(warnoRoot.resolve("Mods").resolve("CreateNewMod.bat"));
+    }
+
+    /** The usual Steam library folders on every drive, for machines whose registry or library list is out of date. */
+    private static List<Path> driveLibraries() {
+        List<Path> found = new ArrayList<>();
+        for (java.io.File drive : java.io.File.listRoots()) {
+            for (String name : new String[]{"SteamLibrary", "Steam", "Games\\Steam", "Games\\SteamLibrary",
+                                            "Program Files (x86)\\Steam", "Program Files\\Steam"}) {
+                Path library = drive.toPath().resolve(name);
+                if (Files.isDirectory(library.resolve("steamapps"))) found.add(library.toAbsolutePath().normalize());
             }
         }
-        return null;
+        return found;
     }
 
     public WarnoPaths fromWarnoRoot(String warnoRoot) {
@@ -86,7 +109,7 @@ public final class WarnoLocator {
                 return null;
             }
             if (process.exitValue() != 0) return null;
-            for (String line : new String(output, StandardCharsets.UTF_8).split("\r?\n")) {
+            for (String line : new String(output, java.nio.charset.Charset.forName(System.getProperty("native.encoding", "UTF-8"))).split("\r?\n")) {
                 int type = line.indexOf("REG_SZ");
                 if (line.trim().startsWith(valueName) && type >= 0) {
                     String value = line.substring(type + "REG_SZ".length()).trim();
