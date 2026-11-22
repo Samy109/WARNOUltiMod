@@ -449,6 +449,14 @@ public final class MergePlanner {
             // A mod that ships vanilla's own source file has not changed it, so it must neither win nor conflict.
             List<Integer> changed = new ArrayList<>();
             for (int i = 0; i < files.size(); i++) if (!sourceBaseline.isVanilla(path, files.get(i), token)) changed.add(i);
+            if (path.equalsIgnoreCase(CountrySources.PATH) && changed.size() > 1) {
+                var variants = changed.stream().map(i -> new String(FileOps.read(files.get(i)), StandardCharsets.ISO_8859_1)).toList();
+                String combined = CountrySources.merge(sourceBaseline.countrySource, variants);
+                Path output = mergeDirectory == null ? null : FileOps.safeCombine(mergeDirectory,path);
+                if (output != null) FileOps.write(output, combined.getBytes(StandardCharsets.ISO_8859_1));
+                return new MergeDecision(path, DecisionKind.MERGED, inputs.get(changed.getFirst()).name,
+                    "Merged skirmish country definitions, flag textures and text commands by key.", output,false,true);
+            }
             if (changed.isEmpty() || changed.size() == files.size()) return overrideDecision;
             CompiledInput winner = inputs.get(changed.get(0));
             Path winnerFile = files.get(changed.get(0));

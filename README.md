@@ -4,6 +4,8 @@ WARNO Mod Maker is a comprehensive Java Swing application designed for advanced 
 
 Version 3.0.0 adds the Combine workspace. Select installed mods in priority order, preview file and database conflicts, and build the combined mod through the WARNO SDK. Existing MODerator build records are supported.
 
+Combine applies its built-in rules first, including preserving independent changes relative to vanilla. When mods conflict on the same value, the first mod in your list that changes it wins. When the same provider declares a registration key twice at equal priority, the first declaration wins. Skirmish country entries and their flags are merged by key.
+
 <img width="1283" height="713" alt="image" src="https://github.com/user-attachments/assets/fea700cf-2f9a-48a8-bc1d-ab7df72dad56" />
 
 

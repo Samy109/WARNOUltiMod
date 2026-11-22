@@ -22,6 +22,7 @@ public final class SourceBaseline {
     // Hashing every vanilla source takes seconds; it is done once per version of base.zip, not once per preview.
     private static final Map<String, SourceBaseline> CACHE = new ConcurrentHashMap<>();
 
+    String countrySource = "";
     private final TreeMap<String, String> hashes = IgnoreCase.map();
 
     private SourceBaseline(Path zipPath) throws IOException {
@@ -32,6 +33,9 @@ public final class SourceBaseline {
                 if (entry.isDirectory()) continue;
                 String path = SourceDeltaAnalyzer.normalize(entry.getName());
                 if (!SourceDeltaAnalyzer.isSourceTree(path)) continue;
+                if (path.equalsIgnoreCase(CountrySources.PATH)) {
+                    try (InputStream in = archive.getInputStream(entry)) { countrySource = new String(in.readAllBytes(), StandardCharsets.ISO_8859_1); }
+                }
                 try (InputStream in = archive.getInputStream(entry)) {
                     hashes.put(path, SourceDeltaAnalyzer.hash(in, Cancel.NONE));
                 }

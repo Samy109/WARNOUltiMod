@@ -204,7 +204,7 @@ public final class NdfMerger {
                     List<Map.Entry<NdfValue, NdfValue>> entries = new ArrayList<>();
                     for (Map.Entry<NdfValue, NdfValue> e : ((NdfValue.MapV) value).entries)
                         entries.add(NdfValue.entry(unifyValue(e.getKey()), unifyValue(e.getValue())));
-                    return new NdfValue.MapV(entries);
+                    return new NdfValue.MapV(firstEntries(entries));
                 }
                 if (value instanceof NdfValue.Pair)
                     return new NdfValue.Pair(unifyValue(((NdfValue.Pair) value).first), unifyValue(((NdfValue.Pair) value).second));
@@ -266,7 +266,15 @@ public final class NdfMerger {
         }
         List<NdfDatabase.TopLevel> exports = new ArrayList<>();
         for (NdfDatabase.TopLevel t : merged) if (t.exportPath != null && descriptorId(t.value) != null) exports.add(t);
-        exports.sort((a, b) -> Integer.compare(keepsVanillaId(vanillaIds, a) ? 0 : 1, keepsVanillaId(vanillaIds, b) ? 0 : 1));
+        Map<Map.Entry<String,NdfValue>,Integer> priority = new HashMap<>();
+        for (int i = 0; i < variants.size(); i++) {
+            for (var entry : variants.get(i).database.topLevel) {
+                var id = descriptorId(entry.value);
+                if (entry.exportPath != null && id != null) priority.putIfAbsent(Map.entry(entry.exportPath,id),i);
+            }
+        }
+        exports.sort(java.util.Comparator.<NdfDatabase.TopLevel>comparingInt(t -> keepsVanillaId(vanillaIds,t) ? 0 : 1)
+            .thenComparingInt(t -> priority.getOrDefault(Map.entry(t.exportPath,descriptorId(t.value)),Integer.MAX_VALUE)));
         Map<String, NdfValue.Obj> reassigned = new HashMap<>();
         for (NdfDatabase.TopLevel top : exports) {
             NdfValue.Raw id = descriptorId(top.value);
@@ -358,7 +366,31 @@ public final class NdfMerger {
         }
     }
 
+    /** Within a single provider, declaration order breaks ties between entries with the same key. */
+    private static <K,V> List<Map.Entry<K,V>> firstEntries(List<Map.Entry<K,V>> entries) {
+        Set<K> seen = new HashSet<>();
+        return entries.stream().filter(entry -> seen.add(entry.getKey())).toList();
+    }
+
     private record Registration(String type, String collection, List<Map.Entry<String,NdfValue>> scope) {}
+
+    private static String registrationCollection(String type) {
+        return switch (type) {
+            case "TTransportedInfantryCatalogEntries" -> "Entries";
+            case "TBUCKToolAdditionalTextureBank" -> "Textures";
+            case "TUISpecificCountriesInfos" -> "CountriesInfos";
+            case "TUnitMimeticRegistration" -> "UnitMimetics";
+            case "TGhostMimeticRegistration" -> "GhostMimetics";
+            case "TGhostBuildingMimeticRegistration" -> "GhostBuildingMimetics";
+            case "TMimeticWorldHappeningRegistration" -> "Happenings";
+            default -> null;
+        };
+    }
+
+    private static boolean isRegistration(NdfDatabase.TopLevel root) {
+        String type = root.value.className;
+        return root.exportPath == null && (registrationCollection(type) != null || type.equals("TTowedUnitCatalogEntry") || type.equals("TDeckSerializerEntries"));
+    }
 
     /** Each top-level entry's key (its export path, or its {@link ConstantKey}) with its value, in order. */
     private static List<Map.Entry<Object, NdfValue.Obj>> keys(List<NdfDatabase.TopLevel> topLevel) {
@@ -383,15 +415,7 @@ public final class NdfMerger {
                 }
                 continue;
             }
-            String collection = switch (t.value.className) {
-                case "TTransportedInfantryCatalogEntries" -> "Entries";
-                case "TBUCKToolAdditionalTextureBank" -> "Textures";
-                case "TUnitMimeticRegistration" -> "UnitMimetics";
-                case "TGhostMimeticRegistration" -> "GhostMimetics";
-                case "TGhostBuildingMimeticRegistration" -> "GhostBuildingMimetics";
-                case "TMimeticWorldHappeningRegistration" -> "Happenings";
-                default -> null;
-            };
+            String collection = registrationCollection(t.value.className);
             if (collection != null && t.value.get(collection) != null) {
                 var scope = t.value.fields.stream().filter(f -> !f.getKey().equals(collection)).toList();
                 Registration key = new Registration(t.value.className, collection, scope);
@@ -414,11 +438,17 @@ public final class NdfMerger {
         }
         catalogs.forEach((key,root) -> {
             var fields = new ArrayList<>(root.fields);
-            NdfValue combined = maps.containsKey(key) ? new NdfValue.MapV(maps.get(key)) : new NdfValue.ListV(entries.get(key));
+            NdfValue combined = maps.containsKey(key) ? new NdfValue.MapV(firstEntries(maps.get(key))) : new NdfValue.ListV(infantryEntries(entries.get(key)));
             fields.replaceAll(f -> f.getKey().equals(key.collection()) ? NdfValue.field(key.collection(), combined) : f);
             result.add(Map.entry(key,new NdfValue.Obj(root.className,fields,root.origin)));
         });
-        return result;
+        return firstEntries(result);
+    }
+
+    private static List<NdfValue> infantryEntries(List<NdfValue> entries) {
+        Set<NdfValue> seen = new HashSet<>();
+        return entries.stream().filter(entry -> !(entry instanceof NdfValue.Obj obj)
+            || obj.get("Identifier") == null || seen.add(obj.get("Identifier"))).toList();
     }
 
     private static <K, V> Map<K, V> toMap(List<Map.Entry<K, V>> entries) {
@@ -487,6 +517,20 @@ public final class NdfMerger {
     // Without vanilla (asset catalogs), anonymous roots are paired by position and every variant is treated as an
     // addition; differing values resolve by priority.
     private List<NdfDatabase.TopLevel> mergeWithoutBase(List<Variant> variants, Cancel token) {
+        if (variants.stream().anyMatch(v -> v.database.topLevel.stream().anyMatch(NdfMerger::isRegistration))) {
+            var registrations = new ArrayList<Variant>();
+            var others = new ArrayList<Variant>();
+            for (var variant : variants) {
+                var registered = new ArrayList<NdfDatabase.TopLevel>();
+                var remaining = new ArrayList<NdfDatabase.TopLevel>();
+                for (var root : variant.database.topLevel) (isRegistration(root) ? registered : remaining).add(root);
+                registrations.add(new Variant(variant.modName, new NdfDatabase(registered, variant.database.propertyOwners)));
+                others.add(new Variant(variant.modName, new NdfDatabase(remaining, variant.database.propertyOwners)));
+            }
+            var result = mergeWithoutBase(others, token);
+            result.addAll(mergeTopLevel(new NdfDatabase(List.of(),Map.of()), registrations, token));
+            return result;
+        }
         List<NdfDatabase.TopLevel> first = variants.get(0).database.topLevel;
         int count = first.size();
         for (Variant v : variants) {
