@@ -30,6 +30,8 @@ public final class CombinationHealth {
         if (!Files.isRegularFile(runtime.resolve("Config.ini")) || !Files.isDirectory(runtime.resolve("Gen"))
             || !Files.isDirectory(paths.modsRoot.resolve(state.outputName).resolve("Gen")))
             return "Combined output is missing or incomplete. Rebuild required.";
+        String problem = DeliveryManifest.problem(IniDocument.load(runtime.resolve("Config.ini")), DeliveryManifest.revisions(paths.warnoRoot), runtime);
+        if (problem != null) return problem + " Rebuild required.";
         if (state.runtimeFingerprint == null || state.gameFingerprint == null) return "Rebuild once to verify and track the existing output.";
         if (!state.gameFingerprint.equalsIgnoreCase(gameHash(paths, token))) return "WARNO build data changed. Rebuild required.";
         if (!state.runtimeFingerprint.equalsIgnoreCase(runtimeHash(runtime, progress, token))) return "Combined output changed. Rebuild required.";

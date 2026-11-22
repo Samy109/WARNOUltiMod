@@ -143,7 +143,7 @@ public final class CombineService {
                 log.accept("[STEP 4/7] Running WARNO SDK GenerateMod.py to build local mod identity and Config.ini baseline...");
                 runSdk(python, request, "GenerateMod.py", Arrays.asList("WARNO", request.outputName), outputSource, log, token);
                 CombineRequest currentRequest = request.withMods(current);
-                IniDocument generatedConfig = loadGeneratedConfig(currentRequest, outputRuntime, log);
+                IniDocument generatedConfig = loadGeneratedConfig(currentRequest, outputRuntime, installedModGen, log, token);
                 MergePreview plan;
                 if (request.mods.stream().anyMatch(m -> m.kind == ModKind.WORKSHOP_COMPILED)) {
                     List<MergePlanner.CompiledInput> inputs = compiledInputs(currentRequest, outputRuntime, generatedConfig);
@@ -238,10 +238,10 @@ public final class CombineService {
         }
     }
 
-    private static IniDocument loadGeneratedConfig(CombineRequest request, Path runtime, Consumer<String> log) {
+    private static IniDocument loadGeneratedConfig(CombineRequest request, Path runtime, int installedModGen, Consumer<String> log, Cancel token) {
         Path path = runtime.resolve("Config.ini");
-        if (!Files.isRegularFile(path)) throw new CombineException("WARNO did not generate the compatibility manifest.");
-        IniDocument config = IniDocument.load(path);
+        IniDocument config = Files.exists(path) ? IniDocument.load(path)
+            : DeliveryManifest.recover(request, runtime, installedModGen, log, token);
         int version = config.getInt("Properties", "ModGenVersion", -1);
         if (version < 0) throw new CombineException("WARNO generated a manifest without a ModGen revision.");
         for (ModDescriptor input : request.mods) {
@@ -352,6 +352,7 @@ public final class CombineService {
         }
         report.report(85, "Writing compatibility manifest");
         Path configPath = runtime.resolve("Config.ini");
+        DeliveryManifest.complete(generatedConfig, runtime, DeliveryManifest.revisions(request.paths.warnoRoot));
         generatedConfig.save(configPath);
         IniDocument saved = IniDocument.load(configPath);
         TreeMap<String, String> configSection = generatedConfig.getSection("Config");

@@ -128,6 +128,7 @@ public final class CombinedModUpdater {
         for (SourceModFingerprint f : fingerprints.compute(new ArrayList<>(distinct.values()), progress, token, "Checking combined mods for updates"))
             current.put(IgnoreCase.upper(f.rootPath), f);
 
+        var revisions = DeliveryManifest.revisions(paths.warnoRoot);
         List<Update> updates = new ArrayList<>();
         for (int s = 0; s < states.size(); s++) {
             CombinedModState state = states.get(s);
@@ -157,6 +158,13 @@ public final class CombinedModUpdater {
             }
             if (builtFor != null && builtFor != modGen) changes.add("built for ModGen " + builtFor + ", WARNO is at " + modGen);
             else if (!game.equalsIgnoreCase(state.gameFingerprint)) changes.add("WARNO updated");
+            Path runtime = paths.savedModsRoot.resolve(state.outputName);
+            Path manifest = runtime.resolve("Config.ini");
+            if (!Files.isRegularFile(manifest)) changes.add("Combined Config.ini is missing");
+            else {
+                String problem = DeliveryManifest.problem(IniDocument.load(manifest), revisions, runtime);
+                if (problem != null) changes.add(problem);
+            }
             updates.add(new Update(state, ready, outdated, changes));
         }
         return updates;

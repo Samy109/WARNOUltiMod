@@ -111,7 +111,8 @@ public final class IniDocument {
         StringBuilder builder = new StringBuilder();
         for (Section section : sections.values()) {
             if (!section.name.isEmpty()) builder.append('[').append(section.name).append("]\r\n");
-            for (String[] entry : section.values.values()) builder.append(entry[0]).append(" = ").append(entry[1]).append("\r\n");
+            String separator = section.name.equalsIgnoreCase("Config") ? "=" : " = ";
+            for (String[] entry : section.values.values()) builder.append(entry[0]).append(separator).append(entry[1]).append("\r\n");
             builder.append("\r\n");
         }
         try {
