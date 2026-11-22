@@ -128,6 +128,7 @@ public final class NdfMerger {
         merged = merger.restoreMissingExports(merged, vanilla, variants);
         merged = merger.settleDescriptors(merged, vanilla, variants);
         merged = merger.settleConstants(merged, sources);
+        merged = merger.settleDeckIds(merged, vanilla, variants);
         // WARNO's pool rule (see NdfPoolOrder): a merged list can put one mod's optional element ahead of another's Required one.
         NdfPoolOrder.Result settled = NdfPoolOrder.settle(new NdfDatabase(merged, owners));
         for (String pool : settled.reordered)
@@ -449,6 +450,123 @@ public final class NdfMerger {
         Set<NdfValue> seen = new HashSet<>();
         return entries.stream().filter(entry -> !(entry instanceof NdfValue.Obj obj)
             || obj.get("Identifier") == null || seen.add(obj.get("Identifier"))).toList();
+    }
+
+
+    // ───────────── Deck serializer IDs ─────────────
+
+    private static final List<String> DECK_ID_FIELDS = List.of("DivisionIds", "UnitIds");
+
+    /**
+     * WARNO refuses to load a deck serializer where two different units (or divisions) share one numeric ID:
+     * "Unit ID '16000' conflict in DeckSerializer". Mods that each add units pick IDs independently, and the merge
+     * unites their entries by key, so the combined mod can list one ID twice. The ID stays with the entry that
+     * vanilla has, otherwise with the highest-priority mod, and every other entry gets the next free ID.
+     * (Deck codes of a renumbered unit change; a crash on load is worse.)
+     */
+    private List<NdfDatabase.TopLevel> settleDeckIds(List<NdfDatabase.TopLevel> merged, NdfDatabase vanilla, List<Variant> variants) {
+        // Rank 0 is vanilla, rank n is the n-th variant: who first declared each exact key and ID pair.
+        Map<String, List<Map<NdfValue, NdfValue>>> declared = new HashMap<>();
+        List<NdfDatabase> sources = new ArrayList<>();
+        sources.add(vanilla);
+        for (Variant v : variants) sources.add(v.database);
+        for (String field : DECK_ID_FIELDS) {
+            List<Map<NdfValue, NdfValue>> ranks = new ArrayList<>();
+            for (NdfDatabase db : sources) {
+                Map<NdfValue, NdfValue> pairs = new HashMap<>();
+                if (db != null) for (NdfDatabase.TopLevel t : db.topLevel) {
+                    if (t.exportPath != null || !t.value.className.equals("TDeckSerializerEntries")) continue;
+                    if (t.value.get(field) instanceof NdfValue.MapV map) for (var e : map.entries) pairs.putIfAbsent(e.getKey(), e.getValue());
+                }
+                ranks.add(pairs);
+            }
+            declared.put(field, ranks);
+        }
+
+        List<NdfDatabase.TopLevel> result = new ArrayList<>(merged);
+        for (String field : DECK_ID_FIELDS) {
+            // Every entry of this field across the deck serializer roots, with where it lives.
+            record Slot(int root, int index, NdfValue key, NdfValue id, int rank) {}
+            List<Slot> slots = new ArrayList<>();
+            for (int r = 0; r < result.size(); r++) {
+                NdfDatabase.TopLevel t = result.get(r);
+                if (t.exportPath != null || !t.value.className.equals("TDeckSerializerEntries")) continue;
+                if (!(t.value.get(field) instanceof NdfValue.MapV map)) continue;
+                for (int i = 0; i < map.entries.size(); i++) {
+                    NdfValue key = map.entries.get(i).getKey();
+                    NdfValue id = map.entries.get(i).getValue();
+                    int rank = Integer.MAX_VALUE;
+                    List<Map<NdfValue, NdfValue>> ranks = declared.get(field);
+                    for (int k = 0; k < ranks.size(); k++) {
+                        if (id.equals(ranks.get(k).get(key))) { rank = k; break; }
+                    }
+                    slots.add(new Slot(r, i, key, id, rank));
+                }
+            }
+            Map<NdfValue, List<Slot>> byId = new LinkedHashMap<>();
+            long highest = 0;
+            for (Slot slot : slots) {
+                byId.computeIfAbsent(slot.id(), k -> new ArrayList<>()).add(slot);
+                Long n = idNumber(slot.id());
+                if (n != null) highest = Math.max(highest, n);
+            }
+            Map<Long, Slot> renumbered = new HashMap<>();
+            Map<Slot, NdfValue> replacement = new HashMap<>();
+            long next = highest;
+            for (Map.Entry<NdfValue, List<Slot>> group : byId.entrySet()) {
+                List<Slot> sharing = group.getValue();
+                if (sharing.size() < 2 || idNumber(group.getKey()) == null) continue;
+                Slot keeper = sharing.get(0);
+                for (Slot slot : sharing) if (slot.rank() < keeper.rank()) keeper = slot;
+                List<String> losers = new ArrayList<>();
+                StringBuilder detail = new StringBuilder();
+                for (Slot slot : sharing) {
+                    if (slot == keeper) continue;
+                    next++;
+                    replacement.put(slot, withIdNumber(group.getKey(), next));
+                    String owner = slot.rank() == Integer.MAX_VALUE ? "the merge" : rankName(slot.rank(), variants);
+                    if (!losers.contains(owner)) losers.add(owner);
+                    if (detail.length() > 0) detail.append("; ");
+                    detail.append(slot.key().describe()).append(" -> ").append(next);
+                }
+                conflicts.add(new Conflict("DeckSerializer." + field + " ID " + group.getKey().describe(),
+                    rankName(keeper.rank(), variants), losers,
+                    "kept for " + keeper.key().describe() + "; renumbered " + detail));
+            }
+            if (replacement.isEmpty()) continue;
+            Map<Integer, Map<Integer, NdfValue>> byRoot = new HashMap<>();
+            for (var e : replacement.entrySet()) byRoot.computeIfAbsent(e.getKey().root(), k -> new HashMap<>()).put(e.getKey().index(), e.getValue());
+            for (var rootEdits : byRoot.entrySet()) {
+                NdfDatabase.TopLevel t = result.get(rootEdits.getKey());
+                NdfValue.MapV map = (NdfValue.MapV) t.value.get(field);
+                List<Map.Entry<NdfValue, NdfValue>> entries = new ArrayList<>(map.entries);
+                for (var edit : rootEdits.getValue().entrySet())
+                    entries.set(edit.getKey(), NdfValue.entry(entries.get(edit.getKey()).getKey(), edit.getValue()));
+                NdfValue.MapV fixed = new NdfValue.MapV(entries);
+                List<Map.Entry<String, NdfValue>> fields = new ArrayList<>(t.value.fields);
+                fields.replaceAll(f -> f.getKey().equals(field) ? NdfValue.field(field, fixed) : f);
+                result.set(rootEdits.getKey(), new NdfDatabase.TopLevel(t.exportPath,
+                    new NdfValue.Obj(t.value.className, fields, t.value.origin)));
+            }
+        }
+        return result;
+    }
+
+    private static String rankName(int rank, List<Variant> variants) {
+        return rank == 0 ? "WARNO" : rank == Integer.MAX_VALUE ? "the merge" : variants.get(rank - 1).modName;
+    }
+
+    /** The number inside a 32-bit integer value (0x02 signed, 0x03 unsigned), or null for anything else. */
+    private static Long idNumber(NdfValue value) {
+        if (!(value instanceof NdfValue.Raw raw) || raw.data.length != 4 || (raw.type != 0x02 && raw.type != 0x03)) return null;
+        int v = java.nio.ByteBuffer.wrap(raw.data).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt();
+        return raw.type == 0x03 ? v & 0xFFFFFFFFL : (long) v;
+    }
+
+    private static NdfValue withIdNumber(NdfValue like, long number) {
+        NdfValue.Raw raw = (NdfValue.Raw) like;
+        byte[] data = java.nio.ByteBuffer.allocate(4).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt((int) number).array();
+        return new NdfValue.Raw(raw.type, data);
     }
 
     private static <K, V> Map<K, V> toMap(List<Map.Entry<K, V>> entries) {
