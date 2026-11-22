@@ -293,6 +293,7 @@ public final class MergePlanner {
         for (int i = 0; i < contributors.size(); i++) payloadSizes.put(contributors.get(i).name, files.get(i).size());
         List<List<MergeDecision>> conflicts = new ArrayList<>(Collections.nCopies(paths.size(), null));
 
+        DamageFamilies families = DamageFamilies.open(inputs, vanilla);
         DepictionSources depictions = new DepictionSources();
         List<MergeDecision> decisions = Parallel.map(paths.size(), Parallel.half(), index -> {
             token.check();
@@ -308,7 +309,7 @@ public final class MergePlanner {
                 debug.add(debugInfo.get(i).get(path));
             }
             MergeDecision decision = decide(path, providerInputs, providerFiles, debug, payloadSizes, vanilla, sourceBaseline,
-                mergeDirectory, conflicts, index, token, depictions);
+                mergeDirectory, conflicts, index, token, depictions, families);
             // A database taken whole from one mod ships its pools in WARNO's order too (see NdfPoolOrder).
             if (NdfLayout.isDatabase(path) && decision.kind != DecisionKind.MERGED && decision.sourcePath != null) {
                 Path source = null;
@@ -395,9 +396,37 @@ public final class MergePlanner {
 
     private static MergeDecision decide(String path, List<CompiledInput> inputs, List<Path> files, List<Path> debugInfo,
                                         Map<String, Integer> payloadSizes, VanillaDatabases vanilla, SourceBaseline sourceBaseline,
-                                        Path mergeDirectory, List<List<MergeDecision>> conflicts, int conflictSlot, Cancel token, DepictionSources depictions) {
+                                        Path mergeDirectory, List<List<MergeDecision>> conflicts, int conflictSlot, Cancel token, DepictionSources depictions, DamageFamilies families) {
         CompiledInput primary = inputs.get(0);
         Path primaryFile = files.get(0);
+        if (families != null && families.source(path) != null) {
+            Path output = mergeDirectory == null ? null : FileOps.safeCombine(mergeDirectory,path);
+            if (output != null) FileOps.write(output, families.source(path).getBytes(StandardCharsets.UTF_8));
+            return new MergeDecision(path, DecisionKind.MERGED, primary.name, "Combined named damage and resistance families.", output, false,true);
+        }
+        if (families != null && families.applies(path, inputs)) {
+            List<NdfMerger.Variant> normalized = new ArrayList<>();
+            boolean changed = false;
+            for (int i = 0; i < files.size(); i++) {
+                var db = NdfDatabase.load(FileOps.read(files.get(i)), debugInfo.get(i) == null ? null : FileOps.read(debugInfo.get(i)));
+                var remapped = families.normalize(inputs.get(i).name, db);
+                changed |= com.warnomodmaker.combine.ndf.NdfRewrite.changed(db, remapped);
+                normalized.add(new NdfMerger.Variant(inputs.get(i).name, remapped));
+            }
+            if (changed) {
+                byte[] bytes = vanilla.tryRead(path);
+                var baseline = bytes == null ? null : NdfDatabase.load(bytes);
+                var result = NdfMerger.merge(baseline, normalized, token);
+                var database = path.equalsIgnoreCase("Gen\\NDF\\DepictionResource\\Cluster.txn") ? depictions.collect(result.database) : result.database;
+                Path output = mergeDirectory == null ? null : writeDatabase(database, mergeDirectory, path);
+                List<MergeDecision> found = new ArrayList<>();
+                for (var conflict : result.conflicts) found.add(new MergeDecision(path + " > " + conflict.path, DecisionKind.VALUE_CONFLICT,
+                    conflict.winner, conflict.winner + " has priority over " + String.join(", ", conflict.overridden), null));
+                conflicts.set(conflictSlot, found);
+                return new MergeDecision(path, DecisionKind.MERGED, inputs.stream().map(i -> i.name).collect(Collectors.joining(" + ")),
+                    "Merged using shared damage and resistance family numbers.", output, false, inputs.size() > 1);
+            }
+        }
         if (inputs.size() == 1)
             return new MergeDecision(path, DecisionKind.SINGLE, primary.name, "Only " + primary.name + " provides this file.", primaryFile);
         boolean allSame = true;

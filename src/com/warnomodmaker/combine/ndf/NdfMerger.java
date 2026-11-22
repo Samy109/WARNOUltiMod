@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -357,19 +358,66 @@ public final class NdfMerger {
         }
     }
 
+    private record Registration(String type, String collection, List<Map.Entry<String,NdfValue>> scope) {}
+
     /** Each top-level entry's key (its export path, or its {@link ConstantKey}) with its value, in order. */
     private static List<Map.Entry<Object, NdfValue.Obj>> keys(List<NdfDatabase.TopLevel> topLevel) {
         Map<NdfValue.Obj, Integer> occurrences = new HashMap<>();
         List<Map.Entry<Object, NdfValue.Obj>> result = new ArrayList<>(topLevel.size());
+        Map<Registration,List<NdfValue>> entries = new LinkedHashMap<>();
+        Map<Registration,List<Map.Entry<NdfValue,NdfValue>>> maps = new LinkedHashMap<>();
+        Map<Registration,NdfValue.Obj> catalogs = new LinkedHashMap<>();
         for (NdfDatabase.TopLevel t : topLevel) {
             if (t.exportPath != null) {
                 result.add(new AbstractMap.SimpleImmutableEntry<>(t.exportPath, t.value));
+                continue;
+            }
+            if (t.value.className.equals("TDeckSerializerEntries")) {
+                // The engine registers each map independently, across every anonymous declaration.
+                for (var field : t.value.fields) {
+                    if (!(field.getValue() instanceof NdfValue.MapV map))
+                        throw new NdfFormatException("Unexpected deck serializer field " + field.getKey());
+                    Registration key = new Registration(t.value.className, field.getKey(), List.of());
+                    catalogs.putIfAbsent(key, new NdfValue.Obj(t.value.className,List.of(field),t.value.origin));
+                    maps.computeIfAbsent(key,k -> new ArrayList<>()).addAll(map.entries);
+                }
+                continue;
+            }
+            String collection = switch (t.value.className) {
+                case "TTransportedInfantryCatalogEntries" -> "Entries";
+                case "TBUCKToolAdditionalTextureBank" -> "Textures";
+                case "TUnitMimeticRegistration" -> "UnitMimetics";
+                case "TGhostMimeticRegistration" -> "GhostMimetics";
+                case "TGhostBuildingMimeticRegistration" -> "GhostBuildingMimetics";
+                case "TMimeticWorldHappeningRegistration" -> "Happenings";
+                default -> null;
+            };
+            if (collection != null && t.value.get(collection) != null) {
+                var scope = t.value.fields.stream().filter(f -> !f.getKey().equals(collection)).toList();
+                Registration key = new Registration(t.value.className, collection, scope);
+                catalogs.putIfAbsent(key, t.value);
+                if (t.value.get(collection) instanceof NdfValue.ListV list)
+                    entries.computeIfAbsent(key, k -> new ArrayList<>()).addAll(list.items);
+                else if (t.value.get(collection) instanceof NdfValue.MapV map)
+                    maps.computeIfAbsent(key, k -> new ArrayList<>()).addAll(map.entries);
+                else throw new NdfFormatException("Unexpected registration data in " + t.value.className);
+                continue;
+            }
+            if (t.value.className.equals("TTowedUnitCatalogEntry") && t.value.get("Identifier") != null) {
+                var identity = t.value.fields.stream().filter(f -> f.getKey().equals("Catalog") || f.getKey().equals("Identifier")).toList();
+                result.add(Map.entry(new Registration(t.value.className, "", identity), t.value));
                 continue;
             }
             int n = occurrences.getOrDefault(t.value, 0);
             occurrences.put(t.value, n + 1);
             result.add(new AbstractMap.SimpleImmutableEntry<>(new ConstantKey(t.value, n), t.value));
         }
+        catalogs.forEach((key,root) -> {
+            var fields = new ArrayList<>(root.fields);
+            NdfValue combined = maps.containsKey(key) ? new NdfValue.MapV(maps.get(key)) : new NdfValue.ListV(entries.get(key));
+            fields.replaceAll(f -> f.getKey().equals(key.collection()) ? NdfValue.field(key.collection(), combined) : f);
+            result.add(Map.entry(key,new NdfValue.Obj(root.className,fields,root.origin)));
+        });
         return result;
     }
 
@@ -417,13 +465,13 @@ public final class NdfMerger {
                 result.add(new NdfDatabase.TopLevel(null, constant));
                 continue;
             }
-            String path = (String) key;
+            String path = key instanceof Registration registration ? registration.type() : (String) key;
             List<Edit> edits = new ArrayList<>(variants.size());
             for (int i = 0; i < variants.size(); i++) edits.add(new Edit(variants.get(i).modName, variantMaps.get(i).get(key)));
             boolean[] changed = new boolean[1];
             NdfValue value = mergeValue(shortName(path), baseByKey.get(key), edits, changed, true);
             if (changed[0]) changedObjects++;
-            if (value instanceof NdfValue.Obj) result.add(new NdfDatabase.TopLevel(path, (NdfValue.Obj) value));
+            if (value instanceof NdfValue.Obj) result.add(new NdfDatabase.TopLevel(key instanceof Registration ? null : path, (NdfValue.Obj) value));
             else if (value != null) throw new NdfFormatException("Export " + path + " merged to a non-object value.");
         }
         List<List<Map.Entry<Object, NdfValue.Obj>>> all = new ArrayList<>();
@@ -643,6 +691,7 @@ public final class NdfMerger {
                     id = o.get(field);
                     if (id != null) break;
                 }
+                if (o.className.equals("TTransportedInfantryEntry")) id = o.get("Identifier");
                 key = id != null ? new ClassKey(o.className, id) : o.className;
             } else if (item instanceof NdfValue.Text || item instanceof NdfValue.Import || item instanceof NdfValue.ExportRef || item instanceof NdfValue.Raw) {
                 key = item;

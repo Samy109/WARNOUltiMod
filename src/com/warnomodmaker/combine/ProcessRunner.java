@@ -34,8 +34,15 @@ public class ProcessRunner {
         } catch (IOException e) {
             throw new CombineException("Could not start " + Path.of(executable).getFileName() + ": " + e.getMessage(), e);
         }
-        Thread out = pump(process.getInputStream(), output);
-        Thread err = pump(process.getErrorStream(), errors);
+        var fatal = new java.util.concurrent.atomic.AtomicReference<String>();
+        Consumer<String> detect = line -> {
+            if (line.startsWith("[Fatal error]") && fatal.compareAndSet(null, line)) {
+                process.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+            }
+        };
+        Thread out = pump(process.getInputStream(), detect.andThen(output));
+        Thread err = pump(process.getErrorStream(), detect.andThen(errors));
         try {
             while (!process.waitFor(200, TimeUnit.MILLISECONDS)) {
                 if (token.isCancelled()) {
@@ -47,6 +54,7 @@ public class ProcessRunner {
             }
             out.join();
             err.join();
+            if (fatal.get() != null) throw new CombineException(fatal.get());
             return process.exitValue();
         } catch (InterruptedException e) {
             process.descendants().forEach(ProcessHandle::destroyForcibly);

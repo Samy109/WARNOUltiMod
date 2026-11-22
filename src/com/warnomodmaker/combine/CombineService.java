@@ -265,7 +265,7 @@ public final class CombineService {
         return inputs;
     }
 
-    private static void composeCompiledPayload(CombineRequest request, MergePreview plan, List<MergePlanner.CompiledInput> inputs,
+    private void composeCompiledPayload(CombineRequest request, MergePreview plan, List<MergePlanner.CompiledInput> inputs,
                                                IniDocument generatedConfig, Path source, Path runtime, Consumer<String> log, Reporter report, Cancel token) {
         log.accept("[STEP 5/7] Composing compiled payload (" + plan.summary() + ")...");
         Path staging = source.resolve(".combine-staging-" + UUID.randomUUID().toString().replace("-", ""));
@@ -300,6 +300,21 @@ public final class CombineService {
             }
         }, done -> report.report(65 + 20 * done / Math.max(1, total), String.format("Installing files · %,d of %,d", done, total)));
         log.accept("  Deployed verified payload to Mods\\" + request.outputName + " and Saved Games\\...\\mod\\" + request.outputName + ".");
+        if (plan.decisions.stream().anyMatch(d -> d.kind == DecisionKind.MERGED && NdfLayout.isTransactionDatabase(d.relativePath))) {
+            report.report(85, "Validating combined databases with WARNO");
+            log.accept("  Loading the installed combination through WARNO's headless SDK...");
+            int exit = processRunner.run(request.paths.warnoRoot.resolve("WARNO.exe").toString(),
+                List.of("-headless", "-generatemod", request.outputName, "-rootdata", ".", "CommonData:Clusters/Bootstrap/ClusterBootstrapGeneration.ndf"),
+                source, log, log, token);
+            if (exit != 0) throw new CombineException("WARNO rejected the combined databases (exit code " + exit + ").");
+            for (Path generated : FileOps.files(source.resolve("Gen/NDF"))) {
+                Path installed = runtime.resolve(source.relativize(generated));
+                if (!Files.isRegularFile(installed) || !FileOps.sameContent(generated, installed, token)) {
+                    FileOps.copyFileAtomic(generated, installed, token);
+                    if (!FileOps.sameContent(generated, installed, token)) throw new CombineException("SDK deployment verification failed for " + installed);
+                }
+            }
+        }
         report.report(85, "Writing compatibility manifest");
         Path configPath = runtime.resolve("Config.ini");
         generatedConfig.save(configPath);
