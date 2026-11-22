@@ -134,11 +134,11 @@ public final class CombinePanel extends JPanel {
 
     // Main area
     private final JLabel summaryText = WarnoTheme.caption("Every file the combined mod will contain, and how each one is produced.");
-    private final JButton checkUpdatesButton = WarnoTheme.button("Check for updates", ICON_UPDATE);
+    private final JButton checkUpdatesButton = WarnoTheme.button("Find outdated modpacks", ICON_UPDATE);
     private final RoundedPanel updatesBanner = new RoundedPanel(new BorderLayout(14, 0), WarnoTheme.hex("#1D2416"), WarnoTheme.hex("#3F5A2E"), 10);
     private final JLabel updatesTitle = WarnoTheme.title("", 14);
     private final JPanel updatesList = new JPanel();
-    private final JButton updateAllButton = WarnoTheme.accentButton("Update all", ICON_UPDATE);
+    private final JButton updateAllButton = WarnoTheme.accentButton("Update modpacks", ICON_UPDATE);
     private final JButton updateWithoutOutdatedButton = new JButton("Update without outdated mods");
     private final JLabel statFiles = stat(WarnoTheme.TEXT), statMerged = stat(WarnoTheme.SUCCESS), statConflicts = stat(WarnoTheme.WARNING),
         statOverrides = stat(WarnoTheme.CAUTION), statSingle = stat(WarnoTheme.INFO), statIdentical = stat(WarnoTheme.MUTED);
@@ -310,7 +310,7 @@ public final class CombinePanel extends JPanel {
         titles.add(Box.createVerticalStrut(4));
         titles.add(summaryText);
         header.add(titles, BorderLayout.CENTER);
-        checkUpdatesButton.setToolTipText("Check every combined mod against its source mods and the installed WARNO");
+        checkUpdatesButton.setToolTipText("Find modpacks that need rebuilding for your installed WARNO version or changes to their source mods.");
         JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         headerRight.setOpaque(false);
         headerRight.add(checkUpdatesButton);
@@ -686,7 +686,7 @@ public final class CombinePanel extends JPanel {
         if (ready > 0 && waiting == 0) updatesTitle.setText(ready + " combined mod" + (ready == 1 ? " is" : "s are") + " out of date");
         else if (ready == 0 && waiting > 0) updatesTitle.setText(waiting + " combined mod" + (waiting == 1 ? " has" : "s have") + " source mods that aren't up to date");
         else updatesTitle.setText(ready + " combined mod" + (ready == 1 ? "" : "s") + " can be updated; " + waiting + " " + (waiting == 1 ? "has" : "have") + " outdated source mods");
-        updateAllButton.setText(ready == 1 ? "Update" : "Update " + ready);
+        updateAllButton.setText(ready == 1 ? "Update modpack" : "Update " + ready + " modpacks");
         updateWithoutOutdatedButton.setVisible(pending.stream().anyMatch(CombinedModUpdater.Update::canUpdateWithoutOutdated));
         for (CombinedModUpdater.Update u : pending) log("[UPDATES] '" + u.outputName() + "': " + u.status());
         updateActionStates();
@@ -698,7 +698,7 @@ public final class CombinePanel extends JPanel {
         if (paths == null) return;
         WarnoPaths p = paths;
         List<ModDescriptor> mods = installed;
-        runUi("Checking combined mods for updates", token -> {
+        runUi("Checking modpacks against WARNO and their source mods", token -> {
             if (updateCheck != null) updateCheck.cancel();
             List<CombinedModUpdater.Update> found = updater.check(p, mods, progressReporter(), token);
             edt(() -> showUpdates(found));

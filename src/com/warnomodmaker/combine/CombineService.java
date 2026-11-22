@@ -303,10 +303,33 @@ public final class CombineService {
         if (plan.decisions.stream().anyMatch(d -> d.kind == DecisionKind.MERGED && NdfLayout.isTransactionDatabase(d.relativePath))) {
             report.report(85, "Validating combined databases with WARNO");
             log.accept("  Loading the installed combination through WARNO's headless SDK...");
-            int exit = processRunner.run(request.paths.warnoRoot.resolve("WARNO.exe").toString(),
-                List.of("-headless", "-generatemod", request.outputName, "-rootdata", ".", "CommonData:Clusters/Bootstrap/ClusterBootstrapGeneration.ndf"),
-                source, log, log, token);
-            if (exit != 0) throw new CombineException("WARNO rejected the combined databases (exit code " + exit + ").");
+            boolean mergedDepictions = plan.decisions.stream().anyMatch(d -> d.kind == DecisionKind.MERGED
+                && d.relativePath.equalsIgnoreCase("Gen\\NDF\\DepictionResource\\Cluster.txn"));
+            List<Path> depictionFiles = List.of(source.resolve("Gen/NDF/GFX/DepictionResources.txn"),
+                source.resolve("Gen/NDF/GFX/DepictionResources.dbg"), source.resolve("Gen/NDF/GFX/DepictionResources.txn.tag"));
+            if (mergedDepictions) {
+                // A source hash restamp cannot recompute ConfigHash, which covers the cluster's ordered file list.
+                // Remove the staged copies here so only a successful SDK generation can supply these artifacts.
+                for (Path file : depictionFiles) {
+                    try { Files.deleteIfExists(file); }
+                    catch (IOException ex) { throw new UncheckedIOException(ex); }
+                }
+            }
+            loadCombinedTransactions(request, source, log, token);
+            if (mergedDepictions) {
+                for (Path file : depictionFiles) {
+                    if (!Files.isRegularFile(file) || file.toFile().length() == 0)
+                        throw new CombineException("WARNO did not regenerate " + file.getFileName() + " for the merged depiction cluster.");
+                }
+                log.accept("  Checking that WARNO can reuse the generated depiction database on a second load...");
+                var regenerated = new java.util.concurrent.atomic.AtomicBoolean();
+                loadCombinedTransactions(request, source, line -> {
+                    log.accept(line);
+                    if (line.toLowerCase(java.util.Locale.ROOT).contains("generating: 'zz:/ndf/gfx/depictionresources.txn'"))
+                        regenerated.set(true);
+                }, token);
+                if (regenerated.get()) throw new CombineException("WARNO still requests regeneration of DepictionResources.txn on a second load.");
+            }
             for (Path generated : FileOps.files(source.resolve("Gen/NDF"))) {
                 Path installed = runtime.resolve(source.relativize(generated));
                 if (!Files.isRegularFile(installed) || !FileOps.sameContent(generated, installed, token)) {
@@ -326,6 +349,13 @@ public final class CombineService {
         log.accept(String.format("[STEP 6/7] Wrote and verified Config.ini manifest (%,d NDF database fingerprints, DeckFormatVersion %s, Tags: %s).",
             configSection.size(), saved.get("Properties", "DeckFormatVersion"), saved.get("Properties", "TagList")));
         FileOps.deleteTree(staging);
+    }
+
+    private void loadCombinedTransactions(CombineRequest request, Path source, Consumer<String> log, Cancel token) {
+        int exit = processRunner.run(request.paths.warnoRoot.resolve("WARNO.exe").toString(),
+            List.of("-headless", "-generatemod", request.outputName, "-rootdata", ".", "CommonData:Clusters/Bootstrap/ClusterBootstrapGeneration.ndf"),
+            source, log, log, token);
+        if (exit != 0) throw new CombineException("WARNO rejected the combined databases (exit code " + exit + ").");
     }
 
     /** Runs a file operation over many files on a few threads (disk-bound work), reporting progress as it goes. */
