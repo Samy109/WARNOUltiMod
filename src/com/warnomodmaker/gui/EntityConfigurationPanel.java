@@ -1,5 +1,6 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.gui.theme.WarnoTheme;
 import javax.swing.*;
 import java.awt.*;
 import java.util.HashMap;
@@ -160,7 +161,7 @@ public class EntityConfigurationPanel extends JPanel {
         infoArea.setEditable(false);
         infoArea.setOpaque(false);
         infoArea.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 11));
-        infoArea.setForeground(Color.GRAY);
+        infoArea.setForeground(WarnoTheme.MUTED);
         
         infoPanel.add(infoArea, BorderLayout.CENTER);
         add(infoPanel, BorderLayout.SOUTH);

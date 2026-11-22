@@ -40,11 +40,11 @@ public class EnhancedListCellRenderer extends DefaultListCellRenderer {
 
         // Apply theme colors
         if (isSelected) {
-            setBackground(WarnoTheme.ACCENT_BLUE);
-            setForeground(Color.WHITE);
+            setBackground(WarnoTheme.SELECTION);
+            setForeground(WarnoTheme.TEXT);
         } else {
-            setBackground(WarnoTheme.TACTICAL_GREEN_DARK);
-            setForeground(Color.WHITE);
+            setBackground(WarnoTheme.PANEL);
+            setForeground(WarnoTheme.TEXT);
         }
 
         // Set preferred height for multi-line display
@@ -71,7 +71,7 @@ public class EnhancedListCellRenderer extends DefaultListCellRenderer {
         } else {
             // Apply modification color to the entire name if modified
             if (isModified) {
-                html.append("<b><font color='").append(colorToHex(WarnoTheme.WARNING_ORANGE)).append("'>")
+                html.append("<b><font color='").append(colorToHex(WarnoTheme.WARNING)).append("'>")
                     .append(escapeHtml(name)).append("</font></b>");
             } else {
                 html.append("<b>").append(escapeHtml(name)).append("</b>");
@@ -80,7 +80,7 @@ public class EnhancedListCellRenderer extends DefaultListCellRenderer {
         html.append("</div>");
 
         // Second line: Type and property count
-        String typeColor = isSelected ? "#FFFFFF" : colorToHex(WarnoTheme.ACCENT_BLUE_LIGHT);
+        String typeColor = isSelected ? "#FFFFFF" : colorToHex(WarnoTheme.MUTED);
         html.append("<div style='font-size: 90%;'>");
         html.append("<font color='").append(typeColor).append("'>")
             .append(escapeHtml(formatTypeName(typeName)))
@@ -110,7 +110,7 @@ public class EnhancedListCellRenderer extends DefaultListCellRenderer {
     private String highlightMatchingText(String text, String highlight, boolean isSelected, boolean isModified) {
         if (highlight == null || highlight.isEmpty()) {
             if (isModified) {
-                return "<b><font color='" + colorToHex(WarnoTheme.WARNING_ORANGE) + "'>" + escapeHtml(text) + "</font></b>";
+                return "<b><font color='" + colorToHex(WarnoTheme.WARNING) + "'>" + escapeHtml(text) + "</font></b>";
             } else {
                 return "<b>" + escapeHtml(text) + "</b>";
             }
@@ -124,7 +124,7 @@ public class EnhancedListCellRenderer extends DefaultListCellRenderer {
 
         // Start with bold and modification color if needed
         if (isModified) {
-            result.append("<b><font color='").append(colorToHex(WarnoTheme.WARNING_ORANGE)).append("'>");
+            result.append("<b><font color='").append(colorToHex(WarnoTheme.WARNING)).append("'>");
         } else {
             result.append("<b>");
         }

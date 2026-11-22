@@ -1,5 +1,7 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.gui.theme.WarnoTheme;
+
 import com.warnomodmaker.model.*;
 import com.warnomodmaker.model.NDFValue.ObjectValue;
 import com.warnomodmaker.util.StringSimilarity;
@@ -719,11 +721,11 @@ public class ProfileLoadDialog extends JDialog {
 
             if (!isSelected) {
                 if ("Valid".equals(value)) {
-                    setBackground(new Color(220, 255, 220)); // Light green
-                    setForeground(Color.BLACK); // Dark black text for better contrast
+                    setBackground(WarnoTheme.ACCENT_SOFT);
+                    setForeground(WarnoTheme.TEXT);
                 } else {
-                    setBackground(new Color(255, 220, 220)); // Light red
-                    setForeground(Color.BLACK); // Dark black text for better contrast
+                    setBackground(WarnoTheme.badge("Delete").background);
+                    setForeground(WarnoTheme.TEXT);
                 }
             }
 

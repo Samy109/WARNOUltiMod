@@ -1,5 +1,7 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.gui.theme.WarnoTheme;
+
 import com.warnomodmaker.model.*;
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
@@ -114,7 +116,7 @@ public class EntityCreationDialog extends JDialog {
         descriptionArea = new JTextArea(3, 30);
         descriptionArea.setEditable(false);
         descriptionArea.setBackground(getBackground());
-        descriptionArea.setForeground(Color.BLACK);
+        descriptionArea.setForeground(WarnoTheme.TEXT);
         descriptionArea.setFont(descriptionArea.getFont().deriveFont(Font.PLAIN));
         JScrollPane descScrollPane = new JScrollPane(descriptionArea);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.BOTH; gbc.weightx = 1.0; gbc.weighty = 0.3;
@@ -131,18 +133,18 @@ public class EntityCreationDialog extends JDialog {
         depsPanel.setBorder(BorderFactory.createTitledBorder(
             BorderFactory.createEtchedBorder(), "Dependencies",
             TitledBorder.LEFT, TitledBorder.TOP,
-            new Font(Font.SANS_SERIF, Font.BOLD, 12), new Color(60, 60, 60)));
+            new Font(Font.SANS_SERIF, Font.BOLD, 12), WarnoTheme.TEXT));
 
         fileRequirementsPanel = new JPanel();
         fileRequirementsPanel.setLayout(new BoxLayout(fileRequirementsPanel, BoxLayout.Y_AXIS));
-        fileRequirementsPanel.setBackground(new Color(60, 63, 65)); // Match the dark theme
+        fileRequirementsPanel.setBackground(WarnoTheme.PANEL);
 
         JScrollPane reqScrollPane = new JScrollPane(fileRequirementsPanel);
         reqScrollPane.setPreferredSize(new Dimension(450, 180));
         reqScrollPane.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
+            BorderFactory.createLineBorder(WarnoTheme.BORDER, 1),
             BorderFactory.createEmptyBorder(5, 5, 5, 5))); // Clean border
-        reqScrollPane.getViewport().setBackground(new Color(60, 63, 65));
+        reqScrollPane.getViewport().setBackground(WarnoTheme.PANEL);
 
         // CRITICAL FIX: Reset scroll position to top every time
         SwingUtilities.invokeLater(() -> {
@@ -157,22 +159,22 @@ public class EntityCreationDialog extends JDialog {
         previewPanel.setBorder(BorderFactory.createTitledBorder(
             BorderFactory.createEtchedBorder(), "What Will Be Created",
             TitledBorder.LEFT, TitledBorder.TOP,
-            new Font(Font.SANS_SERIF, Font.BOLD, 12), new Color(60, 60, 60)));
+            new Font(Font.SANS_SERIF, Font.BOLD, 12), WarnoTheme.TEXT));
 
         propertiesArea = new JTextArea(6, 40);
         propertiesArea.setEditable(false);
-        propertiesArea.setBackground(new Color(60, 63, 65)); // Match the dark theme
+        propertiesArea.setBackground(WarnoTheme.PANEL);
         propertiesArea.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12)); // Readable font
-        propertiesArea.setForeground(new Color(220, 220, 220)); // Light text for dark background
+        propertiesArea.setForeground(WarnoTheme.TEXT);
         propertiesArea.setText("Select an entity type to see what will be created...");
         propertiesArea.setLineWrap(true);
         propertiesArea.setWrapStyleWord(true);
 
         JScrollPane propsScrollPane = new JScrollPane(propertiesArea);
         propsScrollPane.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
+            BorderFactory.createLineBorder(WarnoTheme.BORDER, 1),
             BorderFactory.createEmptyBorder(5, 5, 5, 5))); // Clean border
-        propsScrollPane.getViewport().setBackground(new Color(60, 63, 65));
+        propsScrollPane.getViewport().setBackground(WarnoTheme.PANEL);
 
         // CRITICAL FIX: Reset scroll position to top every time
         SwingUtilities.invokeLater(() -> {
@@ -190,7 +192,7 @@ public class EntityCreationDialog extends JDialog {
         
         // Status label
         statusLabel = new JLabel(" ");
-        statusLabel.setForeground(Color.BLUE);
+        statusLabel.setForeground(WarnoTheme.INFO);
         panel.add(statusLabel, BorderLayout.WEST);
         
         // Buttons
@@ -244,14 +246,14 @@ public class EntityCreationDialog extends JDialog {
 
             fileRequirementsPanel.removeAll();
             JLabel noReqLabel = new JLabel("Open more NDF files to discover entity patterns");
-            noReqLabel.setForeground(Color.GRAY);
+            noReqLabel.setForeground(WarnoTheme.MUTED);
             fileRequirementsPanel.add(noReqLabel);
             fileRequirementsPanel.revalidate();
             fileRequirementsPanel.repaint();
 
             if (statusLabel != null) {
                 statusLabel.setText("No entity patterns available");
-                statusLabel.setForeground(Color.GRAY);
+                statusLabel.setForeground(WarnoTheme.MUTED);
             }
             if (createButton != null) {
                 createButton.setEnabled(false);
@@ -277,7 +279,7 @@ public class EntityCreationDialog extends JDialog {
 
         if (blueprint.getFileRequirements().isEmpty()) {
             JLabel noReqLabel = new JLabel("No file requirements discovered for this entity type");
-            noReqLabel.setForeground(new Color(120, 120, 120));
+            noReqLabel.setForeground(WarnoTheme.MUTED);
             noReqLabel.setHorizontalAlignment(SwingConstants.CENTER);
             fileRequirementsPanel.add(noReqLabel);
         } else {
@@ -310,7 +312,7 @@ public class EntityCreationDialog extends JDialog {
     private void addFileRequirementRow(EntityCreationManager.FileRequirement req, boolean isRequired) {
         JPanel reqPanel = new JPanel(new BorderLayout(12, 0));
         reqPanel.setBorder(BorderFactory.createEmptyBorder(8, 15, 8, 15));
-        reqPanel.setBackground(new Color(60, 63, 65)); // Match dark theme
+        reqPanel.setBackground(WarnoTheme.PANEL);
         reqPanel.setPreferredSize(new Dimension(420, 42));
 
         // Left side - file name with color-coded required/optional text
@@ -318,12 +320,12 @@ public class EntityCreationDialog extends JDialog {
         String requiredText = isRequired ? " (Required)" : " (Optional)";
 
         // Create HTML for color coding
-        String colorCode = isRequired ? "#dc3545" : "#6c757d"; // Red for required, gray for optional
+        String colorCode = isRequired ? WarnoTheme.html(WarnoTheme.DANGER) : WarnoTheme.html(WarnoTheme.MUTED); // Red for required, gray for optional
         String htmlText = "<html>" + fileName + " <span style='color:" + colorCode + ";'>" + requiredText + "</span></html>";
 
         JLabel fileLabel = new JLabel(htmlText);
         fileLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-        fileLabel.setForeground(new Color(220, 220, 220)); // Light text for dark background
+        fileLabel.setForeground(WarnoTheme.TEXT);
 
         // Right side - clean status
         boolean fileOpen = openFiles.containsKey(req.getFileType());
@@ -332,13 +334,13 @@ public class EntityCreationDialog extends JDialog {
 
         if (fileOpen) {
             statusText = "\u2713 Available";
-            statusColor = new Color(80, 200, 120); // Brighter green for dark background
+            statusColor = WarnoTheme.SUCCESS;
         } else if (isRequired) {
             statusText = "\u2717 Not Open";
-            statusColor = new Color(255, 100, 100); // Brighter red for dark background
+            statusColor = WarnoTheme.DANGER;
         } else {
             statusText = "\u25CB Not Open";
-            statusColor = new Color(160, 160, 160); // Lighter gray for dark background
+            statusColor = WarnoTheme.MUTED;
         }
 
         JLabel statusIndicator = new JLabel(statusText);
@@ -353,8 +355,8 @@ public class EntityCreationDialog extends JDialog {
 
         // Add a simple separator using a border instead of a panel
         JPanel separatorContainer = new JPanel();
-        separatorContainer.setBackground(new Color(60, 63, 65));
-        separatorContainer.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(80, 83, 85)));
+        separatorContainer.setBackground(WarnoTheme.PANEL);
+        separatorContainer.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, WarnoTheme.BORDER));
         separatorContainer.setMaximumSize(new Dimension(Short.MAX_VALUE, 1));
         fileRequirementsPanel.add(separatorContainer);
 
@@ -484,12 +486,12 @@ public class EntityCreationDialog extends JDialog {
                 statusText += " (+" + availableOptional + " optional)";
             }
             statusLabel.setText(statusText);
-            statusLabel.setForeground(new Color(0, 120, 0));
+            statusLabel.setForeground(WarnoTheme.SUCCESS);
             createButton.setEnabled(true);
         } else {
             int missingRequired = requiredFiles.size() - availableRequired;
             statusLabel.setText("\u26A0 " + missingRequired + " required files not open");
-            statusLabel.setForeground(Color.RED);
+            statusLabel.setForeground(WarnoTheme.DANGER);
             createButton.setEnabled(false);
         }
     }
@@ -535,7 +537,7 @@ public class EntityCreationDialog extends JDialog {
 
         // CRITICAL: Validate entity creation with integrity manager
         statusLabel.setText("Validating entity integrity...");
-        statusLabel.setForeground(new Color(70, 130, 180));
+        statusLabel.setForeground(WarnoTheme.INFO);
         createButton.setEnabled(false);
 
         CrossSystemIntegrityManager.EntityCreationValidationResult validationResult =
@@ -559,21 +561,21 @@ public class EntityCreationDialog extends JDialog {
                 "Entity Creation Validation Failed", JOptionPane.ERROR_MESSAGE);
 
             statusLabel.setText("\u2717 Validation failed");
-            statusLabel.setForeground(Color.RED);
+            statusLabel.setForeground(WarnoTheme.DANGER);
             createButton.setEnabled(true);
             return;
         }
 
         // Create the entity with empty custom properties (system will use learned defaults)
         statusLabel.setText("Creating entity...");
-        statusLabel.setForeground(new Color(70, 130, 180));
+        statusLabel.setForeground(WarnoTheme.INFO);
 
         EntityCreationManager.EntityCreationResult result = entityManager.createCompleteEntity(
             entityType, entityName, new HashMap<>(), openFiles, trackers);
 
         if (result.isSuccess()) {
             statusLabel.setText("\u2713 Entity created successfully!");
-            statusLabel.setForeground(new Color(40, 167, 69));
+            statusLabel.setForeground(WarnoTheme.SUCCESS);
             entityCreated = true;
 
             // Show success dialog with details
@@ -585,7 +587,7 @@ public class EntityCreationDialog extends JDialog {
             timer.start();
         } else {
             statusLabel.setText("\u2717 Entity creation failed");
-            statusLabel.setForeground(new Color(220, 53, 69));
+            statusLabel.setForeground(WarnoTheme.DANGER);
             createButton.setEnabled(true);
 
             // Show error details

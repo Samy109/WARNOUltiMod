@@ -1,5 +1,7 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.gui.theme.WarnoTheme;
+
 import com.warnomodmaker.model.*;
 import javax.swing.*;
 import java.awt.*;
@@ -235,7 +237,7 @@ public class AdditiveOperationsDialog extends JDialog {
             // Add validation panel
             JPanel validationPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
             JLabel validationLabel = new JLabel("\u2713 Template loaded successfully");
-            validationLabel.setForeground(new Color(0, 120, 0));
+            validationLabel.setForeground(WarnoTheme.SUCCESS);
             validationPanel.add(validationLabel);
             add(validationPanel, BorderLayout.SOUTH);
         }

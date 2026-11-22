@@ -58,26 +58,26 @@ public class DebugConsoleWindow extends JFrame {
     
     private JPanel createControlPanel() {
         JPanel panel = new JPanel(new FlowLayout());
-        panel.setBackground(WarnoTheme.TACTICAL_GREEN_DARK);
+        panel.setBackground(WarnoTheme.SIDEBAR);
         panel.setBorder(BorderFactory.createRaisedBevelBorder());
         
         JButton clearButton = new JButton("Clear Console");
-        clearButton.setBackground(WarnoTheme.WARNING_ORANGE);
+        clearButton.setBackground(WarnoTheme.WARNING);
         clearButton.setForeground(Color.WHITE);
         clearButton.addActionListener(e -> clearConsole());
         
         JButton saveButton = new JButton("Save to File");
-        saveButton.setBackground(WarnoTheme.ACCENT_BLUE);
+        saveButton.setBackground(WarnoTheme.INFO);
         saveButton.setForeground(Color.WHITE);
         saveButton.addActionListener(e -> saveConsoleToFile());
         
         JToggleButton captureButton = new JToggleButton("Capture Output", true);
-        captureButton.setBackground(WarnoTheme.SUCCESS_GREEN);
+        captureButton.setBackground(WarnoTheme.SUCCESS);
         captureButton.setForeground(Color.WHITE);
         captureButton.addActionListener(e -> toggleCapture(captureButton.isSelected()));
         
         JButton scrollToBottomButton = new JButton("Scroll to Bottom");
-        scrollToBottomButton.setBackground(WarnoTheme.TACTICAL_GREEN_LIGHT);
+        scrollToBottomButton.setBackground(WarnoTheme.PANEL);
         scrollToBottomButton.setForeground(Color.WHITE);
         scrollToBottomButton.addActionListener(e -> scrollToBottom());
         

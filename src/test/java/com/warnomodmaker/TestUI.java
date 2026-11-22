@@ -221,7 +221,7 @@ public class TestUI extends JFrame implements TestRunner.TestProgressListener {
         testTree = new JTree(treeModel);
         testTree.setRootVisible(true);
         testTree.setShowsRootHandles(true);
-        testTree.setBackground(WarnoTheme.TACTICAL_GREEN_LIGHT);
+        testTree.setBackground(WarnoTheme.PANEL);
         testTree.setForeground(Color.WHITE);
 
         // Disable multiple selection to avoid weird highlighting
@@ -240,7 +240,7 @@ public class TestUI extends JFrame implements TestRunner.TestProgressListener {
         JScrollPane treeScrollPane = new JScrollPane(testTree);
         treeScrollPane.setPreferredSize(new Dimension(380, 0));
         treeScrollPane.setBorder(BorderFactory.createEmptyBorder()); // Clean, borderless
-        treeScrollPane.getViewport().setBackground(WarnoTheme.TACTICAL_GREEN_LIGHT);
+        treeScrollPane.getViewport().setBackground(WarnoTheme.PANEL);
         leftPanel.add(treeScrollPane, BorderLayout.CENTER);
         
         // Summary panel
@@ -301,7 +301,7 @@ public class TestUI extends JFrame implements TestRunner.TestProgressListener {
         overallProgress = new JProgressBar();
         overallProgress.setStringPainted(true);
         overallProgress.setString("Ready");
-        overallProgress.setBackground(WarnoTheme.TACTICAL_GREEN_LIGHT);
+        overallProgress.setBackground(WarnoTheme.PANEL);
         overallProgress.setForeground(new Color(0, 128, 0)); // Dark green
 
         // Set progress bar string color using UIManager
@@ -364,7 +364,7 @@ public class TestUI extends JFrame implements TestRunner.TestProgressListener {
     
     private JPanel createControlPanel() {
         JPanel controlPanel = new JPanel(new FlowLayout());
-        controlPanel.setBackground(WarnoTheme.TACTICAL_GREEN_DARK);
+        controlPanel.setBackground(WarnoTheme.SIDEBAR);
         controlPanel.setBorder(BorderFactory.createRaisedBevelBorder());
         
         runAllButton = new JButton("Run All Tests");
@@ -509,7 +509,7 @@ public class TestUI extends JFrame implements TestRunner.TestProgressListener {
                     testInstance.runCompleteTestWithUI(testRunner);
                 } catch (Exception e) {
                     SwingUtilities.invokeLater(() -> {
-                        logMessage("FATAL ERROR: " + e.getMessage(), WarnoTheme.ERROR_RED);
+                        logMessage("FATAL ERROR: " + e.getMessage(), WarnoTheme.DANGER);
                         e.printStackTrace();
                     });
                 } finally {
@@ -524,7 +524,7 @@ public class TestUI extends JFrame implements TestRunner.TestProgressListener {
     
     private void runSelectedTests() {
         // Implementation for running selected tests
-        logMessage("Selected test execution not yet implemented", WarnoTheme.WARNING_ORANGE);
+        logMessage("Selected test execution not yet implemented", WarnoTheme.WARNING);
     }
     
     private void exportResults() {
@@ -539,9 +539,9 @@ public class TestUI extends JFrame implements TestRunner.TestProgressListener {
         if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             try {
                 exportResultsToFile(fileChooser.getSelectedFile());
-                logMessage("Results exported to: " + fileChooser.getSelectedFile().getName(), WarnoTheme.SUCCESS_GREEN);
+                logMessage("Results exported to: " + fileChooser.getSelectedFile().getName(), WarnoTheme.SUCCESS);
             } catch (Exception e) {
-                logMessage("Export failed: " + e.getMessage(), WarnoTheme.ERROR_RED);
+                logMessage("Export failed: " + e.getMessage(), WarnoTheme.DANGER);
             }
         }
     }
@@ -747,10 +747,10 @@ public class TestUI extends JFrame implements TestRunner.TestProgressListener {
 
             // Set consistent colors and remove weird highlighting
             if (selected) {
-                setBackground(WarnoTheme.ACCENT_BLUE);
+                setBackground(WarnoTheme.INFO);
                 setForeground(Color.WHITE);
             } else {
-                setBackground(WarnoTheme.TACTICAL_GREEN_LIGHT);
+                setBackground(WarnoTheme.PANEL);
                 setForeground(Color.WHITE);
             }
 

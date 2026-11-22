@@ -1,5 +1,7 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.gui.combine.CombinePanel;
+import com.warnomodmaker.gui.theme.WarnoTheme;
 import com.warnomodmaker.gui.components.StatusBar;
 import com.warnomodmaker.gui.components.EnhancedTabbedPane;
 import com.warnomodmaker.model.FileTabState;
@@ -39,7 +41,7 @@ public class MainWindow extends JFrame implements FileLoader {
     private EnhancedTabbedPane tabbedPane;
     private int nextTabId = 1;
 
-    private JPanel mainPanel;
+    private final CombinePanel combinePanel = new CombinePanel();
     private JMenuBar menuBar;
     private StatusBar statusBar;
 
@@ -47,7 +49,7 @@ public class MainWindow extends JFrame implements FileLoader {
     private CrossSystemIntegrityManager integrityManager;
 
     public MainWindow() {
-        setTitle("WARNO Mod Maker v2.0.0");
+        setTitle("WARNO Mod Maker v3.0.0");
 
         // Restore window position and size from preferences with bounds checking
         UserPreferences prefs = UserPreferences.getInstance();
@@ -242,7 +244,7 @@ public class MainWindow extends JFrame implements FileLoader {
 
 
     private void createMainPanel() {
-        mainPanel = new JPanel(new BorderLayout());
+        JPanel editor = new JPanel(new BorderLayout());
         tabbedPane = new EnhancedTabbedPane();
         tabbedPane.addChangeListener(this::onTabChanged);
 
@@ -252,16 +254,6 @@ public class MainWindow extends JFrame implements FileLoader {
             closeTab(tabIndex);
         });
         tabbedPane.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                if (SwingUtilities.isMiddleMouseButton(e)) {
-                    int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
-                    if (tabIndex >= 0) {
-                        closeTab(tabIndex);
-                    }
-                }
-            }
-
             @Override
             public void mousePressed(MouseEvent e) {
                 if (SwingUtilities.isRightMouseButton(e)) {
@@ -274,13 +266,42 @@ public class MainWindow extends JFrame implements FileLoader {
         });
         setupTabKeyBindings();
 
-        // Add components to main panel
-        mainPanel.add(tabbedPane, BorderLayout.CENTER);
-        mainPanel.add(statusBar, BorderLayout.SOUTH);
-
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(WarnoTheme.PANEL);
+        header.setBorder(WarnoTheme.pad(12, 18, 12, 18));
+        header.add(WarnoTheme.title("NDF Editor", 20), BorderLayout.WEST);
+        editor.add(header, BorderLayout.NORTH);
+        editor.add(tabbedPane, BorderLayout.CENTER);
+        editor.add(statusBar, BorderLayout.SOUTH);
         showWelcomeTab();
 
-        setContentPane(mainPanel);
+        CardLayout layout = new CardLayout();
+        JPanel cards = new JPanel(layout);
+        cards.add(editor, "Editor");
+        cards.add(combinePanel, "Combine");
+
+        JPanel rail = new JPanel();
+        rail.setLayout(new BoxLayout(rail, BoxLayout.Y_AXIS));
+        rail.setBackground(WarnoTheme.SIDEBAR);
+        rail.setBorder(WarnoTheme.pad(12, 6, 12, 6));
+        ButtonGroup navigation = new ButtonGroup();
+        for (String name : new String[]{"Editor", "Combine"}) {
+            boolean isEditor = name.equals("Editor");
+            JToggleButton button = new JToggleButton(name, isEditor);
+            button.setMaximumSize(new Dimension(88, 36));
+            navigation.add(button);
+            rail.add(button);
+            rail.add(Box.createVerticalStrut(6));
+            button.addActionListener(event -> {
+                layout.show(cards, name);
+                menuBar.setVisible(isEditor);
+                if (!isEditor) combinePanel.activate();
+            });
+        }
+        JPanel workspace = new JPanel(new BorderLayout());
+        workspace.add(rail, BorderLayout.WEST);
+        workspace.add(cards, BorderLayout.CENTER);
+        setContentPane(workspace);
     }
 
 
@@ -886,7 +907,7 @@ public class MainWindow extends JFrame implements FileLoader {
         JOptionPane.showMessageDialog(
             this,
             "WARNO Mod Maker\n" +
-            "Version 2.0.0\n\n" +
+            "Version 3.0.0\n\n" +
             "A comprehensive tool for modifying WARNO game files.\n" +
             "Features full additive engine, preview-backed mass modify,\n" +
             "cross-system integrity checking, and line-based serialization.",
@@ -900,6 +921,13 @@ public class MainWindow extends JFrame implements FileLoader {
 
 
     private void exitApplication() {
+        if (combinePanel.isBusy()) {
+            int choice = JOptionPane.showConfirmDialog(this,
+                "Cancel the Combine operation? Once recovery finishes, you can close the app.",
+                "Combine is running", JOptionPane.YES_NO_OPTION);
+            if (choice == JOptionPane.YES_OPTION) combinePanel.requestCancel();
+            return;
+        }
         List<FileTabState> modifiedTabs = new ArrayList<>();
         for (FileTabState tabState : tabStates) {
             if (tabState.isModified()) {
@@ -937,13 +965,14 @@ public class MainWindow extends JFrame implements FileLoader {
             }
         }
 
+        combinePanel.shutdown();
         dispose();
         System.exit(0);
     }
 
 
     private void updateTitle() {
-        String title = "WARNO Mod Maker v2.0.0";
+        String title = "WARNO Mod Maker v3.0.0";
 
         FileTabState currentTab = getCurrentTabState();
         if (currentTab != null && currentTab.getFile() != null) {
@@ -1225,16 +1254,16 @@ public class MainWindow extends JFrame implements FileLoader {
 
     private void showWelcomeTab() {
         if (tabbedPane.getTabCount() == 0) {
-            JPanel welcomePanel = new JPanel(new BorderLayout());
-            JLabel welcomeLabel = new JLabel(
-                "<html><div style='text-align: center; padding: 50px;'>" +
-                "<h2>Welcome to WARNO Mod Maker</h2>" +
-                "<p>Open an NDF file to get started</p>" +
-                "<p>Use Ctrl+O or File -> Open to load a file</p>" +
-                "</div></html>",
-                SwingConstants.CENTER
-            );
-            welcomePanel.add(welcomeLabel, BorderLayout.CENTER);
+            JPanel welcomePanel = new JPanel(new GridBagLayout());
+            welcomePanel.setBackground(WarnoTheme.BACKGROUND);
+            JPanel welcome = new JPanel(new GridLayout(0, 1, 0, 10));
+            welcome.setOpaque(false);
+            welcome.add(WarnoTheme.title("Open an NDF file", 24));
+            welcome.add(WarnoTheme.caption("Choose a WARNO source file to begin editing."));
+            JButton open = WarnoTheme.accentButton("Open file  (Ctrl+O)", '\uE8E5');
+            open.addActionListener(this::openFile);
+            welcome.add(open);
+            welcomePanel.add(welcome);
             tabbedPane.addTab("Welcome", welcomePanel);
         }
     }

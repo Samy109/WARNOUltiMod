@@ -2,6 +2,8 @@
 
 WARNO Mod Maker is a comprehensive Java Swing application designed for advanced editing of WARNO game files (NDF format). Built with the sleek FlatLaf dark UI theme, it offers a professional modding experience with enterprise-grade features for both casual tinkerers and advanced modders. Edit units, weapons, ammunition, buildings, and more with surgical precision and powerful automation tools.
 
+Version 3.0.0 adds the Combine workspace. Select installed mods in priority order, preview file and database conflicts, and build the combined mod through the WARNO SDK. Existing MODerator build records are supported.
+
 <img width="1283" height="713" alt="image" src="https://github.com/user-attachments/assets/fea700cf-2f9a-48a8-bc1d-ab7df72dad56" />
 
 
@@ -81,61 +83,33 @@ WARNO Mod Maker is a comprehensive Java Swing application designed for advanced 
 
 ## 📋 Requirements
 
-- **Java 17 or higher** for building and running the application
-- **Java 17+ recommended** for the best editor performance on large files
+- **JDK 25** for building from source. The Windows release includes its runtime.
 - **Windows OS** (primary support, Linux/Mac may work but untested)
-- **2GB RAM minimum** (4GB recommended for large files and multiple tabs)
+- The packaged app can use up to **6192 MB of Java heap** for large edits and mod combinations.
 - **1GB disk space** for application and temporary files
 
 ---
 
 ## 🛠️ Building and Running
 
-### Quick Start (Windows)
-```bash
-# Clone the repository
-git clone https://github.com/your-repo/warno-mod-maker.git
-cd warno-mod-maker
+### Windows
 
-# Optional: point the build at a specific JDK
-set CUSTOM_JAVA_HOME=C:\Program Files\Java\jdk-17
+Extract the release ZIP and run `WARNO-Mod-Maker.exe`. To build from a source checkout, run these commands in Command Prompt using your JDK 25 installation.
 
-# Build and run
+```bat
+set "CUSTOM_JAVA_HOME=C:\Program Files\Java\jdk-25"
 build.bat
+"%CUSTOM_JAVA_HOME%\bin\java" --sun-misc-unsafe-memory-access=allow -Xmx6192m -jar WarnoModMaker-fat.jar
 ```
 
-### Manual Build
-```bash
-# Compile
-javac --release 17 -cp "lib/*" -d build src/com/warnomodmaker/**/*.java
-
-# Create JAR
-jar -cfe WarnoModMaker.jar com.warnomodmaker.WarnoModMaker -C build .
-
-# Run
-java -jar WarnoModMaker.jar
-```
-
-### For Large Files (Recommended)
-```bash
-java -Xmx8g -jar WarnoModMaker.jar
-```
-
-### Build Overrides
-```bash
-# Use a newer bytecode target when needed
-set BUILD_JAVA_RELEASE=21
-
-# Or point directly at a specific installed JDK
-set CUSTOM_JAVA_HOME=C:\Program Files\Java\jdk-21
-```
+Run `distribute.bat` to create the standalone Windows application in `build/distribution/WARNO-Mod-Maker` and the release archive `WARNO-Mod-Maker.zip`.
 
 ---
 
 ## 🎮 Usage Guide
 
 ### Getting Started
-1. **Launch** the application with `build.bat` or `java -jar WarnoModMaker.jar`
+1. **Launch** the application with `WARNO-Mod-Maker.exe`
 2. **Open Files** via **File → Open** (supports multiple files in tabs)
 3. **Browse Units** in the left tree panel with search and filtering
 4. **Edit Properties** directly in the right panel with real-time validation
@@ -259,7 +233,7 @@ WARNO-Mod-Maker/
 
 ### Common Issues
 - **App won't start**: Ensure Java 11+ is installed (`java -version`)
-- **Out of memory**: Use `java -Xmx8g -jar WarnoModMaker.jar`
+- **Out of memory**: Use `java --sun-misc-unsafe-memory-access=allow -Xmx8g -jar WarnoModMaker-fat.jar`
 - **File won't load**: Check file permissions and ensure it's a valid NDF file
 - **Changes not saving**: Verify write permissions and available disk space
 - **Performance issues**: Close other applications and increase JVM memory

@@ -28,24 +28,24 @@ public class StatusBar extends JPanel {
 
     private void initializeComponents() {
         setPreferredSize(new Dimension(0, 25));
-        setBorder(BorderFactory.createBevelBorder(BevelBorder.LOWERED));
-        setBackground(WarnoTheme.TACTICAL_GREEN_LIGHT);
+        setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, WarnoTheme.BORDER));
+        setBackground(WarnoTheme.SIDEBAR);
 
         // File information
         fileInfoLabel = new JLabel("No file loaded");
-        fileInfoLabel.setForeground(Color.WHITE);
+        fileInfoLabel.setForeground(WarnoTheme.TEXT);
 
         // Object count
         objectCountLabel = new JLabel("0 objects");
-        objectCountLabel.setForeground(WarnoTheme.ACCENT_BLUE_LIGHT);
+        objectCountLabel.setForeground(WarnoTheme.MUTED);
 
         // Modification count
         modificationCountLabel = new JLabel("0 modifications");
-        modificationCountLabel.setForeground(WarnoTheme.WARNING_ORANGE);
+        modificationCountLabel.setForeground(WarnoTheme.WARNING);
 
         // Memory usage
         memoryLabel = new JLabel("Memory: 0 MB");
-        memoryLabel.setForeground(Color.LIGHT_GRAY);
+        memoryLabel.setForeground(WarnoTheme.MUTED);
         memoryLabel.setFont(memoryLabel.getFont().deriveFont(Font.PLAIN, 11f));
 
         // Operation progress
@@ -56,7 +56,7 @@ public class StatusBar extends JPanel {
 
         // Operation label
         operationLabel = new JLabel("");
-        operationLabel.setForeground(WarnoTheme.ACCENT_BLUE_LIGHT);
+        operationLabel.setForeground(WarnoTheme.MUTED);
         operationLabel.setFont(operationLabel.getFont().deriveFont(Font.ITALIC, 11f));
     }
 
@@ -90,7 +90,7 @@ public class StatusBar extends JPanel {
 
     private JLabel createSeparator() {
         JLabel separator = new JLabel("|");
-        separator.setForeground(WarnoTheme.TACTICAL_GREEN_LIGHT.brighter());
+        separator.setForeground(WarnoTheme.RAISED.brighter());
         return separator;
     }
 
@@ -117,11 +117,11 @@ public class StatusBar extends JPanel {
         // Change color based on memory usage
         double usagePercent = (double) usedMemory / totalMemory;
         if (usagePercent > 0.8) {
-            memoryLabel.setForeground(WarnoTheme.ERROR_RED);
+            memoryLabel.setForeground(WarnoTheme.DANGER);
         } else if (usagePercent > 0.6) {
-            memoryLabel.setForeground(WarnoTheme.WARNING_ORANGE);
+            memoryLabel.setForeground(WarnoTheme.WARNING);
         } else {
-            memoryLabel.setForeground(Color.LIGHT_GRAY);
+            memoryLabel.setForeground(WarnoTheme.MUTED);
         }
     }
 
@@ -144,9 +144,9 @@ public class StatusBar extends JPanel {
 
             // Update colors based on modification status
             if (tabState.isModified()) {
-                modificationCountLabel.setForeground(WarnoTheme.WARNING_ORANGE);
+                modificationCountLabel.setForeground(WarnoTheme.WARNING);
             } else {
-                modificationCountLabel.setForeground(WarnoTheme.ACCENT_BLUE_LIGHT);
+                modificationCountLabel.setForeground(WarnoTheme.MUTED);
             }
         }
     }
@@ -180,23 +180,23 @@ public class StatusBar extends JPanel {
 
         switch (type) {
             case SUCCESS:
-                operationLabel.setForeground(WarnoTheme.SUCCESS_GREEN);
+                operationLabel.setForeground(WarnoTheme.SUCCESS);
                 break;
             case WARNING:
-                operationLabel.setForeground(WarnoTheme.WARNING_ORANGE);
+                operationLabel.setForeground(WarnoTheme.WARNING);
                 break;
             case ERROR:
-                operationLabel.setForeground(WarnoTheme.ERROR_RED);
+                operationLabel.setForeground(WarnoTheme.DANGER);
                 break;
             default:
-                operationLabel.setForeground(WarnoTheme.ACCENT_BLUE_LIGHT);
+                operationLabel.setForeground(WarnoTheme.MUTED);
                 break;
         }
 
         // Auto-hide message after 5 seconds
         Timer hideTimer = new Timer(5000, e -> {
             operationLabel.setText("");
-            operationLabel.setForeground(WarnoTheme.ACCENT_BLUE_LIGHT);
+            operationLabel.setForeground(WarnoTheme.MUTED);
         });
         hideTimer.setRepeats(false);
         hideTimer.start();

@@ -97,7 +97,7 @@ public class EnhancedTabbedPane extends JTabbedPane {
 
         // Add modification indicator
         if (tabState != null && tabState.isModified()) {
-            html.append("<font color='").append(colorToHex(WarnoTheme.WARNING_ORANGE)).append("'>*</font> ");
+            html.append("<font color='").append(colorToHex(WarnoTheme.WARNING)).append("'>*</font> ");
         }
 
         // Add title
@@ -105,7 +105,7 @@ public class EnhancedTabbedPane extends JTabbedPane {
         html.append("</html>");
 
         titleLabel.setText(html.toString());
-        titleLabel.setForeground(Color.WHITE);
+        titleLabel.setForeground(WarnoTheme.TEXT);
     }
 
     private String getFileTypeIcon(FileTabState tabState) {
@@ -134,7 +134,7 @@ public class EnhancedTabbedPane extends JTabbedPane {
         JButton closeButton = new JButton("X");
         closeButton.setPreferredSize(new Dimension(16, 16));
         closeButton.setFont(closeButton.getFont().deriveFont(Font.BOLD, 12f));
-        closeButton.setForeground(Color.LIGHT_GRAY);
+        closeButton.setForeground(WarnoTheme.MUTED);
         closeButton.setBackground(new Color(0, 0, 0, 0));
         closeButton.setBorder(null);
         closeButton.setFocusPainted(false);
@@ -153,14 +153,14 @@ public class EnhancedTabbedPane extends JTabbedPane {
         closeButton.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
-                closeButton.setForeground(WarnoTheme.ERROR_RED);
+                closeButton.setForeground(WarnoTheme.DANGER);
                 closeButton.setContentAreaFilled(true);
-                closeButton.setBackground(WarnoTheme.TACTICAL_GREEN_LIGHT);
+                closeButton.setBackground(WarnoTheme.RAISED);
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
-                closeButton.setForeground(Color.LIGHT_GRAY);
+                closeButton.setForeground(WarnoTheme.MUTED);
                 closeButton.setContentAreaFilled(false);
             }
 

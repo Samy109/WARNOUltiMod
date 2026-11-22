@@ -1,5 +1,7 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.gui.theme.WarnoTheme;
+
 import com.warnomodmaker.model.*;
 import com.warnomodmaker.model.EntityCreationManager.EntityBlueprint;
 
@@ -82,16 +84,16 @@ public class EntityCreationWizard extends JDialog {
     private JPanel createHeaderPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        panel.setBackground(new Color(245, 245, 245));
+        panel.setBackground(WarnoTheme.PANEL);
 
         JLabel titleLabel = new JLabel("Create New Entity");
         titleLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
-        titleLabel.setForeground(new Color(50, 50, 50)); // Dark text for better readability
+        titleLabel.setForeground(WarnoTheme.TEXT);
         panel.add(titleLabel, BorderLayout.WEST);
 
         JLabel stepLabel = new JLabel("Step " + currentStep + " of " + totalSteps);
         stepLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-        stepLabel.setForeground(new Color(80, 80, 80)); // Darker grey for better readability
+        stepLabel.setForeground(WarnoTheme.MUTED);
         panel.add(stepLabel, BorderLayout.EAST);
 
         return panel;
@@ -162,7 +164,7 @@ public class EntityCreationWizard extends JDialog {
         descArea.setEditable(false);
         descArea.setOpaque(false);
         descArea.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-        descArea.setForeground(Color.GRAY);
+        descArea.setForeground(WarnoTheme.MUTED);
         
         gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2;
         gbc.fill = GridBagConstraints.BOTH;
@@ -354,8 +356,8 @@ public class EntityCreationWizard extends JDialog {
         resultsArea = new JTextArea(15, 50);
         resultsArea.setEditable(false);
         resultsArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        resultsArea.setBackground(new Color(248, 248, 248));
-        resultsArea.setForeground(new Color(50, 50, 50)); // Dark text for better readability
+        resultsArea.setBackground(WarnoTheme.INPUT);
+        resultsArea.setForeground(WarnoTheme.TEXT);
 
         JScrollPane scrollPane = new JScrollPane(resultsArea);
         scrollPane.setBorder(BorderFactory.createTitledBorder("Creation Summary"));

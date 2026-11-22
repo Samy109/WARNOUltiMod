@@ -39,7 +39,7 @@ public class CrossSystemIntegrityDialog extends JDialog {
         statusBanner.setFont(statusBanner.getFont().deriveFont(Font.BOLD, 13f));
         statusBanner.setOpaque(true);
         statusBanner.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(WarnoTheme.TACTICAL_GREEN_DARK, 1),
+                BorderFactory.createLineBorder(WarnoTheme.PANEL, 1),
                 BorderFactory.createEmptyBorder(10, 12, 10, 12)
         ));
         mainPanel.add(statusBanner, BorderLayout.NORTH);
@@ -77,8 +77,8 @@ public class CrossSystemIntegrityDialog extends JDialog {
         JTextArea area = new JTextArea();
         area.setEditable(false);
         area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        area.setBackground(WarnoTheme.TACTICAL_GREEN_DARK);
-        area.setForeground(Color.WHITE);
+        area.setBackground(WarnoTheme.PANEL);
+        area.setForeground(WarnoTheme.TEXT);
         area.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         return area;
     }
@@ -86,7 +86,7 @@ public class CrossSystemIntegrityDialog extends JDialog {
     private void runValidation() {
         if (integrityManager == null) {
             statusBanner.setText("Integrity manager is unavailable.");
-            statusBanner.setBackground(WarnoTheme.TACTICAL_GREEN_DARK);
+            statusBanner.setBackground(WarnoTheme.PANEL);
             return;
         }
 
@@ -94,12 +94,12 @@ public class CrossSystemIntegrityDialog extends JDialog {
 
         if (!result.hasIssues()) {
             statusBanner.setText("All cross-system references and GUIDs are valid across all loaded files.");
-            statusBanner.setBackground(new Color(30, 80, 40));
-            statusBanner.setForeground(new Color(150, 255, 150));
+            statusBanner.setBackground(WarnoTheme.ACCENT_SOFT);
+            statusBanner.setForeground(WarnoTheme.SUCCESS);
         } else {
             statusBanner.setText("Found " + result.getTotalIssueCount() + " issue(s) across loaded files.");
-            statusBanner.setBackground(new Color(90, 35, 35));
-            statusBanner.setForeground(new Color(255, 160, 160));
+            statusBanner.setBackground(WarnoTheme.badge("Delete").background);
+            statusBanner.setForeground(WarnoTheme.DANGER);
         }
 
         // Issues

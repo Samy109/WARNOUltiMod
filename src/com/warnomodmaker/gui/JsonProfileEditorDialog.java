@@ -1,5 +1,7 @@
 package com.warnomodmaker.gui;
 
+import com.warnomodmaker.gui.theme.WarnoTheme;
+
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
@@ -49,8 +51,8 @@ public class JsonProfileEditorDialog extends JDialog {
         jsonTextArea = new JTextArea(25, 80);
         jsonTextArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         jsonTextArea.setTabSize(2);
-        jsonTextArea.setBackground(new Color(248, 248, 248));
-        jsonTextArea.setForeground(Color.BLACK); // Ensure text is always black for readability
+        jsonTextArea.setBackground(WarnoTheme.INPUT);
+        jsonTextArea.setForeground(WarnoTheme.TEXT);
         jsonTextArea.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         
         // Track changes
@@ -68,7 +70,7 @@ public class JsonProfileEditorDialog extends JDialog {
         
         // Status label
         statusLabel = new JLabel("Ready");
-        statusLabel.setForeground(Color.BLUE);
+        statusLabel.setForeground(WarnoTheme.INFO);
     }
 
     private void setupLayout() {
@@ -112,7 +114,7 @@ public class JsonProfileEditorDialog extends JDialog {
         currentFile = null;
         hasUnsavedChanges = true;
         updateTitle();
-        setStatus("New profile template created", Color.GREEN);
+        setStatus("New profile template created", WarnoTheme.SUCCESS);
     }
 
     private String createProfileTemplate() {
@@ -165,9 +167,9 @@ public class JsonProfileEditorDialog extends JDialog {
                 currentFile = file;
                 hasUnsavedChanges = false;
                 updateTitle();
-                setStatus("Profile loaded successfully", Color.GREEN);
+                setStatus("Profile loaded successfully", WarnoTheme.SUCCESS);
             } catch (IOException ex) {
-                setStatus("Error loading profile: " + ex.getMessage(), Color.RED);
+                setStatus("Error loading profile: " + ex.getMessage(), WarnoTheme.DANGER);
                 JOptionPane.showMessageDialog(this, "Error loading profile:\n" + ex.getMessage(), 
                                             "Load Error", JOptionPane.ERROR_MESSAGE);
             }
@@ -184,9 +186,9 @@ public class JsonProfileEditorDialog extends JDialog {
             saveToFile(currentFile);
             hasUnsavedChanges = false;
             updateTitle();
-            setStatus("Profile saved successfully", Color.GREEN);
+            setStatus("Profile saved successfully", WarnoTheme.SUCCESS);
         } catch (IOException ex) {
-            setStatus("Error saving profile: " + ex.getMessage(), Color.RED);
+            setStatus("Error saving profile: " + ex.getMessage(), WarnoTheme.DANGER);
             JOptionPane.showMessageDialog(this, "Error saving profile:\n" + ex.getMessage(), 
                                         "Save Error", JOptionPane.ERROR_MESSAGE);
         }
@@ -207,9 +209,9 @@ public class JsonProfileEditorDialog extends JDialog {
                 currentFile = file;
                 hasUnsavedChanges = false;
                 updateTitle();
-                setStatus("Profile saved successfully", Color.GREEN);
+                setStatus("Profile saved successfully", WarnoTheme.SUCCESS);
             } catch (IOException ex) {
-                setStatus("Error saving profile: " + ex.getMessage(), Color.RED);
+                setStatus("Error saving profile: " + ex.getMessage(), WarnoTheme.DANGER);
                 JOptionPane.showMessageDialog(this, "Error saving profile:\n" + ex.getMessage(), 
                                             "Save Error", JOptionPane.ERROR_MESSAGE);
             }
@@ -225,16 +227,16 @@ public class JsonProfileEditorDialog extends JDialog {
     private void validateJson() {
         String jsonText = jsonTextArea.getText().trim();
         if (jsonText.isEmpty()) {
-            setStatus("No content to validate", Color.ORANGE);
+            setStatus("No content to validate", WarnoTheme.WARNING);
             return;
         }
 
         try {
             // Basic JSON structure validation
             validateJsonStructure(jsonText);
-            setStatus("JSON structure is valid", Color.GREEN);
+            setStatus("JSON structure is valid", WarnoTheme.SUCCESS);
         } catch (Exception ex) {
-            setStatus("JSON validation error: " + ex.getMessage(), Color.RED);
+            setStatus("JSON validation error: " + ex.getMessage(), WarnoTheme.DANGER);
             JOptionPane.showMessageDialog(this, "JSON Validation Error:\n" + ex.getMessage(), 
                                         "Validation Error", JOptionPane.ERROR_MESSAGE);
         }

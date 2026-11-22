@@ -63,7 +63,7 @@ public class MassModifyPreviewDialog extends JDialog {
 
         // Top info header
         JPanel headerPanel = new JPanel(new GridLayout(2, 1, 4, 4));
-        JLabel titleLabel = new JLabel("<html><b>Property:</b> <font color='#4da6ff'>" +
+        JLabel titleLabel = new JLabel("<html><b>Property:</b> <font color='" + WarnoTheme.html(WarnoTheme.INFO) + "'>" +
                 escapeHtml(propertyPath) + "</font> | <b>Operation:</b> " + escapeHtml(operationDesc) + "</html>");
         summaryLabel = new JLabel("Pending changes: " + items.size() + " units affected");
         headerPanel.add(titleLabel);
@@ -90,7 +90,7 @@ public class MassModifyPreviewDialog extends JDialog {
             public Component getTableCellRendererComponent(JTable t, Object val, boolean isSel, boolean hasFocus, int row, int col) {
                 Component c = super.getTableCellRendererComponent(t, val, isSel, hasFocus, row, col);
                 if (!isSel) {
-                    c.setForeground(new Color(90, 200, 90)); // Soft green highlight
+                    c.setForeground(WarnoTheme.SUCCESS);
                 }
                 return c;
             }

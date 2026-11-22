@@ -56,14 +56,14 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
 
         // Apply theme colors
         if (selected) {
-            setBackgroundSelectionColor(WarnoTheme.ACCENT_BLUE);
-            setTextSelectionColor(Color.WHITE);
+            setBackgroundSelectionColor(WarnoTheme.SELECTION);
+            setTextSelectionColor(WarnoTheme.TEXT);
         } else {
-            setBackgroundNonSelectionColor(WarnoTheme.TACTICAL_GREEN_DARK);
-            setTextNonSelectionColor(Color.WHITE);
+            setBackgroundNonSelectionColor(WarnoTheme.PANEL);
+            setTextNonSelectionColor(WarnoTheme.TEXT);
         }
 
-        setBorderSelectionColor(WarnoTheme.ACCENT_BLUE_LIGHT);
+        setBorderSelectionColor(WarnoTheme.MUTED);
 
         return this;
     }
@@ -76,7 +76,7 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
 
         String displayName = propertyName;
         if (showModificationIndicators && propertyNode.isModified()) {
-            html.append("<b><font color='").append(colorToHex(WarnoTheme.WARNING_ORANGE)).append("'>")
+            html.append("<b><font color='").append(colorToHex(WarnoTheme.WARNING)).append("'>")
                 .append(escapeHtml(displayName)).append("</font></b>");
         } else {
             html.append("<b>").append(escapeHtml(displayName)).append("</b>");
@@ -84,7 +84,7 @@ public class EnhancedTreeCellRenderer extends DefaultTreeCellRenderer {
 
         String valuePreview = getValuePreview(propertyValue);
         if (!valuePreview.isEmpty()) {
-            String color = selected ? "#FFFFFF" : colorToHex(WarnoTheme.ACCENT_BLUE_LIGHT);
+            String color = selected ? "#FFFFFF" : colorToHex(WarnoTheme.MUTED);
             html.append(" <font color='").append(color).append("'>")
                 .append(escapeHtml(valuePreview)).append("</font>");
         }
