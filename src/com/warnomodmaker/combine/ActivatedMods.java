@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -40,18 +41,57 @@ public final class ActivatedMods {
             if (mod.workshopId != null && !mod.workshopId.isEmpty()) contained.add(mod.workshopId);
             if (mod.rootPath.getFileName() != null) contained.add(mod.rootPath.getFileName().toString());
         }
+        Path ownConfig = paths.savedModsRoot.resolve(outputName).resolve("Config.ini");
+        if (!Files.isRegularFile(ownConfig)) throw new CombineException("The combined mod's manifest is missing: " + ownConfig);
+        Map<String, String> fingerprints = IniDocument.load(ownConfig).getSection("Config");
         List<String> current = read(paths);
         List<String> kept = new ArrayList<>();
         kept.add(outputName);
         for (String entry : current) {
             if (entry.equalsIgnoreCase(outputName)) continue;
+            Path config = installedConfig(paths, entry);
             if (contained.contains(entry)) names.add(describe(entry, sources));
+            else if (config == null) names.add("'" + entry + "' (no longer installed)");
             else if (sharesSource(paths, entry, sources)) names.add("'" + entry + "' (an earlier combination of the same mods)");
+            else if (conflicts(fingerprints, config)) names.add("'" + describeInstalled(entry, config) + "' (WARNO's compatibility check rejects it beside this combination)");
             else kept.add(entry);
         }
         write(paths, kept);
         log.accept("  Activated '" + outputName + "' for WARNO's next start"
-            + (names.isEmpty() ? "." : " and deactivated what it replaces: " + String.join(", ", names) + "."));
+            + (names.isEmpty() ? "." : " and deactivated: " + String.join(", ", names) + "."));
+    }
+
+    /**
+     * The Config.ini WARNO reads for an activated entry (a Workshop ID or a local mod folder), or null when the mod
+     * is not installed any more.
+     */
+    private static Path installedConfig(WarnoPaths paths, String entry) {
+        List<Path> candidates = new ArrayList<>();
+        if (entry.chars().allMatch(Character::isDigit)) candidates.add(paths.workshopRoot.resolve(entry).resolve("Config.ini"));
+        if (MergePlanner.isValidOutputName(entry)) {
+            candidates.add(paths.savedModsRoot.resolve(entry).resolve("Config.ini"));
+            candidates.add(paths.modsRoot.resolve(entry).resolve("Config.ini"));
+        }
+        for (Path candidate : candidates) if (Files.isRegularFile(candidate)) return candidate;
+        return null;
+    }
+
+    /**
+     * WARNO's compatibility check: two activated mods are incompatible when both ship a database with different
+     * [Config] fingerprints.
+     */
+    private static boolean conflicts(Map<String, String> ours, Path otherConfig) {
+        Map<String, String> theirs = IniDocument.load(otherConfig).getSection("Config");
+        for (Map.Entry<String, String> entry : ours.entrySet()) {
+            String other = theirs.get(entry.getKey());
+            if (other != null && !other.trim().equalsIgnoreCase(entry.getValue().trim())) return true;
+        }
+        return false;
+    }
+
+    private static String describeInstalled(String entry, Path config) {
+        String name = IniDocument.load(config).get("Properties", "Name");
+        return name != null && !name.trim().isEmpty() && !name.trim().equalsIgnoreCase(entry) ? name.trim() + " (" + entry + ")" : entry;
     }
 
     /** Removes a deleted combined mod from WARNO's activated mods. */
