@@ -1,6 +1,8 @@
 package com.warnomodmaker.combine;
 
+import com.warnomodmaker.combine.Models.CombinedModState;
 import com.warnomodmaker.combine.Models.ModDescriptor;
+import com.warnomodmaker.combine.Models.SourceModFingerprint;
 import com.warnomodmaker.combine.Models.WarnoPaths;
 import com.warnomodmaker.combine.ndf.IgnoreCase;
 
@@ -44,11 +46,12 @@ public final class ActivatedMods {
         for (String entry : current) {
             if (entry.equalsIgnoreCase(outputName)) continue;
             if (contained.contains(entry)) names.add(describe(entry, sources));
+            else if (sharesSource(paths, entry, sources)) names.add("'" + entry + "' (an earlier combination of the same mods)");
             else kept.add(entry);
         }
         write(paths, kept);
         log.accept("  Activated '" + outputName + "' for WARNO's next start"
-            + (names.isEmpty() ? "." : " and deactivated the mods it already contains: " + String.join(", ", names) + "."));
+            + (names.isEmpty() ? "." : " and deactivated what it replaces: " + String.join(", ", names) + "."));
     }
 
     /** Removes a deleted combined mod from WARNO's activated mods. */
@@ -93,6 +96,22 @@ public final class ActivatedMods {
         }
         FileOps.write(file, text.getBytes(StandardCharsets.UTF_8));
         if (!read(paths).equals(entries)) throw new CombineException("WARNO's activated mod list couldn't be updated at " + file + ".");
+    }
+
+    /** True when the entry is another combined mod built from at least one of the same source mods. */
+    private static boolean sharesSource(WarnoPaths paths, String entry, List<ModDescriptor> sources) {
+        if (!MergePlanner.isValidOutputName(entry)) return false;
+        Path folder = paths.modsRoot.resolve(entry);
+        if (!Files.isDirectory(folder)) return false;
+        CombinedModState state = new CombinedModStateStore().tryLoad(folder);
+        if (state == null) return false;
+        for (SourceModFingerprint used : state.sources()) {
+            for (ModDescriptor mod : sources) {
+                if (used.name != null && used.name.equalsIgnoreCase(mod.name)) return true;
+                if (used.rootPath != null && CombinedModStateStore.sameSource(used.rootPath, mod.rootPath.toString())) return true;
+            }
+        }
+        return false;
     }
 
     private static String describe(String entry, List<ModDescriptor> sources) {
