@@ -87,6 +87,8 @@ public final class CombinedModRemover {
                 FileOps.deleteTree(folder);
                 log.accept("Deleted " + folder);
             }
+            if (!Files.isDirectory(paths.modsRoot.resolve(files.outputName)) && !Files.isDirectory(paths.savedModsRoot.resolve(files.outputName)))
+                ActivatedMods.deactivate(paths, files.outputName, log);
         }
     }
 }

@@ -210,6 +210,7 @@ public final class CombineService {
             }
         }
         // Cancellation after the commit cannot turn a completed build into a rollback.
+        ActivatedMods.activateCombined(request.paths, request.outputName, request.mods, log);
         log.accept("[OK] Verified " + result.plan.summary() + ". Combination completed successfully.");
         progress.accept(new CombineProgress(100, "Complete"));
         return result;
