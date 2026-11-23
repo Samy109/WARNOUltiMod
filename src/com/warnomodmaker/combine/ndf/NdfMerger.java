@@ -843,11 +843,12 @@ public final class NdfMerger {
         if (baseValue != null) lists.add(baseValue);
         for (Edit v : variants) if (v.value instanceof NdfValue.ListV) lists.add((NdfValue.ListV) v.value);
         boolean allKeyed = true;
-        for (NdfValue.ListV l : lists) if (keyList(l) == null) { allKeyed = false; break; }
+        Map<String, String> identity = identityFields(lists);
+        for (NdfValue.ListV l : lists) if (keyList(l, identity) == null) { allKeyed = false; break; }
         if (allKeyed) {
             List<KeyedEdit> edits = new ArrayList<>();
-            for (Edit v : variants) edits.add(new KeyedEdit(v.mod, v.value instanceof NdfValue.ListV ? keyList((NdfValue.ListV) v.value) : null));
-            List<Map.Entry<Object, NdfValue>> entries = mergeKeyed(path, baseValue == null ? null : keyList(baseValue), edits);
+            for (Edit v : variants) edits.add(new KeyedEdit(v.mod, v.value instanceof NdfValue.ListV ? keyList((NdfValue.ListV) v.value, identity) : null));
+            List<Map.Entry<Object, NdfValue>> entries = mergeKeyed(path, baseValue == null ? null : keyList(baseValue, identity), edits);
             List<NdfValue> items = new ArrayList<>(entries.size());
             for (Map.Entry<Object, NdfValue> e : entries) items.add(e.getValue());
             return new NdfValue.ListV(items);
@@ -941,11 +942,17 @@ public final class NdfMerger {
     private static int[] align(List<NdfValue> base, List<NdfValue> other) {
         int n = base.size(), m = other.size();
         if ((long) n * m > 4_000_000L) return null;
-        int[][] best = new int[n + 1][m + 1];
+        List<Set<NdfValue>> baseIds = new ArrayList<>(n), otherIds = new ArrayList<>(m);
+        for (NdfValue v : base) baseIds.add(nestedDescriptorIds(v));
+        for (NdfValue v : other) otherIds.add(nestedDescriptorIds(v));
+        int[][] scores = new int[n][m];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < m; j++) scores[i][j] = matchScore(base.get(i), other.get(j), baseIds.get(i), otherIds.get(j));
+        long[][] best = new long[n + 1][m + 1];
         for (int i = n - 1; i >= 0; i--) {
             for (int j = m - 1; j >= 0; j--) {
-                int score = matchScore(base.get(i), other.get(j));
-                int take = score > 0 ? score + best[i + 1][j + 1] : Integer.MIN_VALUE;
+                int score = scores[i][j];
+                long take = score > 0 ? score + best[i + 1][j + 1] : Long.MIN_VALUE;
                 best[i][j] = Math.max(take, Math.max(best[i + 1][j], best[i][j + 1]));
             }
         }
@@ -953,7 +960,7 @@ public final class NdfMerger {
         java.util.Arrays.fill(result, -1);
         int i = 0, j = 0;
         while (i < n && j < m) {
-            int score = matchScore(base.get(i), other.get(j));
+            int score = scores[i][j];
             if (score > 0 && best[i][j] == score + best[i + 1][j + 1]) {
                 result[j] = i;
                 i++;
@@ -967,17 +974,48 @@ public final class NdfMerger {
         return result;
     }
 
-    /** How surely two list elements are the same element: 4 equal, 3 same identity, 1 same class, 0 unrelated. */
-    private static int matchScore(NdfValue a, NdfValue b) {
-        if (NdfValue.same(a, b)) return 4;
+    /**
+     * How surely two list elements are the same element: equal content most, then the same identity (name-like
+     * field); unnamed objects of one class score by what they share, each descriptor id found inside both (the
+     * ammunition of a mounted weapon) counting far more than an equal field. 0 means unrelated.
+     */
+    private static int matchScore(NdfValue a, NdfValue b, Set<NdfValue> idsA, Set<NdfValue> idsB) {
+        if (NdfValue.same(a, b)) return 100_000;
         if (!(a instanceof NdfValue.Obj) || !(b instanceof NdfValue.Obj)) return 0;
         NdfValue.Obj x = (NdfValue.Obj) a, y = (NdfValue.Obj) b;
         if (!x.className.equals(y.className)) return 0;
         for (String field : IDENTITY_FIELDS) {
             NdfValue p = x.get(field), q = y.get(field);
-            if (p != null && q != null) return NdfValue.same(p, q) ? 3 : 0;
+            if (p != null && q != null) return NdfValue.same(p, q) ? 50_000 : 0;
         }
-        return 1;
+        int score = 10;
+        for (Map.Entry<String, NdfValue> field : x.fields)
+            if (NdfValue.same(field.getValue(), y.get(field.getKey()))) score++;
+        for (NdfValue id : idsA) if (idsB.contains(id)) score += 100;
+        return score;
+    }
+
+    /** Every descriptor id inside a value, at any depth. */
+    private static Set<NdfValue> nestedDescriptorIds(NdfValue value) {
+        Set<NdfValue> ids = new HashSet<>();
+        ArrayDeque<NdfValue> stack = new ArrayDeque<>();
+        stack.push(value);
+        while (!stack.isEmpty()) {
+            NdfValue v = stack.pop();
+            if (v instanceof NdfValue.Obj o) {
+                NdfValue.Raw id = descriptorId(o);
+                if (id != null) ids.add(id);
+                for (Map.Entry<String, NdfValue> f : o.fields) stack.push(f.getValue());
+            } else if (v instanceof NdfValue.ListV l) {
+                for (NdfValue item : l.items) stack.push(item);
+            } else if (v instanceof NdfValue.MapV mp) {
+                for (Map.Entry<NdfValue, NdfValue> e : mp.entries) stack.push(e.getValue());
+            } else if (v instanceof NdfValue.Pair p) {
+                stack.push(p.first);
+                stack.push(p.second);
+            }
+        }
+        return ids;
     }
 
     /** Identity of a list element by class and name-like field. */
@@ -1007,19 +1045,38 @@ public final class NdfMerger {
     }
 
     /** Keys list elements by identity (class plus name-like field, or the value itself); null if ambiguous. */
-    private static List<Map.Entry<Object, NdfValue>> keyList(NdfValue.ListV list) {
+    /**
+     * The name-like field each class of element is keyed by in these lists: the first of {@link #IDENTITY_FIELDS} that
+     * every element of the class has in every list. A field only some versions have (WARNO adding Name to mounted
+     * weapons) would key the same element differently in each, so the class is then keyed by class alone.
+     */
+    private static Map<String, String> identityFields(List<NdfValue.ListV> lists) {
+        Map<String, List<NdfValue.Obj>> byClass = new HashMap<>();
+        for (NdfValue.ListV l : lists)
+            for (NdfValue item : l.items) if (item instanceof NdfValue.Obj o) byClass.computeIfAbsent(o.className, c -> new ArrayList<>()).add(o);
+        Map<String, String> result = new HashMap<>();
+        for (Map.Entry<String, List<NdfValue.Obj>> e : byClass.entrySet()) {
+            List<String> candidates = new ArrayList<>(List.of(IDENTITY_FIELDS));
+            if (e.getKey().equals("TTransportedInfantryEntry")) candidates.add(0, "Identifier");
+            for (String field : candidates) {
+                if (e.getValue().stream().allMatch(o -> o.get(field) != null)) {
+                    result.put(e.getKey(), field);
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
+    private static List<Map.Entry<Object, NdfValue>> keyList(NdfValue.ListV list, Map<String, String> identity) {
         Set<Object> keys = new HashSet<>();
         List<Map.Entry<Object, NdfValue>> result = new ArrayList<>(list.items.size());
         for (NdfValue item : list.items) {
             Object key = null;
             if (item instanceof NdfValue.Obj) {
                 NdfValue.Obj o = (NdfValue.Obj) item;
-                NdfValue id = null;
-                for (String field : IDENTITY_FIELDS) {
-                    id = o.get(field);
-                    if (id != null) break;
-                }
-                if (o.className.equals("TTransportedInfantryEntry")) id = o.get("Identifier");
+                String field = identity.get(o.className);
+                NdfValue id = field == null ? null : o.get(field);
                 key = id != null ? new ClassKey(o.className, id) : o.className;
             } else if (item instanceof NdfValue.Text || item instanceof NdfValue.Import || item instanceof NdfValue.ExportRef || item instanceof NdfValue.Raw) {
                 key = item;

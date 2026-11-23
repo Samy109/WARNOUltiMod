@@ -70,8 +70,10 @@ public class UnitBrowser extends JPanel {
         searchPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
 
         // Top row: Search type dropdown
-        JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        topRow.add(new JLabel("Search by:"));
+        // Label left, dropdown filling the rest: a wrapping row would push the dropdown onto a hidden second line.
+        JPanel topRow = new JPanel(new BorderLayout(8, 0));
+        topRow.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
+        topRow.add(new JLabel("Search by:"), BorderLayout.WEST);
         searchTypeComboBox = new JComboBox<>();
         updateSearchTypeOptions(); // Initialize with appropriate options
         searchTypeComboBox.addActionListener(e -> {
@@ -79,11 +81,11 @@ public class UnitBrowser extends JPanel {
             searchTimer.stop();
             filterUnits();
         });
-        topRow.add(searchTypeComboBox);
+        topRow.add(searchTypeComboBox, BorderLayout.CENTER);
         searchPanel.add(topRow, BorderLayout.NORTH);
 
         // Middle row: Search field (always visible)
-        JPanel middleRow = new JPanel(new BorderLayout());
+        JPanel middleRow = new JPanel(new BorderLayout(8, 0));
         middleRow.add(new JLabel("Search:"), BorderLayout.WEST);
         searchField = new JTextField();
 

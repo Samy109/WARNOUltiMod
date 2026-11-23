@@ -45,6 +45,31 @@ final class VersionMigration {
     private final Map<String, String> classRenames = new HashMap<>();
     private final Map<String, List<Rule>> rules = new HashMap<>();
     private final Map<String, Map<String, NdfValue>> defaults = new HashMap<>();
+    private final Census current;
+    private final Map<Rule, Map<NdfValue, NdfValue>> byChildDescriptor = new ConcurrentHashMap<>();
+
+    /**
+     * For a moved-up rule: current vanilla's value of the property on objects whose child (the rule's field) is a
+     * given descriptor, by that descriptor's id. Ids vanilla gives different values are left out.
+     */
+    private Map<NdfValue, NdfValue> byChildDescriptor(Rule rule) {
+        return byChildDescriptor.computeIfAbsent(rule, r -> {
+            Map<NdfValue, NdfValue> values = new HashMap<>();
+            Set<NdfValue> ambiguous = new HashSet<>();
+            for (NdfValue.Obj obj : current.byPath.values()) {
+                if (!obj.className.equals(r.targetClass)) continue;
+                if (!(obj.get(r.field) instanceof NdfValue.Obj child)) continue;
+                NdfValue id = child.get("DescriptorId"), value = obj.get(r.property);
+                if (id == null || value == null || ambiguous.contains(id)) continue;
+                NdfValue seen = values.putIfAbsent(id, value);
+                if (seen != null && !NdfValue.same(seen, value)) {
+                    values.remove(id);
+                    ambiguous.add(id);
+                }
+            }
+            return values;
+        });
+    }
     private final Map<String, Set<String>> required = new HashMap<>();
 
     static VersionMigration between(VanillaDatabases oldVanilla, VanillaDatabases newVanilla) {
@@ -54,6 +79,7 @@ final class VersionMigration {
 
     private VersionMigration(VanillaDatabases oldVanilla, VanillaDatabases newVanilla) {
         Census before = Census.of(oldVanilla), after = Census.of(newVanilla);
+        current = after;
 
         // Classes whose objects changed class at the same place.
         Map<String, Map<String, Integer>> renamedTo = new HashMap<>();
@@ -230,11 +256,18 @@ final class VersionMigration {
      * The value a rule carries onto the object from where the old layout kept it, or null. A value still in the old
      * place is one the mod set (vanilla's own was removed there by the update), so it wins over the merged one.
      */
-    private static NdfValue carried(Rule rule, NdfValue.Obj obj, NdfValue.Obj parent, String fieldInParent) {
+    private NdfValue carried(Rule rule, NdfValue.Obj obj, NdfValue.Obj parent, String fieldInParent) {
         switch (rule.kind) {
-            case UP:
-                return obj.get(rule.field) instanceof NdfValue.Obj child && classMatches(child.className, rule.sourceClass)
-                    ? child.get(rule.sourceProperty) : null;
+            case UP: {
+                if (!(obj.get(rule.field) instanceof NdfValue.Obj child) || !classMatches(child.className, rule.sourceClass)) return null;
+                NdfValue own = child.get(rule.sourceProperty);
+                if (own != null) return own;
+                // The child is a shared descriptor (vanilla ammunition) the merge has already given its current
+                // layout; the moved value belongs to that descriptor, so it is the one current vanilla carries for it.
+                if (obj.get(rule.property) != null) return null;
+                NdfValue id = child.get("DescriptorId");
+                return id == null ? null : byChildDescriptor(rule).get(id);
+            }
             case RENAME:
                 return obj.get(rule.sourceProperty);
             default:
@@ -309,6 +342,9 @@ final class VersionMigration {
         final Map<String, NdfValue.Obj> byPath = new HashMap<>();
         final Map<String, Integer> count = new HashMap<>();
         final Map<String, Map<String, Integer>> props = new HashMap<>();
+        // Per class, the value every object gives each property, while they all agree.
+        final Map<String, Map<String, NdfValue>> shared = new HashMap<>();
+        final Set<String> mixed = new HashSet<>();
 
         static Census of(VanillaDatabases vanilla) {
             return CENSUSES.computeIfAbsent(vanilla.archivePath().toAbsolutePath().normalize().toString(), k -> {
@@ -329,8 +365,17 @@ final class VersionMigration {
                 if (path != null) byPath.put(path, obj);
                 count.merge(obj.className, 1, Integer::sum);
                 Map<String, Integer> p = props.computeIfAbsent(obj.className, c -> new HashMap<>());
+                Map<String, NdfValue> values = shared.computeIfAbsent(obj.className, c -> new HashMap<>());
                 for (Map.Entry<String, NdfValue> field : obj.fields) {
                     p.merge(field.getKey(), 1, Integer::sum);
+                    String key = obj.className + "." + field.getKey();
+                    if (!mixed.contains(key)) {
+                        NdfValue seen = values.putIfAbsent(field.getKey(), field.getValue());
+                        if (seen != null && !NdfValue.same(seen, field.getValue())) {
+                            mixed.add(key);
+                            values.remove(field.getKey());
+                        }
+                    }
                     walk(field.getValue(), path == null ? null : path + "." + field.getKey());
                 }
             } else if (value instanceof NdfValue.ListV list) {
@@ -354,17 +399,10 @@ final class VersionMigration {
             return p != null && p.containsKey(property);
         }
 
-        /** The value every object of the class sets the property to, or null when they differ. */
+        /** The value every object of the class sets the property to (anonymous objects included), or null when they differ. */
         NdfValue sharedValue(String className, String property) {
-            NdfValue shared = null;
-            for (NdfValue.Obj obj : byPath.values()) {
-                if (!obj.className.equals(className)) continue;
-                NdfValue v = obj.get(property);
-                if (v == null) continue;
-                if (shared == null) shared = v;
-                else if (!NdfValue.same(shared, v)) return null;
-            }
-            return shared;
+            Map<String, NdfValue> values = shared.get(className);
+            return values == null ? null : values.get(property);
         }
     }
 }

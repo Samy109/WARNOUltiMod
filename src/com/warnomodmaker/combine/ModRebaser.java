@@ -22,10 +22,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -46,7 +48,7 @@ import java.util.function.Function;
  */
 public final class ModRebaser {
     private static final String CACHE_FOLDER = ".warno-moderator-updated";
-    private static final String FORMAT_VERSION = "10";
+    private static final String FORMAT_VERSION = "20";
     private static final String[] OWN_FOLDERS = {"Localisation", "ResourcePacks"};
     private static final String[][] DICTIONARIES = {
         {"dico_units", "UNITS.csv"}, {"dico_companies", "COMPANIES.csv"}, {"dico_platoons", "PLATOONS.csv"},
@@ -348,11 +350,17 @@ public final class ModRebaser {
 
         final Map<String, Place> byPath = new HashMap<>();
         final Map<String, List<Place>> byName = new HashMap<>();
+        // Exports by their DescriptorId: WARNO renames an export but keeps its descriptor GUID, which must stay unique.
+        final Map<NdfValue, Place> byDescriptor = new HashMap<>();
 
         ExportIndex(VanillaDatabases vanilla) {
             for (String database : vanilla.databasePaths()) {
                 for (NdfDatabase.TopLevel top : NdfDatabase.load(vanilla.tryRead(database)).topLevel)
-                    if (top.exportPath != null) add(top.exportPath, database, top.value.className);
+                    if (top.exportPath != null) {
+                        add(top.exportPath, database, top.value.className);
+                        NdfValue id = top.value.get("DescriptorId");
+                        if (id instanceof NdfValue.Raw) byDescriptor.put(id, byPath.get(top.exportPath));
+                    }
             }
         }
 
@@ -547,6 +555,157 @@ public final class ModRebaser {
      * in turn, so the mod keeps working as it was made. References to objects outside the game databases (engine
      * resources) are left as they are.
      */
+    private static final String DEPICTION_EXPORT_PREFIX = "$/GFX/DepictionResources/";
+
+    /**
+     * Registration classes looked up by name, with the field that holds their entries: a map keyed by the name, or (for
+     * transported infantry, which registers each squad's mimetic) a list of entries named by their Identifier.
+     */
+    private static final Map<String, String> REGISTRATIONS = Map.of(
+        "TUnitMimeticRegistration", "UnitMimetics",
+        "TGhostMimeticRegistration", "GhostMimetics",
+        "TGhostBuildingMimeticRegistration", "GhostBuildingMimetics",
+        "TMimeticWorldHappeningRegistration", "Happenings",
+        "TTransportedInfantryCatalogEntries", "Entries");
+
+    /** One registered name: a map entry (mapKey set) or a list item (mapKey null). */
+    private record RegisteredEntry(String database, String className, List<Map.Entry<String, NdfValue>> scope, String name,
+                                   NdfValue mapKey, NdfValue value) {}
+
+    /**
+     * WARNO looks registrations up by name ("Unknown unit mimetic: 'BDX_Mortar_81_BEL'"). Entries the old revision
+     * registered, the current one no longer does and the mod still names are registered again, in the database and
+     * with the scope they had, as an extra anonymous registration of their class (WARNO combines them).
+     */
+    private static void restoreRegistrations(ModDescriptor mod, Map<String, NdfDatabase> working, VanillaDatabases oldVanilla,
+                                             VanillaDatabases newVanilla, Set<String> changed, List<String> notes) {
+        Map<String, Set<String>> current = new HashMap<>();
+        for (RegisteredEntry e : registrations(newVanilla)) current.computeIfAbsent(e.className(), c -> new HashSet<>()).add(e.name());
+        List<RegisteredEntry> removed = new ArrayList<>();
+        for (RegisteredEntry e : registrations(oldVanilla))
+            if (!current.getOrDefault(e.className(), Set.of()).contains(e.name())) removed.add(e);
+        if (removed.isEmpty()) return;
+        // Names the mod's data still uses, apart from the registrations themselves.
+        Set<String> named = new HashSet<>();
+        for (NdfDatabase db : working.values()) collectTexts(db, named);
+        Map<String, List<RegisteredEntry>> byRegistration = new LinkedHashMap<>();
+        for (RegisteredEntry e : removed) {
+            if (!named.contains(e.name())) continue;
+            byRegistration.computeIfAbsent(e.database() + "|" + e.className() + "|" + e.scope(), k -> new ArrayList<>()).add(e);
+        }
+        if (byRegistration.isEmpty()) return;
+        List<String> names = new ArrayList<>();
+        for (List<RegisteredEntry> group : byRegistration.values()) {
+            RegisteredEntry first = group.get(0);
+            List<Map.Entry<NdfValue, NdfValue>> entries = new ArrayList<>();
+            List<NdfValue> items = new ArrayList<>();
+            for (RegisteredEntry e : group) {
+                if (e.mapKey() != null) entries.add(NdfValue.entry(e.mapKey(), e.value()));
+                else items.add(e.value());
+                names.add(e.name());
+            }
+            List<Map.Entry<String, NdfValue>> fields = new ArrayList<>(first.scope());
+            fields.add(NdfValue.field(REGISTRATIONS.get(first.className()), first.mapKey() != null ? new NdfValue.MapV(entries) : new NdfValue.ListV(items)));
+            NdfDatabase host = working.computeIfAbsent(first.database(), d -> NdfDatabase.load(newVanilla.tryRead(d)));
+            working.put(first.database(), withTop(host, new NdfDatabase.TopLevel(null, new NdfValue.Obj(first.className(), fields, null))));
+            changed.add(first.database());
+        }
+        notes.add(String.format("%s uses %,d registration(s) WARNO has since removed (%s%s); they were registered again from the version it was made for.",
+            mod.name, names.size(), String.join(", ", names.subList(0, Math.min(8, names.size()))), names.size() > 8 ? ", ..." : ""));
+    }
+
+    /** Every registration entry of a revision, with the database (current naming) it lives in. */
+    private static List<RegisteredEntry> registrations(VanillaDatabases vanilla) {
+        List<RegisteredEntry> result = new ArrayList<>();
+        for (String path : vanilla.databasePaths()) {
+            byte[] data = vanilla.tryRead(path);
+            if (data == null) continue;
+            String database = NdfLayout.isLegacyDatabase(path) ? NdfLayout.toTransactionPath(path) : path;
+            for (NdfDatabase.TopLevel t : NdfDatabase.load(data).topLevel) {
+                String collection = REGISTRATIONS.get(t.value.className);
+                if (t.exportPath != null || collection == null) continue;
+                List<Map.Entry<String, NdfValue>> scope = new ArrayList<>();
+                for (Map.Entry<String, NdfValue> f : t.value.fields) if (!f.getKey().equals(collection)) scope.add(f);
+                if (t.value.get(collection) instanceof NdfValue.MapV map) {
+                    for (Map.Entry<NdfValue, NdfValue> entry : map.entries)
+                        result.add(new RegisteredEntry(database, t.value.className, scope, keyText(entry.getKey()), entry.getKey(), entry.getValue()));
+                } else if (t.value.get(collection) instanceof NdfValue.ListV list) {
+                    for (NdfValue item : list.items)
+                        if (item instanceof NdfValue.Obj o && o.get("Identifier") instanceof NdfValue.Text id)
+                            result.add(new RegisteredEntry(database, t.value.className, scope, id.text, null, item));
+                }
+            }
+        }
+        return result;
+    }
+
+    private static String keyText(NdfValue key) {
+        return key instanceof NdfValue.Text t ? t.text : key.describe();
+    }
+
+    private static void collectTexts(NdfDatabase db, Set<String> out) {
+        ArrayDeque<NdfValue> stack = new ArrayDeque<>();
+        for (NdfDatabase.TopLevel t : db.topLevel) stack.push(t.value);
+        while (!stack.isEmpty()) {
+            NdfValue v = stack.pop();
+            if (v instanceof NdfValue.Text t) out.add(t.text);
+            else if (v instanceof NdfValue.Obj o) for (Map.Entry<String, NdfValue> f : o.fields) stack.push(f.getValue());
+            else if (v instanceof NdfValue.ListV l) for (NdfValue item : l.items) stack.push(item);
+            else if (v instanceof NdfValue.MapV m) for (Map.Entry<NdfValue, NdfValue> e : m.entries) { stack.push(e.getKey()); stack.push(e.getValue()); }
+            else if (v instanceof NdfValue.Pair p) { stack.push(p.first); stack.push(p.second); }
+        }
+    }
+
+    /**
+     * NDF source declaring restored models the way vanilla's DepictionResources sources do
+     * ({@code export Modele_X is TResourceMesh ( Mesh="GameData:/..." )}). Only text properties are written, which is
+     * all a model resource has; anything else can't be declared faithfully, so it stops the update.
+     */
+    private static String depictionSource(ModDescriptor mod, Map<String, NdfValue.Obj> models) {
+        StringBuilder text = new StringBuilder();
+        text.append("// Models ").append(mod.name).append(" uses that WARNO has since removed, as they were declared in the version it was made for.\r\n");
+        for (Map.Entry<String, NdfValue.Obj> e : models.entrySet()) {
+            NdfValue.Obj model = e.getValue();
+            text.append("\r\nexport ").append(e.getKey().substring(DEPICTION_EXPORT_PREFIX.length())).append(" is ").append(model.className).append("\r\n(\r\n");
+            for (Map.Entry<String, NdfValue> field : model.fields) {
+                NdfValue v = field.getValue();
+                String written;
+                if (v instanceof NdfValue.Text value && !value.text.contains("\"")) written = "\"" + value.text + "\"";
+                else if (v instanceof NdfValue.Import ref && ref.path.startsWith("$/")) written = ref.path;
+                else if (v instanceof NdfValue.ExportRef ref && ref.path.startsWith("$/")) written = ref.path;
+                else throw new CombineException(mod.name + " uses the model " + e.getKey() + ", which WARNO has removed, and its " + field.getKey()
+                    + " (" + v.describe() + ") can't be written as NDF source, so the model can't be restored.");
+                text.append("    ").append(field.getKey()).append("=").append(written).append("\r\n");
+            }
+            text.append(")\r\n");
+        }
+        return text.toString();
+    }
+
+    /** The cluster with one more source file loaded into the DepictionResources transaction. */
+    private static NdfDatabase withDepictionSource(NdfDatabase cluster, String source) {
+        boolean[] added = new boolean[1];
+        NdfDatabase result = new NdfRewrite(null, null, obj -> {
+            if (!obj.className.equals("TNDFTransaction") || !(obj.get("NameSpace") instanceof NdfValue.Text ns)
+                || !ns.text.equalsIgnoreCase("GFX/DepictionResources") || !(obj.get("Files") instanceof NdfValue.ListV list)) return obj;
+            added[0] = true;
+            int type = -1;
+            for (NdfValue item : list.items) {
+                if (!(item instanceof NdfValue.Text t)) continue;
+                if (t.text.equalsIgnoreCase(source)) return obj;
+                type = t.type;
+            }
+            if (type < 0) throw new CombineException("WARNO's depiction cluster lists no source files to add a restored model's beside.");
+            List<NdfValue> items = new ArrayList<>(list.items);
+            items.add(new NdfValue.Text(type, source));
+            List<Map.Entry<String, NdfValue>> fields = new ArrayList<>(obj.fields);
+            fields.replaceAll(f -> f.getKey().equals("Files") ? NdfValue.field("Files", new NdfValue.ListV(items)) : f);
+            return new NdfValue.Obj(obj.className, fields, obj.origin);
+        }).apply(cluster);
+        if (!added[0]) throw new CombineException("WARNO's depiction cluster has no DepictionResources transaction to load a restored model from.");
+        return result;
+    }
+
     private static void fixReferences(ModDescriptor mod, Path root, ExportIndex index, ExportIndex oldIndex, VanillaDatabases oldVanilla,
                                       VanillaDatabases newVanilla, Map<String, String> pathMap, List<String> notes, Map<String, String> configKeys) {
         Path ndf = root.resolve("Gen").resolve("NDF");
@@ -559,6 +718,11 @@ public final class ModRebaser {
         Set<String> changed = IgnoreCase.set();
         Map<String, NdfDatabase> oldDatabases = new HashMap<>();
         List<String> restored = new ArrayList<>();
+        Map<String, NdfValue.Obj> restoredDepictions = new LinkedHashMap<>();
+
+        // Registrations (unit mimetics and the like) WARNO removed but the mod still names come back first, so the
+        // pass below also repairs whatever they point at.
+        restoreRegistrations(mod, working, oldVanilla, newVanilla, changed, notes);
 
         // Until no reference is stale: re-point what moved, restore what WARNO deleted but the mod still uses.
         for (int pass = 0; pass < 64; pass++) {
@@ -589,9 +753,17 @@ public final class ModRebaser {
                     pathMap.put(path, local.get(0).path);
                     continue;
                 }
-                // Deleted (or no longer one object): bring back the old one, where its old database's objects live now.
                 String oldDatabase = oldIndex.byPath.get(path).database;
                 NdfDatabase oldDb = oldDatabases.computeIfAbsent(oldDatabase, d -> NdfDatabase.load(oldVanilla.tryRead(d)));
+                // Renamed: the current game still has its descriptor, under another export name. Restoring the old
+                // one would declare that descriptor GUID twice, which WARNO rejects.
+                NdfValue oldId = oldDb.topLevel.stream().filter(t -> path.equals(t.exportPath)).findFirst().orElseThrow().value.get("DescriptorId");
+                ExportIndex.Place renamed = oldId instanceof NdfValue.Raw ? index.byDescriptor.get(oldId) : null;
+                if (renamed != null && renamed.className.equals(className)) {
+                    pathMap.put(path, renamed.path);
+                    continue;
+                }
+                // Deleted (or no longer one object): bring back the old one, where its old database's objects live now.
                 // Old revisions name databases Gen\NDF\X.ndfbin, the current one Gen\NDF\X.txn.
                 String currentName = NdfLayout.isLegacyDatabase(oldDatabase) ? NdfLayout.toTransactionPath(oldDatabase) : oldDatabase;
                 String host;
@@ -621,6 +793,7 @@ public final class ModRebaser {
                 index.add(path, hostName, className);
                 changed.add(hostName);
                 restored.add(shortName(path));
+                if (path.startsWith(DEPICTION_EXPORT_PREFIX)) restoredDepictions.put(path, value);
             }
             for (String database : new ArrayList<>(working.keySet())) {
                 NdfDatabase before = working.get(database);
@@ -643,6 +816,19 @@ public final class ModRebaser {
                     changed.add(database);
                 }
             }
+        }
+
+        // WARNO generates DepictionResources from the source files its cluster lists, so a restored model only survives
+        // a build as a source declaration: the mod gets its own source file, listed in the cluster.
+        if (!restoredDepictions.isEmpty()) {
+            String sourcePath = "GameData\\Gameplay\\Gfx\\DepictionResources\\" + safe(mod.name).replace(' ', '_') + "_RestoredModels.ndf";
+            writeText(root.resolve(sourcePath), depictionSource(mod, restoredDepictions));
+            String cluster = "Gen\\NDF\\DepictionResource\\Cluster.txn";
+            NdfDatabase clusterDb = working.computeIfAbsent(cluster, d -> NdfDatabase.load(newVanilla.tryRead(d)));
+            working.put(cluster, withDepictionSource(clusterDb, "GameData:/" + sourcePath.substring("GameData\\".length()).replace('\\', '/')));
+            changed.add(cluster);
+            notes.add(String.format("%s uses %,d model(s) WARNO has since removed; they were declared again in %s so WARNO builds them.",
+                mod.name, restoredDepictions.size(), sourcePath));
         }
 
         // The mod's objects are reshaped the way WARNO's update reshaped vanilla's (properties moved, renamed or newly
@@ -674,6 +860,20 @@ public final class ModRebaser {
         if (!dropped.isEmpty())
             notes.add(String.format("%s set %,d propert%s WARNO has since removed (%s); they were dropped, as the current game no longer has them.",
                 mod.name, dropped.size(), dropped.size() == 1 ? "y" : "ies", RemovedProperties.summary(dropped)));
+
+        // Objects restored from the old revision carry its copies of descriptors the current game shares and has since
+        // changed; WARNO rejects a GUID declared with two contents.
+        Set<String> settledIds = new TreeSet<>();
+        for (String database : new ArrayList<>(working.keySet())) {
+            NdfDatabase settledDb = DescriptorSettle.settle(working.get(database), settledIds);
+            if (settledDb != working.get(database)) {
+                working.put(database, settledDb);
+                changed.add(database);
+            }
+        }
+        if (!settledIds.isEmpty())
+            notes.add(String.format("%s: %,d shared descriptor(s) restored from its version were given the content the rest of the data uses.",
+                mod.name, settledIds.size()));
 
         for (String database : changed) {
             Path output = root.resolve(database);

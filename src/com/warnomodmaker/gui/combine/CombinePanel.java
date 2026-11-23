@@ -355,8 +355,9 @@ public final class CombinePanel extends JPanel {
         searchBox.setToolTipText("Filter by file or value path, decision, winning mod or reason");
         WarnoTheme.placeholder(searchBox, "Search files, values, mods");
         if (WarnoTheme.hasIcons()) searchBox.putClientProperty("JTextField.leadingIcon", new GlyphIcon(ICON_SEARCH, 13, WarnoTheme.FAINT));
-        searchBox.setPreferredSize(new Dimension(460, 34));
-        filters.add(searchBox, BorderLayout.WEST);
+        // The search box takes whatever width the toggle and export button leave, so they never overlap it.
+        searchBox.setPreferredSize(new Dimension(320, 34));
+        filters.add(searchBox, BorderLayout.CENTER);
         JPanel filterRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 16, 0));
         filterRight.setOpaque(false);
         filterRight.add(conflictsOnlyBox);
