@@ -591,9 +591,13 @@ public final class NdfMerger {
         Map<Object, NdfValue.Obj> baseByKey = toMap(baseKeys);
         List<Map<Object, NdfValue.Obj>> variantMaps = new ArrayList<>();
         List<List<Object>> variantOrders = new ArrayList<>();
+        List<Map<Object, Object>> aliases = new ArrayList<>();
         for (List<Map.Entry<Object, NdfValue.Obj>> k : variantKeys) {
-            variantMaps.add(toMap(k));
-            variantOrders.add(keyOrder(k));
+            Map<Object, NdfValue.Obj> map = toMap(k);
+            List<Object> keyOrder = keyOrder(k);
+            aliases.add(pairEditedConstants(baseKeys, baseByKey, map, keyOrder));
+            variantMaps.add(map);
+            variantOrders.add(keyOrder);
         }
         List<Object> order = mergeOrder(keyOrder(baseKeys), variantOrders);
         List<NdfDatabase.TopLevel> result = new ArrayList<>(order.size());
@@ -601,13 +605,34 @@ public final class NdfMerger {
         for (Object key : order) {
             token.check();
             if (key instanceof ConstantKey) {
-                // Equal content wherever it comes from; the highest-priority mod's instance (and its debug line) is kept.
-                NdfValue.Obj constant = null;
+                NdfValue.Obj base = baseByKey.get(key);
+                boolean edited = false;
                 for (Map<Object, NdfValue.Obj> m : variantMaps) {
-                    constant = m.get(key);
-                    if (constant != null) break;
+                    NdfValue.Obj v = m.get(key);
+                    if (base != null && v != null && !v.equals(base)) edited = true;
                 }
-                if (constant == null) constant = baseByKey.get(key);
+                NdfValue.Obj constant = null;
+                if (edited) {
+                    // A constant some input edited (see pairEditedConstants) merges like any object: each input's
+                    // changes to vanilla's, by priority where they disagree.
+                    List<Edit> edits = new ArrayList<>(variants.size());
+                    for (int i = 0; i < variants.size(); i++) {
+                        NdfValue.Obj v = variantMaps.get(i).get(key);
+                        edits.add(new Edit(variants.get(i).modName, v != null ? v : base));
+                    }
+                    boolean[] changed = new boolean[1];
+                    NdfValue value = mergeValue(base.className, base, edits, changed, false);
+                    if (!(value instanceof NdfValue.Obj)) throw new NdfFormatException("A " + base.className + " constant merged to a non-object value.");
+                    if (changed[0]) changedObjects++;
+                    constant = (NdfValue.Obj) value;
+                } else {
+                    // Equal content wherever it comes from; the highest-priority mod's instance (and its debug line) is kept.
+                    for (Map<Object, NdfValue.Obj> m : variantMaps) {
+                        constant = m.get(key);
+                        if (constant != null) break;
+                    }
+                }
+                if (constant == null) constant = base;
                 merged.put((ConstantKey) key, constant);
                 if (baseByKey.containsKey(key) && variantMaps.stream().anyMatch(m -> !m.containsKey(key))) removedConstants.add(constant);
                 result.add(new NdfDatabase.TopLevel(null, constant));
@@ -622,14 +647,44 @@ public final class NdfMerger {
             if (value instanceof NdfValue.Obj) result.add(new NdfDatabase.TopLevel(key instanceof Registration ? null : path, (NdfValue.Obj) value));
             else if (value != null) throw new NdfFormatException("Export " + path + " merged to a non-object value.");
         }
-        List<List<Map.Entry<Object, NdfValue.Obj>>> all = new ArrayList<>();
-        all.add(baseKeys);
-        all.addAll(variantKeys);
-        for (List<Map.Entry<Object, NdfValue.Obj>> keys : all) {
-            for (Map.Entry<Object, NdfValue.Obj> e : keys)
-                if (e.getKey() instanceof ConstantKey) constants.put(e.getValue(), merged.get(e.getKey()));
+        for (Map.Entry<Object, NdfValue.Obj> e : baseKeys)
+            if (e.getKey() instanceof ConstantKey) constants.put(e.getValue(), merged.get(e.getKey()));
+        for (int i = 0; i < variantKeys.size(); i++) {
+            for (Map.Entry<Object, NdfValue.Obj> e : variantKeys.get(i))
+                if (e.getKey() instanceof ConstantKey) constants.put(e.getValue(), merged.get(aliases.get(i).getOrDefault(e.getKey(), e.getKey())));
         }
         return result;
+    }
+
+    /**
+     * A constant is keyed by its content, so an input that edits one (a mod changing a value, or WARNO adding a
+     * property) seems to remove vanilla's constant and add an unrelated one, and both inputs' versions would be kept
+     * side by side. Where an input drops exactly as many of vanilla's constants of a class as it adds of that class,
+     * its n-th added constant is vanilla's n-th dropped one, edited: it is re-keyed to vanilla's key so the two merge.
+     *
+     * @return the input's re-keyed constants, from their own key to vanilla's
+     */
+    private static Map<Object, Object> pairEditedConstants(List<Map.Entry<Object, NdfValue.Obj>> baseKeys, Map<Object, NdfValue.Obj> baseByKey,
+                                                           Map<Object, NdfValue.Obj> variant, List<Object> variantOrder) {
+        Map<String, List<Object>> dropped = new LinkedHashMap<>(), added = new LinkedHashMap<>();
+        for (Map.Entry<Object, NdfValue.Obj> e : baseKeys)
+            if (e.getKey() instanceof ConstantKey && !variant.containsKey(e.getKey()))
+                dropped.computeIfAbsent(e.getValue().className, c -> new ArrayList<>()).add(e.getKey());
+        for (Object key : variantOrder)
+            if (key instanceof ConstantKey && !baseByKey.containsKey(key))
+                added.computeIfAbsent(variant.get(key).className, c -> new ArrayList<>()).add(key);
+        Map<Object, Object> aliases = new HashMap<>();
+        for (Map.Entry<String, List<Object>> e : dropped.entrySet()) {
+            List<Object> replacements = added.get(e.getKey());
+            if (replacements == null || replacements.size() != e.getValue().size()) continue;
+            for (int n = 0; n < replacements.size(); n++) {
+                Object from = replacements.get(n), to = e.getValue().get(n);
+                variant.put(to, variant.remove(from));
+                variantOrder.set(variantOrder.indexOf(from), to);
+                aliases.put(from, to);
+            }
+        }
+        return aliases;
     }
 
     // Without vanilla (asset catalogs), anonymous roots are paired by position and every variant is treated as an
@@ -811,7 +866,118 @@ public final class NdfMerger {
             }
             return new NdfValue.ListV(items);
         }
-        return null;
+        return mergeAlignedList(path, baseValue, variants);
+    }
+
+    /**
+     * Lists of different lengths (a mod adding a turret, WARNO reshaping every mounted weapon in it): each input's list
+     * is aligned with vanilla's, its elements matched by content, then by identity (name-like field or descriptor
+     * id), then by class, keeping their order. Matched elements merge like any value; an element an input added goes
+     * in where it added it; one an input removed is removed unless another input changed it. Null when there is no
+     * vanilla list to align with.
+     */
+    private NdfValue.ListV mergeAlignedList(String path, NdfValue.ListV base, List<Edit> variants) {
+        if (base == null) return null;
+        int n = base.items.size();
+        List<int[]> alignments = new ArrayList<>(variants.size());
+        List<NdfValue.ListV> lists = new ArrayList<>(variants.size());
+        for (Edit v : variants) {
+            if (!(v.value instanceof NdfValue.ListV)) return null;
+            NdfValue.ListV list = (NdfValue.ListV) v.value;
+            int[] alignment = align(base.items, list.items);
+            if (alignment == null) return null;
+            alignments.add(alignment);
+            lists.add(list);
+        }
+        // For each input, its unmatched elements by the vanilla position they come before (n = at the end), and its
+        // element matched to each vanilla position.
+        List<Map<Integer, List<NdfValue>>> inserted = new ArrayList<>();
+        List<NdfValue[]> matched = new ArrayList<>();
+        for (int k = 0; k < variants.size(); k++) {
+            int[] alignment = alignments.get(k);
+            List<NdfValue> items = lists.get(k).items;
+            Map<Integer, List<NdfValue>> before = new HashMap<>();
+            NdfValue[] at = new NdfValue[n];
+            List<NdfValue> pending = new ArrayList<>();
+            for (int j = 0; j < items.size(); j++) {
+                if (alignment[j] < 0) {
+                    pending.add(items.get(j));
+                    continue;
+                }
+                at[alignment[j]] = items.get(j);
+                if (!pending.isEmpty()) {
+                    before.computeIfAbsent(alignment[j], x -> new ArrayList<>()).addAll(pending);
+                    pending = new ArrayList<>();
+                }
+            }
+            if (!pending.isEmpty()) before.computeIfAbsent(n, x -> new ArrayList<>()).addAll(pending);
+            inserted.add(before);
+            matched.add(at);
+        }
+        List<NdfValue> out = new ArrayList<>();
+        for (int i = 0; i <= n; i++) {
+            List<NdfValue> added = new ArrayList<>();
+            for (Map<Integer, List<NdfValue>> before : inserted) {
+                for (NdfValue item : before.getOrDefault(i, List.of())) {
+                    boolean duplicate = false;
+                    for (NdfValue a : added) if (NdfValue.same(a, item)) { duplicate = true; break; }
+                    if (!duplicate) added.add(item);
+                }
+            }
+            out.addAll(added);
+            if (i == n) break;
+            List<Edit> edits = new ArrayList<>(variants.size());
+            for (int k = 0; k < variants.size(); k++) edits.add(new Edit(variants.get(k).mod, matched.get(k)[i]));
+            NdfValue item = mergeValue(path + "[" + i + "]", base.items.get(i), edits, new boolean[1], false);
+            if (item != null) out.add(item);
+        }
+        return new NdfValue.ListV(out);
+    }
+
+    /**
+     * For each element of {@code other}, the index of the base element it is, or -1 for an addition: the order-keeping
+     * alignment with the highest total match score (see {@link #matchScore}). Null for lists too long to align.
+     */
+    private static int[] align(List<NdfValue> base, List<NdfValue> other) {
+        int n = base.size(), m = other.size();
+        if ((long) n * m > 4_000_000L) return null;
+        int[][] best = new int[n + 1][m + 1];
+        for (int i = n - 1; i >= 0; i--) {
+            for (int j = m - 1; j >= 0; j--) {
+                int score = matchScore(base.get(i), other.get(j));
+                int take = score > 0 ? score + best[i + 1][j + 1] : Integer.MIN_VALUE;
+                best[i][j] = Math.max(take, Math.max(best[i + 1][j], best[i][j + 1]));
+            }
+        }
+        int[] result = new int[m];
+        java.util.Arrays.fill(result, -1);
+        int i = 0, j = 0;
+        while (i < n && j < m) {
+            int score = matchScore(base.get(i), other.get(j));
+            if (score > 0 && best[i][j] == score + best[i + 1][j + 1]) {
+                result[j] = i;
+                i++;
+                j++;
+            } else if (best[i][j] == best[i + 1][j]) {
+                i++;
+            } else {
+                j++;
+            }
+        }
+        return result;
+    }
+
+    /** How surely two list elements are the same element: 4 equal, 3 same identity, 1 same class, 0 unrelated. */
+    private static int matchScore(NdfValue a, NdfValue b) {
+        if (NdfValue.same(a, b)) return 4;
+        if (!(a instanceof NdfValue.Obj) || !(b instanceof NdfValue.Obj)) return 0;
+        NdfValue.Obj x = (NdfValue.Obj) a, y = (NdfValue.Obj) b;
+        if (!x.className.equals(y.className)) return 0;
+        for (String field : IDENTITY_FIELDS) {
+            NdfValue p = x.get(field), q = y.get(field);
+            if (p != null && q != null) return NdfValue.same(p, q) ? 3 : 0;
+        }
+        return 1;
     }
 
     /** Identity of a list element by class and name-like field. */

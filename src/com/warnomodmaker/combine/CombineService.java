@@ -456,9 +456,20 @@ public final class CombineService {
     }
 
     private static void synthesizeConfig(CombineRequest request, MergePreview plan, List<MergePlanner.CompiledInput> inputs, IniDocument output) {
+        int installed = output.getInt("Properties", "ModGenVersion", -1);
+        // WARNO's fingerprint is the MD5 of the vanilla database a mod's database was built from, and the game
+        // reports a mod as out of date when it differs from the installed one. Every input is brought up to the
+        // installed revision before merging, so the output's fingerprints are the installed game's, never an input's.
+        Map<String, String> vanilla = BuildRevision.vanillaFingerprints(request.paths.warnoRoot, installed);
+        if (vanilla.isEmpty()) throw new CombineException("WARNO's databases for ModGen " + installed + " weren't found, so the combined manifest can't be written.");
         for (MergeDecision decision : plan.decisions) {
             if (!NdfLayout.isDatabase(decision.relativePath)) continue;
             String key = NdfLayout.manifestKey(decision.relativePath);
+            String current = vanilla.get(key.toLowerCase());
+            if (current != null) {
+                output.set("Config", key, current);
+                continue;
+            }
             // WARNO's fingerprint identifies the database revision rather than its content, so a merged database takes
             // the entry of an input that ships it, preferring the decision's winner.
             List<String> winners = Arrays.asList(decision.winner.split(" \\+ "));

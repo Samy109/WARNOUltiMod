@@ -46,7 +46,7 @@ import java.util.function.Function;
  */
 public final class ModRebaser {
     private static final String CACHE_FOLDER = ".warno-moderator-updated";
-    private static final String FORMAT_VERSION = "6";
+    private static final String FORMAT_VERSION = "10";
     private static final String[] OWN_FOLDERS = {"Localisation", "ResourcePacks"};
     private static final String[][] DICTIONARIES = {
         {"dico_units", "UNITS.csv"}, {"dico_companies", "COMPANIES.csv"}, {"dico_platoons", "PLATOONS.csv"},
@@ -209,7 +209,7 @@ public final class ModRebaser {
         NdfMerger.Result result = oldBytes != null
             ? NdfMerger.merge(NdfDatabase.load(oldBytes), Arrays.asList(new NdfMerger.Variant(mod.name, modDb), new NdfMerger.Variant(updateName, newDb)), Cancel.NONE)
             : NdfMerger.merge(newDb, Collections.singletonList(new NdfMerger.Variant(mod.name, modDb)), Cancel.NONE);
-        for (NdfMerger.Conflict c : result.conflicts) conflicts.add(c.withPath(database + " › " + c.path));
+        for (NdfMerger.Conflict c : result.conflicts) conflicts.add(c.withPath(database + " â€º " + c.path));
         write(result.database, output);
         byte[] tag = newVanilla.tryRead(database + ".tag");
         if (tag == null) throw new CombineException("WARNO's current " + database + " has no generation tag to give " + mod.name + "'s updated copy.");
@@ -470,7 +470,7 @@ public final class ModRebaser {
                 NdfRewrite rewrite = references.apply(db);
                 NdfMerger.One merged = NdfMerger.mergeOne(shortName(target), rewrite.object(before),
                     Arrays.asList(new NdfMerger.Edit(mod.name, after == null ? null : rewrite.object(after)), new NdfMerger.Edit(update, entry.value)));
-                for (NdfMerger.Conflict c : merged.conflicts) conflicts.add(c.withPath(db + " › " + c.path));
+                for (NdfMerger.Conflict c : merged.conflicts) conflicts.add(c.withPath(db + " â€º " + c.path));
                 boolean referenced = merged.value == null && NdfRewrite.referencePaths(current).contains(target);
                 List<NdfDatabase.TopLevel> top = new ArrayList<>();
                 for (NdfDatabase.TopLevel t : current.topLevel) {
@@ -514,7 +514,7 @@ public final class ModRebaser {
                     NdfMerger.One merged = NdfMerger.mergeOne(group.getKey(), rewrite.object(olds.get(i)),
                         Arrays.asList(new NdfMerger.Edit(mod.name, rewrite.object(mods.get(i))), new NdfMerger.Edit(update, current)));
                     String hostDb = placeDb;
-                    for (NdfMerger.Conflict c : merged.conflicts) conflicts.add(c.withPath(hostDb + " › " + c.path));
+                    for (NdfMerger.Conflict c : merged.conflicts) conflicts.add(c.withPath(hostDb + " â€º " + c.path));
                     if (merged.value instanceof NdfValue.Obj) {
                         NdfValue.Obj replacement = (NdfValue.Obj) merged.value, original = current;
                         working.put(placeDb, new NdfRewrite(o -> o == original ? replacement : null, null).apply(workingDb.apply(placeDb)));
@@ -644,6 +644,36 @@ public final class ModRebaser {
                 }
             }
         }
+
+        // The mod's objects are reshaped the way WARNO's update reshaped vanilla's (properties moved, renamed or newly
+        // required), then properties WARNO has since removed are dropped; either would stop the database from loading.
+        VersionMigration migration = VersionMigration.between(oldVanilla, newVanilla);
+        Set<String> migrated = new TreeSet<>();
+        if (!migration.isEmpty()) {
+            for (String database : new ArrayList<>(working.keySet())) {
+                NdfDatabase reshaped = migration.apply(working.get(database), migrated);
+                if (reshaped != working.get(database)) {
+                    working.put(database, reshaped);
+                    changed.add(database);
+                }
+            }
+        }
+        if (!migrated.isEmpty())
+            notes.add(String.format("%s was carried over WARNO's layout changes since its version: %s.", mod.name, VersionMigration.summary(migrated)));
+        RemovedProperties removed = new RemovedProperties(oldVanilla, newVanilla);
+        Set<String> dropped = new TreeSet<>();
+        if (!removed.isEmpty()) {
+            for (String database : new ArrayList<>(working.keySet())) {
+                NdfDatabase stripped = removed.strip(working.get(database), dropped);
+                if (stripped != working.get(database)) {
+                    working.put(database, stripped);
+                    changed.add(database);
+                }
+            }
+        }
+        if (!dropped.isEmpty())
+            notes.add(String.format("%s set %,d propert%s WARNO has since removed (%s); they were dropped, as the current game no longer has them.",
+                mod.name, dropped.size(), dropped.size() == 1 ? "y" : "ies", RemovedProperties.summary(dropped)));
 
         for (String database : changed) {
             Path output = root.resolve(database);

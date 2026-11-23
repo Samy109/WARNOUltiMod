@@ -32,12 +32,26 @@ public final class EdatArchive {
     public EdatArchive(Path path) {
         this.path = path;
         try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
-            ByteBuffer head = readFully(channel, 0, 0x28);
+            ByteBuffer head = readFully(channel, 0, 0x41);
             if (head.get(0) != 'e' || head.get(1) != 'd' || head.get(2) != 'a' || head.get(3) != 't')
                 throw new NdfFormatException(path + " is not an edat archive.");
-            long dictOffset = head.getInt(8) & 0xFFFFFFFFL;
-            int dictLength = head.getInt(12);
-            long filesOffset = head.getLong(16);
+            int version = head.getInt(4);
+            long dictOffset;
+            int dictLength;
+            long filesOffset;
+            if (version == 2) {
+                // Before November 2026 (Glad.dat, ZZ_n.dat): 17 bytes of padding, then u32 dictionary offset and
+                // length, u32 file data offset and length, u32 0, u32 sector size and a 16-byte checksum.
+                dictOffset = head.getInt(0x19) & 0xFFFFFFFFL;
+                dictLength = head.getInt(0x1D);
+                filesOffset = head.getInt(0x21) & 0xFFFFFFFFL;
+            } else if (version == 3) {
+                dictOffset = head.getInt(8) & 0xFFFFFFFFL;
+                dictLength = head.getInt(12);
+                filesOffset = head.getLong(16);
+            } else {
+                throw new NdfFormatException(path + " is an edat archive of unknown version " + version + ".");
+            }
             byte[] dictionary = new byte[dictLength];
             readFully(channel, dictOffset, dictLength).get(dictionary);
             TreeMap<String, Entry> found = IgnoreCase.map();

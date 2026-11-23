@@ -129,7 +129,8 @@ public final class MergePlanner {
                                              Cancel token, List<ModRebaser.RebasedMod> rebased) {
         ModRebaser rebaser = new ModRebaser();
         List<ModDescriptor> current = new ArrayList<>();
-        for (ModDescriptor mod : mods) {
+        for (ModDescriptor declared : mods) {
+            ModDescriptor mod = withBuildRevision(paths, declared, installed, log);
             if (!ModRebaser.isOutdated(mod, installed)) {
                 current.add(mod);
                 continue;
@@ -139,6 +140,21 @@ public final class MergePlanner {
             current.add(result.mod);
         }
         return current;
+    }
+
+    /**
+     * Notes a Workshop mod that declares the installed revision while its manifest fingerprints name older vanilla
+     * databases (see {@link BuildRevision}). WARNO itself would refuse such a mod's data if it were really that old,
+     * so its data is current and only its manifest is stale; the combined manifest is stamped with the installed
+     * game's fingerprints, so the combination isn't reported out of date because of it.
+     */
+    static ModDescriptor withBuildRevision(WarnoPaths paths, ModDescriptor mod, int installed, Consumer<String> log) {
+        if (log == null || mod.kind != ModKind.WORKSHOP_COMPILED || mod.modGenVersion == null || mod.modGenVersion != installed) return mod;
+        List<String> stale = BuildRevision.staleKeys(paths.warnoRoot, installed, mod.configKeys);
+        if (!stale.isEmpty())
+            log.accept("  [NOTE] " + mod.name + "'s Config.ini lists out-of-date fingerprints for " + String.join(", ", stale)
+                + ", so WARNO reports it as out of date beside other mods. The combined mod carries the current game's fingerprints instead.");
+        return mod;
     }
 
     static List<String> rebaseNotes(List<ModRebaser.RebasedMod> rebased, int installed) {
