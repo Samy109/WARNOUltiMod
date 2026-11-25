@@ -1,0 +1,11 @@
+[h1]WARNO UltiMod 3.0.0 is out![/h1]
+
+[b]Mod for your country![/b] 🫡
+
+Want UltiAI and your favorite overhaul in the same skirmish? UltiMod 3.0.0 brings MODerator into the NDF editor. Open [b]Combine[/b], choose your mods, set their priority, and preview what happens when two mods change the same value. Once the preview looks right, build your combined mod with WARNO’s SDK.
+
+Already made a combination in MODerator? UltiMod recognizes its build record, so you can check for updates or rebuild it. The editor also has a refreshed dark theme, and middle-click now closes one tab at a time.
+
+[url=https://github.com/Samy109/WARNOUltiMod/releases/download/v3.0.0/WARNO-Mod-Maker.zip]Download UltiMod 3.0.0 for Windows[/url] · [url=https://github.com/Samy109/WARNOUltiMod/releases/tag/v3.0.0]Release notes[/url]
+
+Extract the ZIP and run WARNO-Mod-Maker.exe. Java 25 is bundled.
