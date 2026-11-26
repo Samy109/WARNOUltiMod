@@ -33,9 +33,14 @@ public class EnhancedListCellRenderer extends DefaultListCellRenderer {
 
         super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 
+        setIcon(null);
         if (value instanceof ObjectValue) {
             ObjectValue unit = (ObjectValue) value;
             formatObjectCell(unit, isSelected);
+            // The unit's in-game picture, once WARNO's icon atlases are read.
+            setIcon(com.warnomodmaker.gui.components.UnitPictureCache.icon(
+                com.warnomodmaker.gui.components.UnitPictureCache.key(unit), 84, 43, list::repaint));
+            setIconTextGap(10);
         }
 
         // Apply theme colors

@@ -15,8 +15,8 @@ mkdir "%STAGE%\input" || exit /b 1
 copy /y WarnoModMaker-fat.jar "%STAGE%\input\WarnoModMaker.jar" >nul || exit /b 1
 jpackage --type app-image --dest "%STAGE%" --input "%STAGE%\input" ^
     --name "WARNO-Mod-Maker" --main-jar WarnoModMaker.jar ^
-    --app-version 3.0.0 --vendor "WARNO Mod Maker" ^
-    --description "WARNO NDF editor and mod combiner" ^
+    --app-version 3.5.0 --vendor "WARNO Mod Maker" ^
+    --description "WARNO NDF editor, mod combiner and map tool" ^
     --java-options "-Xmx6192m" --java-options "--sun-misc-unsafe-memory-access=allow" || exit /b 1
 jar --create --no-manifest --file WARNO-Mod-Maker.zip -C "%STAGE%" WARNO-Mod-Maker || exit /b 1
 echo Built WARNO-Mod-Maker.zip

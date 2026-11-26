@@ -1,6 +1,7 @@
 package com.warnomodmaker.gui;
 
 import com.warnomodmaker.gui.combine.CombinePanel;
+import com.warnomodmaker.gui.maps.MapModePanel;
 import com.warnomodmaker.gui.theme.WarnoTheme;
 import com.warnomodmaker.gui.components.StatusBar;
 import com.warnomodmaker.gui.components.EnhancedTabbedPane;
@@ -42,6 +43,7 @@ public class MainWindow extends JFrame implements FileLoader {
     private int nextTabId = 1;
 
     private final CombinePanel combinePanel = new CombinePanel();
+    private final MapModePanel mapModePanel = new MapModePanel();
     private JMenuBar menuBar;
     private StatusBar statusBar;
 
@@ -49,7 +51,7 @@ public class MainWindow extends JFrame implements FileLoader {
     private CrossSystemIntegrityManager integrityManager;
 
     public MainWindow() {
-        setTitle("WARNO Mod Maker v3.0.0");
+        setTitle("WARNO Mod Maker v3.5.0");
 
         // Restore window position and size from preferences with bounds checking
         UserPreferences prefs = UserPreferences.getInstance();
@@ -279,13 +281,14 @@ public class MainWindow extends JFrame implements FileLoader {
         JPanel cards = new JPanel(layout);
         cards.add(editor, "Editor");
         cards.add(combinePanel, "Combine");
+        cards.add(mapModePanel, "Maps");
 
         JPanel rail = new JPanel();
         rail.setLayout(new BoxLayout(rail, BoxLayout.Y_AXIS));
         rail.setBackground(WarnoTheme.SIDEBAR);
         rail.setBorder(WarnoTheme.pad(12, 6, 12, 6));
         ButtonGroup navigation = new ButtonGroup();
-        for (String name : new String[]{"Editor", "Combine"}) {
+        for (String name : new String[]{"Editor", "Combine", "Maps"}) {
             boolean isEditor = name.equals("Editor");
             JToggleButton button = new JToggleButton(name, isEditor);
             button.setMaximumSize(new Dimension(88, 36));
@@ -295,7 +298,8 @@ public class MainWindow extends JFrame implements FileLoader {
             button.addActionListener(event -> {
                 layout.show(cards, name);
                 menuBar.setVisible(isEditor);
-                if (!isEditor) combinePanel.activate();
+                if (name.equals("Combine")) combinePanel.activate();
+                if (name.equals("Maps")) mapModePanel.activate();
             });
         }
         JPanel workspace = new JPanel(new BorderLayout());
@@ -907,10 +911,10 @@ public class MainWindow extends JFrame implements FileLoader {
         JOptionPane.showMessageDialog(
             this,
             "WARNO Mod Maker\n" +
-            "Version 3.0.0\n\n" +
-            "A comprehensive tool for modifying WARNO game files.\n" +
-            "Features full additive engine, preview-backed mass modify,\n" +
-            "cross-system integrity checking, and line-based serialization.",
+            "Version 3.5.0\n\n" +
+            "Edit WARNO's NDF files with unit pictures from the game,\n" +
+            "combine installed mods into one, and rebuild skirmish maps\n" +
+            "in Conquest or Destruction with your own map settings.",
             "About WARNO Mod Maker",
             JOptionPane.INFORMATION_MESSAGE
         );
@@ -921,6 +925,13 @@ public class MainWindow extends JFrame implements FileLoader {
 
 
     private void exitApplication() {
+        if (mapModePanel.isBusy()) {
+            int choice = JOptionPane.showConfirmDialog(this,
+                "Cancel the map conversion? Once WARNO's tools stop, you can close the app.",
+                "Map conversion is running", JOptionPane.YES_NO_OPTION);
+            if (choice == JOptionPane.YES_OPTION) mapModePanel.requestCancel();
+            return;
+        }
         if (combinePanel.isBusy()) {
             int choice = JOptionPane.showConfirmDialog(this,
                 "Cancel the Combine operation? Once recovery finishes, you can close the app.",
@@ -966,13 +977,14 @@ public class MainWindow extends JFrame implements FileLoader {
         }
 
         combinePanel.shutdown();
+        mapModePanel.shutdown();
         dispose();
         System.exit(0);
     }
 
 
     private void updateTitle() {
-        String title = "WARNO Mod Maker v3.0.0";
+        String title = "WARNO Mod Maker v3.5.0";
 
         FileTabState currentTab = getCurrentTabState();
         if (currentTab != null && currentTab.getFile() != null) {

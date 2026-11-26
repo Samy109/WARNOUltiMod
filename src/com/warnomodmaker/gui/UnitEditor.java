@@ -146,7 +146,43 @@ public class UnitEditor extends JPanel {
 
         splitPane.setRightComponent(editorPanel);
 
+        pictureLabel.setHorizontalAlignment(SwingConstants.LEFT);
+        pictureLabel.setIconTextGap(14);
+        pictureLabel.setBorder(BorderFactory.createEmptyBorder(4, 6, 8, 6));
+        pictureLabel.setVisible(false);
+        add(pictureLabel, BorderLayout.NORTH);
         add(splitPane, BorderLayout.CENTER);
+    }
+
+    private final JLabel pictureLabel = new JLabel();
+
+    /** Shows the selected unit's in-game picture above its properties. */
+    private void updatePicture() {
+        ObjectValue unit = ndfObject;
+        if (unit == null) {
+            pictureLabel.setVisible(false);
+            return;
+        }
+        String key = com.warnomodmaker.gui.components.UnitPictureCache.key(unit);
+        ImageIcon icon = com.warnomodmaker.gui.components.UnitPictureCache.icon(key, 270, 138, () -> {
+            if (ndfObject == unit) updatePicture();
+        });
+        String name = unit.getInstanceName() == null ? "" : unit.getInstanceName();
+        if (icon != null) {
+            pictureLabel.setIcon(icon);
+            pictureLabel.setText("<html><b>" + name.replace("&", "&amp;").replace("<", "&lt;") + "</b><br>As shown on the unit card in game</html>");
+            pictureLabel.setVisible(true);
+        } else if (com.warnomodmaker.gui.components.UnitPictureCache.settled(key, 270, 138)) {
+            String reason = com.warnomodmaker.gui.components.UnitPictureCache.unavailableReason();
+            pictureLabel.setIcon(null);
+            pictureLabel.setText(reason != null ? reason : "WARNO has no picture for " + name + ".");
+            pictureLabel.setVisible(unit.getInstanceName() != null && unit.getInstanceName().startsWith("Descriptor_Unit_") || reason != null);
+        } else {
+            pictureLabel.setIcon(null);
+            pictureLabel.setText("Loading the unit picture…");
+            pictureLabel.setVisible(true);
+        }
+        revalidate();
     }
 
 
@@ -170,6 +206,7 @@ public class UnitEditor extends JPanel {
         updatePropertyTree();
         clearEditor();
         updateBorderTitle();
+        updatePicture();
     }
 
     /**

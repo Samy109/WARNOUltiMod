@@ -1,9 +1,10 @@
 # WARNO Mod Maker (UltiMod)
 
-A Windows tool for WARNO modders with two workspaces:
+A Windows tool for WARNO modders with three workspaces:
 
-- **Editor** — open WARNO's NDF files and edit units, weapons, ammunition and more, one value at a time or in bulk.
+- **Editor** — open WARNO's NDF files and edit units, weapons, ammunition and more, one value at a time or in bulk. Units show their in-game picture.
 - **Combine** — merge any installed WARNO mods into one mod that loads in the current game, including mods made for older WARNO versions.
+- **Maps** — rebuild any skirmish map in Conquest or Destruction, and change its lobby name, players, times of day and zone points, as a mod.
 
 ![The Combine workspace planning a merge of UltiAI and RebsFRAGO](docs/screenshots/combine.png)
 
@@ -59,10 +60,40 @@ Every mod you combine remains the work of its original author, who keeps full cr
 
 ---
 
+## Maps
+
+Every skirmish scenario WARNO ships is listed with its map and game mode. Tick the ones you want, select one to change its settings, and build them into a mod. Each becomes a new scenario next to the original, which stays as it is.
+
+**What you can change**
+
+| Setting | Notes |
+|---------|-------|
+| Game mode | Conquest or Destruction, in either direction |
+| Lobby name and scenario name | The name shown in the skirmish lobby, and the internal name |
+| Players | The default number of open slots, both teams together (2–20) |
+| Environments | Which times of day the map offers |
+| Map size and density labels, rivers | What the detailed map list shows |
+| Command zone points | Per zone, or all zones scaled by a percentage |
+
+A converted scenario keeps the map, its command zones, deployment areas, air corridors, camera paths and the computer player's map data. A zone's points are victory points in Conquest and income in Destruction, and Eugen designed each mode's zones separately, so a converted map plays differently from Eugen's own version of that mode; the zone list is there to tune it.
+
+**How a scenario is built**
+
+The build follows Eugen's map editor manual (`WARNO\Tools\map_editor_manual.pdf`):
+
+1. The scenario's zone data is read from WARNO's `Data\PC\<revision>\Scenarios\<Name>_Details.dat`, and written with a `Scenario.ndf`, a `MapPack.ndf` declaring the mode and settings and a lobby name file to `Saved Games\EugenSystems\WARNO\Scenario\<New name>`.
+2. WARNO's generation (`LaunchGeneration`), AssetCooker and DataPacker (`LaunchDatapacking`) turn it into the scenario's datapacks. A second generation must find them current.
+3. The datapacks are read back and checked against the settings, then installed in the mod's `Scenarios` folder; the mod comes from WARNO's `CreateNewMod` and `GenerateMod`, or an existing mod gets the scenarios added.
+
+Activate the mod in WARNO's mod center; the scenarios appear in skirmish and multiplayer. Players joining a multiplayer game need the same mod.
+
+---
+
 ## Editor
 
 - **Open files** with File → Open (Ctrl+O). Supports UniteDescriptor, WeaponDescriptor, Ammunition, MissileDescriptors, BuildingDescriptors, DamageResistance, FireDescriptor, SmokeDescriptor, sound and effect files and more, each in its own tab.
 - **Browse and search** objects by name, property, unit type, weapons, mobility, role, specialty or tag, and edit any value in place.
+- **Unit pictures** — the unit list and the unit editor show each unit's picture from its in-game unit card, read from the installed WARNO's icon atlases (`ButtonTexture`).
 - **Mass Modify** (Tools) — change a property across many objects at once: set, add, multiply or change by a percentage, filtered by tags or names, with a preview first. Paths support wildcards and indexes, e.g. `ModulesDescriptors[*].MaxSpeed`.
 - **Create Complete Entity** — create a new unit across UniteDescriptor, WeaponDescriptor and Ammunition with consistent references and new GUIDs.
 - **Additive Operations** — add objects, modules, properties or list elements.
@@ -93,17 +124,19 @@ build.bat
 
 | Folder | Contents |
 |--------|----------|
-| `src/com/warnomodmaker/gui` | Editor windows and dialogs; `gui/combine` is the Combine workspace |
+| `src/com/warnomodmaker/gui` | Editor windows and dialogs; `gui/combine` is the Combine workspace, `gui/maps` the Maps workspace |
 | `src/com/warnomodmaker/model`, `parser` | NDF text model, parser and writer used by the editor |
 | `src/com/warnomodmaker/combine` | Combine engine: mod scanning, planning, merging, version migration, WARNO SDK and validation |
-| `src/com/warnomodmaker/combine/ndf` | Compiled NDF database reader, writer and merger |
+| `src/com/warnomodmaker/combine/ndf` | Compiled NDF database reader, writer and merger; unit picture atlases |
 | `src/test/java` | Tests |
 
 ---
 
 ## Troubleshooting
 
-- **WARNO isn't found** — choose the WARNO folder (the one with `WARNO.exe`) with the folder button in Combine.
+- **WARNO isn't found** — choose the WARNO folder (the one with `WARNO.exe`) with the folder button in Combine or Maps.
+- **No unit pictures** — the Editor finds WARNO through Steam; pictures appear for units whose `ButtonTexture` WARNO has a picture for.
+- **A map build stops with a WARNO error dialog** — WARNO shows it even when running in the background. Click OK; the log says which step failed. Scenarios of your own in `Saved Games\EugenSystems\WARNO\Scenario` are generated too, so a broken one there stops the build.
 - **A build fails with a WARNO error** — the log names the database and the mod involved; the previous output is restored automatically.
 - **The game says mods are incompatible** — in WARNO's mod menu, leave only the combined mod enabled. Building with this version does this for you.
 - **Out of memory on very large edits** — run the jar with a larger `-Xmx`.
