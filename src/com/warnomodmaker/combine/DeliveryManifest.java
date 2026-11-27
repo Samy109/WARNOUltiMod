@@ -68,7 +68,7 @@ final class DeliveryManifest {
             throw new CombineException("SDK delivery is missing the generated databases for '" + request.outputName + "' at " + runtime + ".");
         IniDocument manifest = new IniDocument();
         manifest.set("Properties", "Name", request.outputName);
-        manifest.set("Properties", "ID", "0");
+        manifest.set("Properties", "ID", CombineService.combinedModId(request.paths, request.outputName));
         manifest.set("Properties", "Version", "0");
         manifest.set("Properties", "PreviewImagePath", "");
         var tags = new TreeSet<String>(String.CASE_INSENSITIVE_ORDER);

@@ -17,14 +17,20 @@ import com.warnomodmaker.combine.ndf.VanillaDatabases;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -179,6 +185,11 @@ public final class CombineService {
                         }
                     }
                     log.accept("[STEP 6/7] Verified generated Config.ini compatibility manifest in '" + outputRuntime + "'.");
+                    String assignedId = combinedModId(request.paths, request.outputName);
+                    if (!assignedId.equals(generatedConfig.get("Properties", "ID"))) {
+                        generatedConfig.set("Properties", "ID", assignedId);
+                        generatedConfig.save(outputRuntime.resolve("Config.ini"));
+                    }
                 }
                 if (!Files.isDirectory(outputSource.resolve("Gen")) || !Files.isDirectory(outputRuntime.resolve("Gen")))
                     throw new CombineException("WARNO generated incomplete output.");
@@ -499,7 +510,7 @@ public final class CombineService {
         Set<String> tags = new TreeSet<>(IgnoreCase.ORDER);
         for (ModDescriptor m : request.mods) tags.addAll(m.tags);
         output.set("Properties", "TagList", String.join(",", new LinkedHashSet<>(tags)));
-        output.set("Properties", "ID", "0");
+        output.set("Properties", "ID", combinedModId(request.paths, request.outputName));
         int deck = output.getInt("Properties", "DeckFormatVersion", 0);
         for (ModDescriptor m : request.mods) deck = Math.max(deck, m.deckFormatVersion);
         output.set("Properties", "DeckFormatVersion", Integer.toString(deck));
@@ -512,5 +523,44 @@ public final class CombineService {
         // Mods ship extra per-mod databases such as Localisation/<Mod>_test, so any database in these folders is
         // accepted when unfingerprinted.
         return folder.equalsIgnoreCase("Localisation") || folder.equalsIgnoreCase("ResourcePacks");
+    }
+
+    /**
+     * Generates a stable, non-zero, non-colliding Steam-style mod ID for a combined mod's Config.ini.
+     * WARNO confuses multiple unpublished mods that share ID = 0 when launching campaigns.
+     */
+    static String combinedModId(Models.WarnoPaths paths, String outputName) {
+        Set<Long> usedIds = new HashSet<>();
+        if (paths != null) {
+            for (Path root : new Path[]{paths.savedModsRoot, paths.workshopRoot}) {
+                if (root == null || !Files.isDirectory(root)) continue;
+                for (Path dir : FileOps.directories(root)) {
+                    String folder = dir.getFileName().toString();
+                    if (root.equals(paths.savedModsRoot) && folder.equalsIgnoreCase(outputName)) continue;
+                    Path cfg = dir.resolve("Config.ini");
+                    if (!Files.isRegularFile(cfg)) continue;
+                    try {
+                        String raw = IniDocument.load(cfg).get("Properties", "ID");
+                        if (raw != null && !raw.trim().isEmpty()) {
+                            long parsed = Long.parseLong(raw.trim());
+                            if (parsed > 0) usedIds.add(parsed);
+                        }
+                    } catch (RuntimeException ignored) {
+                    }
+                }
+            }
+        }
+        long candidate;
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(outputName.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8));
+            long raw = ByteBuffer.wrap(hash).getLong() & Long.MAX_VALUE;
+            candidate = 1_000_000_000L + (raw % 1_000_000_000L);
+        } catch (NoSuchAlgorithmException e) {
+            candidate = 1_000_000_000L + (Math.abs((long) outputName.toLowerCase(Locale.ROOT).hashCode()) % 1_000_000_000L);
+        }
+        while (usedIds.contains(candidate)) {
+            candidate = 1_000_000_000L + ((candidate - 1_000_000_000L + 1L) % 1_000_000_000L);
+        }
+        return Long.toString(candidate);
     }
 }
