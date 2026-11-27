@@ -108,13 +108,7 @@ public final class CombinedModUpdater {
         for (CombinedModState state : states) {
             ModDescriptor[] sources = new ModDescriptor[state.sources().size()];
             for (int i = 0; i < sources.length; i++) {
-                SourceModFingerprint source = state.sources().get(i);
-                for (ModDescriptor m : installed) {
-                    if (CombinedModStateStore.sameSource(source.rootPath, m.rootPath.toString())) {
-                        sources[i] = m;
-                        break;
-                    }
-                }
+                sources[i] = CombinedModStateStore.resolve(state.sources().get(i), installed);
                 if (sources[i] != null) distinct.putIfAbsent(IgnoreCase.upper(FileOps.full(sources[i].rootPath)), sources[i]);
             }
             resolved.add(sources);

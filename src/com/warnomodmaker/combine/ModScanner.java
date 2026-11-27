@@ -39,7 +39,6 @@ public final class ModScanner {
             if (RESERVED.contains(name)
                 || lower.contains(".warno-moderator-backup-")
                 || lower.contains(".warno-moderator-incomplete-")
-                || Files.exists(directory.resolve(CombinedModStateStore.FILE_NAME))
                 || !Files.isRegularFile(directory.resolve("base.zip"))
                 || !Files.isDirectory(directory.resolve("GameData"))
                 || !Files.isDirectory(directory.resolve("CommonData")))

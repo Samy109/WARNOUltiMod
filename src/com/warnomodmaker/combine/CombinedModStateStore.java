@@ -40,7 +40,7 @@ public final class CombinedModStateStore {
         List<CombinedModState> result = new ArrayList<>();
         for (CombinedModState state : findAll(paths, token)) {
             if (state.sources().size() != mods.size()) continue;
-            boolean all = mods.stream().allMatch(mod -> state.sources().stream().anyMatch(s -> sameSource(s.rootPath, mod.rootPath.toString())));
+            boolean all = mods.stream().allMatch(mod -> state.sources().stream().anyMatch(s -> resolve(s, mods) == mod));
             if (all) result.add(state);
         }
         return result;
@@ -144,6 +144,30 @@ public final class CombinedModStateStore {
         } catch (RuntimeException e) {
             return false;
         }
+    }
+
+    /**
+     * The installed mod a combined mod's recorded source now is: the one at the same place (see {@link #sameSource}),
+     * else the only Workshop item with the same name, for a Workshop mod its author re-published under a new ID.
+     * Null when it isn't installed.
+     */
+    public static ModDescriptor resolve(SourceModFingerprint source, List<ModDescriptor> installed) {
+        if (source == null || source.rootPath == null) return null;
+        for (ModDescriptor m : installed) if (sameSource(source.rootPath, m.rootPath.toString())) return m;
+        if (source.name == null || !source.rootPath.toLowerCase().replace('/', '\\').contains("\\workshop\\content\\1611600\\")) return null;
+        ModDescriptor workshop = byName(source.name, installed, Models.ModKind.WORKSHOP_COMPILED);
+        // Not subscribed under the new ID, but the same mod is installed as an editable mod (its author's copy).
+        return workshop != null ? workshop : byName(source.name, installed, Models.ModKind.EDITABLE_SOURCE);
+    }
+
+    private static ModDescriptor byName(String name, List<ModDescriptor> installed, Models.ModKind kind) {
+        ModDescriptor found = null;
+        for (ModDescriptor m : installed) {
+            if (m.kind != kind || m.isCombined() || !m.name.trim().equalsIgnoreCase(name.trim())) continue;
+            if (found != null) return null; // two mods share the name; don't guess
+            found = m;
+        }
+        return found;
     }
 
     /**

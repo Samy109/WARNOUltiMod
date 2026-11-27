@@ -74,7 +74,16 @@ public final class Models {
         }
 
         public String kindLabel() {
-            return kind == ModKind.WORKSHOP_COMPILED ? "Workshop " + workshopId : "Editable source";
+            return kind == ModKind.WORKSHOP_COMPILED ? "Workshop " + workshopId : isCombined() ? "Combined mod" : "Editable source";
+        }
+
+        private Boolean combined;
+
+        /** True for a combined mod this tool (or WARNO UltiAI MODerator) built, which can itself be combined again. */
+        public boolean isCombined() {
+            if (combined == null)
+                combined = kind == ModKind.EDITABLE_SOURCE && java.nio.file.Files.isRegularFile(rootPath.resolve(".warno-moderator.json"));
+            return combined;
         }
 
         public String modGenLabel() {

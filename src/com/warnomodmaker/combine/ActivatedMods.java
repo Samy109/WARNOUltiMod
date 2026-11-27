@@ -40,6 +40,19 @@ public final class ActivatedMods {
             contained.add(mod.name);
             if (mod.workshopId != null && !mod.workshopId.isEmpty()) contained.add(mod.workshopId);
             if (mod.rootPath.getFileName() != null) contained.add(mod.rootPath.getFileName().toString());
+            // A combined mod used as a source already contains its own sources, so they are deactivated too.
+            CombinedModState inner = mod.isCombined() ? new CombinedModStateStore().tryLoad(mod.rootPath) : null;
+            if (inner != null) {
+                for (SourceModFingerprint used : inner.sources()) {
+                    if (used.name != null) contained.add(used.name);
+                    try {
+                        Path folder = java.nio.file.Paths.get(used.rootPath).getFileName();
+                        if (folder != null) contained.add(folder.toString());
+                    } catch (RuntimeException ignored) {
+                        // A record with an unreadable path still has its name.
+                    }
+                }
+            }
         }
         Path ownConfig = paths.savedModsRoot.resolve(outputName).resolve("Config.ini");
         if (!Files.isRegularFile(ownConfig)) throw new CombineException("The combined mod's manifest is missing: " + ownConfig);

@@ -533,7 +533,10 @@ public final class CombinePanel extends JPanel {
             if (!settingSelection) updateActionStates();
         }));
         existingMergeBox.addActionListener(e -> {
-            if (!settingSelection && !busy) runUi("Checking existing merge", this::checkExisting);
+            if (settingSelection || busy) return;
+            CombinedModState chosen = (CombinedModState) existingMergeBox.getSelectedItem();
+            if (chosen != null && !builtFromOrder(chosen)) loadSources(chosen);
+            else runUi("Checking existing merge", this::checkExisting);
         });
         deleteMergeButton.addActionListener(e -> deleteMerge());
         cleanLeftoversButton.addActionListener(e -> cleanLeftovers());
@@ -627,7 +630,7 @@ public final class CombinePanel extends JPanel {
                 for (CombinedModState state : existingStates) {
                     List<ModDescriptor> sources = new ArrayList<>();
                     for (SourceModFingerprint source : state.sources()) {
-                        ModDescriptor mod = findSource(source.rootPath);
+                        ModDescriptor mod = findSource(source);
                         if (mod != null) sources.add(mod);
                     }
                     if (sources.size() == state.sources().size()) {
@@ -788,9 +791,42 @@ public final class CombinePanel extends JPanel {
     }
 
     // A combined mod's recorded source, even after Steam moved WARNO to another library.
-    private ModDescriptor findSource(String root) {
-        for (ModDescriptor m : installed) if (CombinedModStateStore.sameSource(root, m.rootPath.toString())) return m;
-        return null;
+    private ModDescriptor findSource(SourceModFingerprint source) {
+        return CombinedModStateStore.resolve(source, installed);
+    }
+
+    /** True when the combined mod was built from exactly the mods now in the list, in any order. */
+    private boolean builtFromOrder(CombinedModState state) {
+        return state.sources().size() == order.size()
+            && order.stream().allMatch(mod -> state.sources().stream().anyMatch(s -> CombinedModStateStore.resolve(s, order) == mod));
+    }
+
+    /** Puts a combined mod's source mods in the list, in its priority order, so it can be rebuilt. */
+    private void loadSources(CombinedModState state) {
+        List<ModDescriptor> sources = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        for (SourceModFingerprint source : state.sources()) {
+            ModDescriptor mod = findSource(source);
+            if (mod != null) sources.add(mod);
+            else missing.add(source.name);
+        }
+        if (!missing.isEmpty()) {
+            status = "'" + state.outputName + "' can't be rebuilt: " + String.join(", ", missing) + (missing.size() == 1 ? " isn't" : " aren't")
+                + " installed. Subscribe to " + (missing.size() == 1 ? "it" : "them") + " or add the mods you want by hand.";
+            log("[REBUILD] " + status);
+            settingSelection = true;
+            try {
+                existingMergeBox.setSelectedIndex(-1);
+            } finally {
+                settingSelection = false;
+            }
+            updateActionStates();
+            return;
+        }
+        changeOrder(() -> {
+            order.clear();
+            order.addAll(sources);
+        }, null);
     }
 
     private void refreshModLists(ModDescriptor select) {
@@ -858,32 +894,40 @@ public final class CombinePanel extends JPanel {
             } finally {
                 settingSelection = false;
             }
-            return order.size() < 2 ? null : paths;
+            return paths;
         });
         if (p == null) return;
         List<ModDescriptor> mods = edt(() -> new ArrayList<>(order));
+        boolean enough = mods.size() >= 2;
         String defaultName = edt(this::defaultOutputName);
-        List<CombinedModState> choices = new ArrayList<>(stateStore.findAllForSources(p, mods, token));
-        if (MergePlanner.isValidOutputName(defaultName) && choices.stream().noneMatch(x -> x.outputName.equalsIgnoreCase(defaultName))
+        // Every combined mod is listed; picking one built from other mods loads its mods into the list.
+        List<CombinedModState> matching = enough ? new ArrayList<>(stateStore.findAllForSources(p, mods, token)) : new ArrayList<>();
+        if (enough && MergePlanner.isValidOutputName(defaultName) && matching.stream().noneMatch(x -> x.outputName.equalsIgnoreCase(defaultName))
             && CombinedModStateStore.outputExists(p, defaultName)) {
             List<SourceModFingerprint> sources = mods.stream().map(m -> new SourceModFingerprint(m.name, m.rootPath.toString(), "")).collect(Collectors.toList());
-            choices.add(new CombinedModState(CombinedModState.CURRENT_SCHEMA_VERSION, defaultName, sources, null, null, null, null));
+            matching.add(new CombinedModState(CombinedModState.CURRENT_SCHEMA_VERSION, defaultName, sources, null, null, null, null));
         }
+        matching.sort((a, b) -> IgnoreCase.ORDER.compare(a.outputName, b.outputName));
+        List<CombinedModState> choices = new ArrayList<>(matching);
+        for (CombinedModState state : stateStore.findAll(p, token))
+            if (choices.stream().noneMatch(x -> x.outputName.equalsIgnoreCase(state.outputName))) choices.add(state);
         choices.sort((a, b) -> IgnoreCase.ORDER.compare(a.outputName, b.outputName));
-        String suggested = CombinedModStateStore.suggestNewOutputName(p, defaultName);
+        String suggested = enough ? CombinedModStateStore.suggestNewOutputName(p, defaultName) : null;
         edt(() -> {
             settingSelection = true;
             try {
                 DefaultComboBoxModel<CombinedModState> model = new DefaultComboBoxModel<>();
                 for (CombinedModState c : choices) model.addElement(c);
                 existingMergeBox.setModel(model);
-                existingMergeBox.setSelectedIndex(choices.isEmpty() ? -1 : 0);
+                existingMergeBox.setSelectedIndex(matching.isEmpty() ? -1 : choices.indexOf(matching.get(0)));
+                existingMergeBox.setEnabled(!busy && !choices.isEmpty());
                 existing = (CombinedModState) existingMergeBox.getSelectedItem();
-                outputNameBox.setText(suggested);
+                if (suggested != null) outputNameBox.setText(suggested);
             } finally {
                 settingSelection = false;
             }
         });
+        if (!enough) return;
         tryGeneratePreview(token);
         checkExisting(token);
     }
@@ -917,7 +961,7 @@ public final class CombinePanel extends JPanel {
         }
         boolean reordered = state.sources().size() != mods.size();
         for (int i = 0; !reordered && i < mods.size(); i++)
-            reordered = !CombinedModStateStore.sameSource(state.sources().get(i).rootPath, mods.get(i).rootPath.toString());
+            reordered = CombinedModStateStore.resolve(state.sources().get(i), mods) != mods.get(i);
         boolean differs = reordered;
         edt(() -> {
             changedMods = changed;

@@ -20,7 +20,7 @@ Get `WARNO-Mod-Maker.zip` from the [latest release](https://github.com/Samy109/W
 
 ## Combine
 
-Pick installed mods (Workshop subscriptions or your own editable mods in `Mods\`), put them in priority order, and build. The first mod in the list is the primary; higher in the list wins conflicts.
+Pick installed mods (Workshop subscriptions, your own editable mods in `Mods\`, or combined mods you built earlier), put them in priority order, and build. The first mod in the list is the primary; higher in the list wins conflicts.
 
 **How a combination is built**
 
@@ -47,7 +47,7 @@ Before building, the plan shows every file the combined mod will contain and how
 **Keeping combinations current**
 
 - **Find outdated modpacks / Update modpacks** — after a WARNO update or a Workshop update to one of its mods, rebuild a combination with the same mods and order.
-- **Rebuild existing** — rebuild a combination you made before (records from WARNO UltiAI MODerator are supported).
+- **Rebuild existing** — rebuild a combination you made before (records from WARNO UltiAI MODerator are supported). Every combined mod is listed; picking one puts its mods back in the list in their priority order. A source mod its author re-published under a new Workshop ID is found by name.
 - **Delete combined mod** — removes it from both `Mods\` and `Saved Games\...\mod\`, with any leftovers, and from WARNO's mod list.
 
 **Safety**
